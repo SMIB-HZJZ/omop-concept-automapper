@@ -1,46 +1,151 @@
 name: omop-automapper
+
+x-backend-env: &backend-env
+  POSTGRES_HOST: postgres-db
+  POSTGRES_PORT: "5432"
+  REDIS_URL: redis://redis:6379/0
+  LLM_GATEWAY_URL: http://litellm:4000
+  VOCABULARY_DIR: /data/vocabulary
+  UPLOAD_DIR: /data/uploads
+
 services:
+  # PostgreSQL 18 with pgvector + pgvectorscale (StreamingDiskANN) preinstalled
   postgres-db:
-    image: postgres:15
+    image: timescale/timescaledb-ha:pg18.6-ts2.30.2
     restart: always
-    env_file: .env # Load environment variables from .env file
+    env_file: .env
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "5432:5432"
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-1GB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-3GB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-32MB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-1GB}
+      - -c
+      - max_wal_size=${PG_MAX_WAL_SIZE:-4GB}
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-200}
+    shm_size: ${PG_SHM_SIZE:-1g}
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./vocabulary:/app/vocabulary # Mount vocabulary directory
+      - pgdata18:/home/postgres/pgdata
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
       retries: 5
 
-  qdrant:
-    image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
-
-  app:
-    build: .
-    ports:
-      - "8501:8501"
+  # LiteLLM proxy: the only service holding LLM provider keys
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.104.0
+    restart: always
     env_file: .env
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: omop-automapper-backend
+    restart: always
+    env_file: .env
+    environment: *backend-env
     depends_on:
       postgres-db:
         condition: service_healthy
-      qdrant:
-        condition: service_started
+      redis:
+        condition: service_healthy
     volumes:
-      - ./data:/app/data # Mount for temporary CSV uploads
-      - ./vocabulary:/app/vocabulary # Mount vocabulary directory
+      - ./vocabulary:/data/vocabulary:ro
+      - uploads:/data/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  worker:
+    image: omop-automapper-backend
+    restart: always
+    env_file: .env
+    environment:
+      <<: *backend-env
+      SKIP_DB_INIT: "1"
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=${CELERY_CONCURRENCY:-2}"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./vocabulary:/data/vocabulary:ro
+      - uploads:/data/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: always
+    ports:
+      - "${FRONTEND_PORT:-8501}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # --- One-off helpers (not started by `docker compose up`) ---
+
+  # Old Streamlit-era vector store, used only by the Qdrant -> pgvector migration task:
+  #   docker compose --profile qdrant-migration up -d qdrant
+  qdrant:
+    image: qdrant/qdrant:latest
+    profiles: ["qdrant-migration"]
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # The previous PostgreSQL 15 data volume, used only by scripts/upgrade-postgres.sh
+  postgres-15-old:
+    image: postgres:15
+    profiles: ["pg-upgrade"]
+    env_file: .env
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
-  pgdata:
+  pgdata18:
+  pgdata: # PostgreSQL 15 data from the Streamlit version (kept for the upgrade/rollback)
+  redis_data:
+  uploads:
   qdrant_data:

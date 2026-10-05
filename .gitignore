@@ -65,3 +65,12 @@ logs/
 # Documentation build
 docs/_build/
 
+
+# Test fixtures (small synthetic vocabulary) are versioned
+!backend/tests/fixtures/**/*.csv
+!backend/tests/fixtures/*.csv
+
+# Backend / frontend tooling
+.ruff_cache/
+node_modules/
+frontend/dist/

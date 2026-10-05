@@ -1,0 +1,57 @@
+"""Fakes for running workflows without a database or an LLM provider."""
+
+import logging
+import re
+
+from app.core.config import get_settings
+from app.workflows.context import NodeContext
+
+CONCEPTS = {
+    1: {"concept_id": 1, "concept_name": "metformin 500 MG Oral Tablet", "domain_id": "Drug",
+        "concept_class_id": "Clinical Drug", "vocabulary_id": "RxNorm", "concept_code": "861007",
+        "standard_concept": "S", "atc7_codes": ["A10BA02"]},
+    2: {"concept_id": 2, "concept_name": "metformin 850 MG Oral Tablet", "domain_id": "Drug",
+        "concept_class_id": "Clinical Drug", "vocabulary_id": "RxNorm", "concept_code": "861010",
+        "standard_concept": "S", "atc7_codes": ["A10BA02"]},
+    3: {"concept_id": 3, "concept_name": "acetaminophen 500 MG Oral Tablet", "domain_id": "Drug",
+        "concept_class_id": "Clinical Drug", "vocabulary_id": "RxNorm", "concept_code": "198440",
+        "standard_concept": "S", "atc7_codes": ["N02BE01"]},
+    201: {"concept_id": 201, "concept_name": "Type 2 diabetes mellitus", "domain_id": "Condition",
+          "concept_class_id": "Clinical Finding", "vocabulary_id": "SNOMED", "concept_code": "44054006",
+          "standard_concept": "S", "atc7_codes": None},
+}
+
+
+class FakeSearcher:
+    def __init__(self):
+        self.calls = []
+
+    def search(self, query, k, filters):
+        self.calls.append((query, k, tuple(filters.domains), tuple(filters.atc7_codes)))
+        words = set(re.findall(r"[a-z0-9]+", query.lower()))
+        results = []
+        for c in CONCEPTS.values():
+            if filters.domains and c["domain_id"] not in filters.domains:
+                continue
+            if filters.atc7_codes and not set(filters.atc7_codes) & set(c["atc7_codes"] or []):
+                continue
+            overlap = len(words & set(re.findall(r"[a-z0-9]+", c["concept_name"].lower())))
+            if overlap:
+                results.append({**c, "score": overlap / 10})
+        results.sort(key=lambda r: -r["score"])
+        return [{**r, "rank": i + 1} for i, r in enumerate(results[:k])]
+
+
+def make_context(reranker, **kwargs) -> NodeContext:
+    return NodeContext(
+        searcher=kwargs.pop("searcher", FakeSearcher()),
+        reranker=reranker,
+        get_concepts=lambda ids: [CONCEPTS[i] for i in ids if i in CONCEPTS],
+        get_ancestors=lambda cid, levels: [],
+        settings=get_settings(),
+        llm_model="test/chat",
+        logger=logging.getLogger("test"),
+        **kwargs,
+    )
+
+

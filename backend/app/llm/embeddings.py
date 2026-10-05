@@ -1,0 +1,94 @@
+"""Embedding client (through the gateway) with retries and a Redis cache for query vectors."""
+
+import hashlib
+import logging
+from collections.abc import Sequence
+
+import numpy as np
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+from app.core.config import get_settings
+from app.core.redis import get_redis_bytes
+from app.llm.gateway import get_async_client, get_sync_client
+
+logger = logging.getLogger(__name__)
+
+
+class Embedder:
+    def __init__(self, model: str, dims: int | None):
+        self.model = model
+        self.dims = dims
+        retries = get_settings().embedding_max_retries
+        self._retry = retry(
+            stop=stop_after_attempt(retries),
+            wait=wait_exponential(multiplier=2, min=2, max=30),
+            reraise=True,
+        )
+
+    def _params(self, texts: Sequence[str]) -> dict:
+        params: dict = {"model": self.model, "input": list(texts)}
+        if self.dims:
+            params["dimensions"] = self.dims
+        return params
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        @self._retry
+        def call():
+            response = get_sync_client().embeddings.create(**self._params(texts))
+            if not response.data:
+                raise RuntimeError("The embedding provider returned no vectors")
+            return [d.embedding for d in sorted(response.data, key=lambda d: d.index)]
+
+        return call()
+
+    async def aembed(self, texts: Sequence[str]) -> list[list[float]]:
+        @self._retry
+        async def call():
+            response = await get_async_client().embeddings.create(**self._params(texts))
+            if not response.data:
+                raise RuntimeError("The embedding provider returned no vectors")
+            return [d.embedding for d in sorted(response.data, key=lambda d: d.index)]
+
+        return await call()
+
+    def _cache_key(self, text: str) -> str:
+        digest = hashlib.sha1(text.strip().lower().encode()).hexdigest()
+        return f"emb:{self.model}:{self.dims}:{digest}"
+
+    def embed_query(self, text: str) -> list[float]:
+        key = self._cache_key(text)
+        try:
+            hit = get_redis_bytes().get(key)
+            if hit:
+                return np.frombuffer(hit, dtype=np.float32).tolist()
+        except Exception:
+            hit = None
+        vector = self.embed([text])[0]
+        self._store(key, vector)
+        return vector
+
+    async def aembed_query(self, text: str) -> list[float]:
+        key = self._cache_key(text)
+        try:
+            hit = get_redis_bytes().get(key)
+            if hit:
+                return np.frombuffer(hit, dtype=np.float32).tolist()
+        except Exception:
+            pass
+        vector = (await self.aembed([text]))[0]
+        self._store(key, vector)
+        return vector
+
+    def _store(self, key: str, vector: list[float]) -> None:
+        try:
+            get_redis_bytes().set(
+                key,
+                np.asarray(vector, dtype=np.float32).tobytes(),
+                ex=get_settings().query_embedding_cache_ttl,
+            )
+        except Exception:
+            logger.debug("Query embedding cache write failed", exc_info=True)
+
+    def probe_dims(self) -> int:
+        """Actual vector size returned by the model (some providers ignore ``dimensions``)."""
+        return len(self.embed(["test"])[0])

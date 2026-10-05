@@ -1,0 +1,5 @@
+concept_id_1	concept_id_2	relationship_id	valid_start_date	valid_end_date	invalid_reason
+501	201	Maps to	19700101	20991231	
+201	501	Mapped from	19700101	20991231	
+4	9	RxNorm has ing	19700101	20991231	
+9	4	RxNorm ing of	19700101	20991231	

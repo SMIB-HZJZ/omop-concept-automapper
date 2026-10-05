@@ -1,0 +1,25 @@
+# Same as `automap`, but low-confidence results get a second chance from a tool-using agent
+name: automap_refine
+description: automap, then a Pydantic AI agent retries rejected concepts with query reformulation
+entry: extract_atc7
+nodes:
+  extract_atc7:
+    uses: extract_atc7
+  retrieve:
+    uses: retrieve
+    params: { k_default: 15, k_drug: 30 }
+  rerank:
+    uses: llm_rerank
+  gate:
+    uses: confidence_gate
+    routes: { accept: END, reject: refine }
+  refine:
+    uses: agentic_refine
+  final_gate:
+    uses: confidence_gate
+    routes: { accept: END, reject: END }
+edges:
+  - [extract_atc7, retrieve]
+  - [retrieve, rerank]
+  - [rerank, gate]
+  - [refine, final_gate]

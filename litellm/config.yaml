@@ -1,0 +1,19 @@
+# LiteLLM proxy: one OpenAI-compatible endpoint for every provider.
+# The app sends model names in LiteLLM form ("<provider>/<model>"), e.g.
+#   openai/gpt-5-mini, anthropic/claude-sonnet-5, azure/<deployment>, ollama/llama3.1,
+#   openai/text-embedding-3-large, cohere/embed-multilingual-v3.0, ollama/nomic-embed-text
+# The wildcard route passes any such name straight to the provider, so switching provider is
+# only a matter of changing LLM_CHAT_MODEL / LLM_EMBEDDING_MODEL and the provider key in .env.
+model_list:
+  - model_name: "*"
+    litellm_params:
+      model: "*"
+
+litellm_settings:
+  # Silently drop parameters a provider does not support (e.g. `dimensions` for some embedders)
+  drop_params: true
+  num_retries: 2
+  request_timeout: 120
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
