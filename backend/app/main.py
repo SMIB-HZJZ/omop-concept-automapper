@@ -22,6 +22,7 @@ from app.api.routes import (
 )
 from app.core.config import get_settings
 from app.core.logging import setup_logging
+from app.llm.embeddings import GatewayUnavailable
 from app.vector.store import CollectionMissing
 from app.workflows.plugins import load_plugins
 
@@ -56,6 +57,10 @@ def create_app() -> FastAPI:
     @app.exception_handler(CollectionMissing)
     async def _collection_missing(_: Request, exc: CollectionMissing):
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(GatewayUnavailable)
+    async def _gateway_unavailable(_: Request, exc: GatewayUnavailable):
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
 
     api = APIRouter(prefix="/api")
     for module in (

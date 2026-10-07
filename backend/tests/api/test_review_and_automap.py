@@ -3,22 +3,35 @@ from tests.conftest import import_source_csv
 
 def _run(client, headers, vocabulary_id, **body):
     payload = {"domains": ["Drug", "Condition"], "threshold": 8, **body}
-    resp = client.post(f"/api/source-vocabularies/{vocabulary_id}/automap", json=payload, headers=headers)
+    resp = client.post(
+        f"/api/source-vocabularies/{vocabulary_id}/automap", json=payload, headers=headers
+    )
     assert resp.status_code == 202, resp.text
     return client.get(f"/api/tasks/{resp.json()['task_id']}", headers=headers).json()
 
 
 def test_automap_validation(client, user_headers, embedded):
     import_source_csv(client, user_headers, 20)
-    assert client.post(
-        "/api/source-vocabularies/20/automap", json={"domains": []}, headers=user_headers
-    ).status_code == 422
-    assert client.post(
-        "/api/source-vocabularies/20/automap", json={"domains": ["Drug"], "pipeline": "nope"}, headers=user_headers
-    ).status_code == 400
-    assert client.post(
-        "/api/source-vocabularies/999/automap", json={"domains": ["Drug"]}, headers=user_headers
-    ).status_code == 404
+    assert (
+        client.post(
+            "/api/source-vocabularies/20/automap", json={"domains": []}, headers=user_headers
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/source-vocabularies/20/automap",
+            json={"domains": ["Drug"], "pipeline": "nope"},
+            headers=user_headers,
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/api/source-vocabularies/999/automap", json={"domains": ["Drug"]}, headers=user_headers
+        ).status_code
+        == 404
+    )
 
 
 def test_automap_review_mode_then_accept_and_reject(client, user_headers, embedded, fake_reranker):
@@ -46,20 +59,29 @@ def test_automap_review_mode_then_accept_and_reject(client, user_headers, embedd
     assert again["result"]["processed"] == 2
 
     accepted = client.post(
-        "/api/suggestions/accept", json={"ids": [by_name["metformin 500 mg tableta"]["id"]]}, headers=user_headers
+        "/api/suggestions/accept",
+        json={"ids": [by_name["metformin 500 mg tableta"]["id"]]},
+        headers=user_headers,
     )
     assert accepted.json()["count"] == 1
     rejected = client.post(
-        "/api/suggestions/reject", json={"vocabulary_id": 21, "min_confidence": 1}, headers=user_headers
+        "/api/suggestions/reject",
+        json={"vocabulary_id": 21, "min_confidence": 1},
+        headers=user_headers,
     )
     assert rejected.json()["count"] == 1
 
     stats = client.get("/api/source-vocabularies/21/stats", headers=user_headers).json()
     assert stats["mapped"] == 3 and stats["pending_suggestions"] == 0
-    audit = {a["mapping_method"]: a for a in client.get("/api/source-vocabularies/21/audit/stats", headers=user_headers).json()}
+    audit = {
+        a["mapping_method"]: a
+        for a in client.get("/api/source-vocabularies/21/audit/stats", headers=user_headers).json()
+    }
     assert audit["auto_drug"]["mapping_count"] == 1 and audit["auto_drug"]["avg_confidence"] == 9
     history = client.get(
-        "/api/source-vocabularies/21/suggestions", params={"status": "accepted"}, headers=user_headers
+        "/api/source-vocabularies/21/suggestions",
+        params={"status": "accepted"},
+        headers=user_headers,
     ).json()
     assert history["items"][0]["decided_by"] == "mapper"
 
@@ -77,7 +99,9 @@ def test_automap_commit_mode(client, user_headers, embedded, fake_reranker):
 
 def test_ai_suggest_single_concept(client, user_headers, embedded, fake_reranker):
     import_source_csv(client, user_headers, 23)
-    item = client.get("/api/source-vocabularies/23/unmapped", headers=user_headers).json()["items"][0]
+    item = client.get("/api/source-vocabularies/23/unmapped", headers=user_headers).json()["items"][
+        0
+    ]
     resp = client.post(
         f"/api/source-concepts/{item['source_id']}/suggest",
         json={"domains": ["Drug"], "drug_specific": True},
@@ -90,11 +114,18 @@ def test_ai_suggest_single_concept(client, user_headers, embedded, fake_reranker
     assert [t["node"] for t in body["trace"]] == ["extract_atc7", "retrieve", "rerank", "gate"]
     assert "A10BA02" in body["trace"][0]["summary"]
     # Nothing is persisted
-    assert client.get("/api/source-vocabularies/23/stats", headers=user_headers).json()["pending_suggestions"] == 0
+    assert (
+        client.get("/api/source-vocabularies/23/stats", headers=user_headers).json()[
+            "pending_suggestions"
+        ]
+        == 0
+    )
 
 
 def test_workflow_catalog(client, user_headers):
     catalog = client.get("/api/workflows", headers=user_headers).json()
     names = [p["name"] for p in catalog["pipelines"]]
     assert names[0] == "automap" and "automap_refine" in names
-    assert {"retrieve", "llm_rerank", "confidence_gate", "agentic_refine"} <= {n["name"] for n in catalog["nodes"]}
+    assert {"retrieve", "llm_rerank", "confidence_gate", "agentic_refine"} <= {
+        n["name"] for n in catalog["nodes"]
+    }

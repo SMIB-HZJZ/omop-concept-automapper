@@ -5,7 +5,11 @@ import json
 import instructor
 import pytest
 from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageFunctionToolCall
+from openai.types.chat import (
+    ChatCompletion,
+    ChatCompletionMessage,
+    ChatCompletionMessageFunctionToolCall,
+)
 from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_message_function_tool_call import Function
 
@@ -31,7 +35,9 @@ def _completion(arguments: dict) -> ChatCompletion:
                         ChatCompletionMessageFunctionToolCall(
                             id="call_1",
                             type="function",
-                            function=Function(name="RerankerResponse", arguments=json.dumps(arguments)),
+                            function=Function(
+                                name="RerankerResponse", arguments=json.dumps(arguments)
+                            ),
                         )
                     ],
                 ),
@@ -60,7 +66,12 @@ def reranker_with(provider: MockProvider) -> Reranker:
 
 def _state(name="metformin 500 mg tableta", value="A10BA02-001", drug=True, threshold=8):
     return initial_state(
-        source_id=1, source_value=value, source_name=name, domains=["Drug"], drug_specific=drug, threshold=threshold
+        source_id=1,
+        source_value=value,
+        source_name=name,
+        domains=["Drug"],
+        drug_specific=drug,
+        threshold=threshold,
     )
 
 

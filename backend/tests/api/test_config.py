@@ -34,9 +34,15 @@ def test_setting_env_value_removes_override(client, admin_headers):
 
 def test_collection_preview_and_models(client, user_headers):
     preview = client.get(
-        "/api/config/collection-preview", params={"model": "openai/text-embedding-3-small", "dims": 512}, headers=user_headers
+        "/api/config/collection-preview",
+        params={"model": "openai/text-embedding-3-small", "dims": 512},
+        headers=user_headers,
     ).json()
-    assert preview == {"name": "openai_text_embedding_3_small_512", "exists": False, "embedded_count": None}
+    assert preview == {
+        "name": "openai_text_embedding_3_small_512",
+        "exists": False,
+        "embedded_count": None,
+    }
     models = client.get("/api/config/models", headers=user_headers).json()
     assert "test/chat" in models["llm_models"]
     assert models["gateway_models_available"] is False

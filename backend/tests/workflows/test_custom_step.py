@@ -25,7 +25,9 @@ def with_plugin(monkeypatch):
     from app.core.config import get_settings
 
     settings = get_settings()
-    monkeypatch.setattr(settings, "workflow_plugins", "examples.workflow_plugins.translate_query.nodes")
+    monkeypatch.setattr(
+        settings, "workflow_plugins", "examples.workflow_plugins.translate_query.nodes"
+    )
     monkeypatch.setattr(settings, "workflow_definitions_dir", str(EXAMPLE_DIR))
     plugins.load_plugins(force=True)
     yield
@@ -44,15 +46,27 @@ async def test_translate_step_runs_before_retrieval(with_plugin):
     ctx = make_context(
         FirstCandidate(),
         searcher=searcher,
-        agent_model=TestModel(custom_output_args={"query": "acetaminophen 500 mg tablet", "source_language": "hr"}),
+        agent_model=TestModel(
+            custom_output_args={"query": "acetaminophen 500 mg tablet", "source_language": "hr"}
+        ),
     )
     state = initial_state(
-        source_id=1, source_value="X", source_name="paracetamol 500 mg tablete",
-        domains=["Drug"], drug_specific=False, threshold=8,
+        source_id=1,
+        source_value="X",
+        source_name="paracetamol 500 mg tablete",
+        domains=["Drug"],
+        drug_specific=False,
+        threshold=8,
     )
     result = await run_pipeline(state, ctx, "automap_translated")
 
-    assert [t["node"] for t in result["trace"]] == ["extract_atc7", "translate", "retrieve", "rerank", "gate"]
+    assert [t["node"] for t in result["trace"]] == [
+        "extract_atc7",
+        "translate",
+        "retrieve",
+        "rerank",
+        "gate",
+    ]
     assert searcher.calls[0][0] == "acetaminophen 500 mg tablet"
     assert result["meta"]["original_query"] == "paracetamol 500 mg tablete"
     assert result["selected"]["concept_id"] == 3

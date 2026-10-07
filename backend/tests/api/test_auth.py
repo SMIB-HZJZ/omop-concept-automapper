@@ -75,7 +75,9 @@ def test_expired_token_rejected(client, user_headers):
         get_settings().jwt_secret,
         algorithm="HS256",
     )
-    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+    assert (
+        client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+    )
 
 
 def test_user_management_and_deactivation(client, admin_headers):
@@ -86,11 +88,18 @@ def test_user_management_and_deactivation(client, admin_headers):
     )
     assert resp.status_code == 201
     user_id = resp.json()["id"]
-    assert client.post(
-        "/api/users", json={"username": "TEMP_user", "password": "temp-password"}, headers=admin_headers
-    ).status_code == 409
+    assert (
+        client.post(
+            "/api/users",
+            json={"username": "TEMP_user", "password": "temp-password"},
+            headers=admin_headers,
+        ).status_code
+        == 409
+    )
 
-    login = client.post("/api/auth/login", json={"username": "temp_user", "password": "temp-password"})
+    login = client.post(
+        "/api/auth/login", json={"username": "temp_user", "password": "temp-password"}
+    )
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
     client.cookies.clear()
     assert client.get("/api/auth/me", headers=headers).status_code == 200
@@ -112,13 +121,23 @@ def test_last_admin_is_protected(client, admin_headers):
 
 def test_change_password(client):
     client.cookies.clear()
-    admin = client.post("/api/auth/login", json={"username": "admin", "password": "admin-password"}).json()
+    admin = client.post(
+        "/api/auth/login", json={"username": "admin", "password": "admin-password"}
+    ).json()
     headers = {"Authorization": f"Bearer {admin['access_token']}"}
-    client.post("/api/users", json={"username": "pw_user", "password": "first-password"}, headers=headers)
-    token = client.post("/api/auth/login", json={"username": "pw_user", "password": "first-password"}).json()
+    client.post(
+        "/api/users", json={"username": "pw_user", "password": "first-password"}, headers=headers
+    )
+    token = client.post(
+        "/api/auth/login", json={"username": "pw_user", "password": "first-password"}
+    ).json()
     h = {"Authorization": f"Bearer {token['access_token']}"}
     client.cookies.clear()
-    bad = client.post("/api/auth/change-password", json={"current_password": "x", "new_password": "second-password"}, headers=h)
+    bad = client.post(
+        "/api/auth/change-password",
+        json={"current_password": "x", "new_password": "second-password"},
+        headers=h,
+    )
     assert bad.status_code == 400
     ok = client.post(
         "/api/auth/change-password",
@@ -126,5 +145,10 @@ def test_change_password(client):
         headers=h,
     )
     assert ok.status_code == 200
-    assert client.post("/api/auth/login", json={"username": "pw_user", "password": "second-password"}).status_code == 200
+    assert (
+        client.post(
+            "/api/auth/login", json={"username": "pw_user", "password": "second-password"}
+        ).status_code
+        == 200
+    )
     client.cookies.clear()

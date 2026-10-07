@@ -1,6 +1,11 @@
 import pytest
 
-from app.workflows.builder import PipelineError, compile_definition, parse_definition, validate_definition
+from app.workflows.builder import (
+    PipelineError,
+    compile_definition,
+    parse_definition,
+    validate_definition,
+)
 from app.workflows.plugins import load_plugins
 
 load_plugins()
@@ -28,16 +33,28 @@ def test_valid_definition_compiles():
         (VALID.replace("uses: retrieve", "uses: does_not_exist"), "unknown step 'does_not_exist'"),
         (VALID.replace("k_default: 5", "k_default: 0"), "invalid params"),
         (VALID.replace("k_default: 5", "bogus: 1"), "invalid params"),
-        (VALID.replace("{ accept: END, reject: END }", "{ accept: END }"), "must map exactly the routes"),
-        (VALID.replace("{ accept: END, reject: END }", "{ accept: END, reject: nowhere }"), "unknown node 'nowhere'"),
+        (
+            VALID.replace("{ accept: END, reject: END }", "{ accept: END }"),
+            "must map exactly the routes",
+        ),
+        (
+            VALID.replace("{ accept: END, reject: END }", "{ accept: END, reject: nowhere }"),
+            "unknown node 'nowhere'",
+        ),
         (VALID.replace("entry: a", "entry: zz"), "entry node 'zz'"),
         (VALID.replace("  - [b, g]\n", ""), "must have exactly one outgoing edge"),
         (VALID + "  - [b, a]\n", "must have exactly one outgoing edge"),
         (
-            VALID.replace("  g: {", "  orphan: { uses: llm_rerank }\n  g: {") + "  - [orphan, END]\n",
+            VALID.replace("  g: {", "  orphan: { uses: llm_rerank }\n  g: {")
+            + "  - [orphan, END]\n",
             "unreachable nodes: ['orphan']",
         ),
-        (VALID.replace("a: { uses: extract_atc7 }", "a: { uses: extract_atc7, routes: { x: END } }"), "not a router"),
+        (
+            VALID.replace(
+                "a: { uses: extract_atc7 }", "a: { uses: extract_atc7, routes: { x: END } }"
+            ),
+            "not a router",
+        ),
     ],
 )
 def test_invalid_definitions(yaml_text, message):

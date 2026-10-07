@@ -49,9 +49,7 @@ os.environ.update(
 
 
 def _admin_conn() -> psycopg.Connection:
-    return psycopg.connect(
-        dbname="postgres", autocommit=True, **{k: v for k, v in _PG.items()}
-    )
+    return psycopg.connect(dbname="postgres", autocommit=True, **{k: v for k, v in _PG.items()})
 
 
 # --------------------------------------------------------------------------- fake LLMs
@@ -105,7 +103,9 @@ class FakeReranker:
         words = set(re.findall(r"[a-z0-9]+", term.lower()))
         best = max(
             range(len(candidates)),
-            key=lambda i: len(words & set(re.findall(r"[a-z0-9]+", candidates[i]["concept_name"].lower()))),
+            key=lambda i: len(
+                words & set(re.findall(r"[a-z0-9]+", candidates[i]["concept_name"].lower()))
+            ),
         )
         return RerankResult(best, self.overrides.get(term, self.confidence))
 
@@ -195,7 +195,9 @@ def embedded(client, admin_headers, loaded_vocabulary):
     return task
 
 
-def import_source_csv(client, headers, vocabulary_id: int, content: bytes | None = None, **form) -> dict:
+def import_source_csv(
+    client, headers, vocabulary_id: int, content: bytes | None = None, **form
+) -> dict:
     content = content if content is not None else (FIXTURES / "source_concepts.csv").read_bytes()
     resp = client.post(
         f"/api/source-vocabularies/{vocabulary_id}/concepts/import",

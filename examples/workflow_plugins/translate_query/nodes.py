@@ -44,7 +44,11 @@ class TranslateParams(BaseModel):
     only_non_ascii: bool = False
 
 
-@node("translate_query", params=TranslateParams, description="Translate the source term to English OMOP wording")
+@node(
+    "translate_query",
+    params=TranslateParams,
+    description="Translate the source term to English OMOP wording",
+)
 async def translate_query(state: AutomapState, ctx: NodeContext, params: TranslateParams) -> dict:
     term = state.get("query") or state.get("source_name", "")
     if params.only_non_ascii and term.isascii():

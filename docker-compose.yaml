@@ -4,7 +4,7 @@ x-backend-env: &backend-env
   POSTGRES_HOST: postgres-db
   POSTGRES_PORT: "5432"
   REDIS_URL: redis://redis:6379/0
-  LLM_GATEWAY_URL: http://litellm:4000
+  LLM_GATEWAY_URL: ${LLM_GATEWAY_URL:-http://litellm:4000}
   VOCABULARY_DIR: /data/vocabulary
   UPLOAD_DIR: /data/uploads
 

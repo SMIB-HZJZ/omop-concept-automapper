@@ -8,7 +8,7 @@ x-backend-env: &backend-env
   POSTGRES_HOST: postgres-db
   POSTGRES_PORT: "5432"
   REDIS_URL: redis://redis:6379/0
-  LLM_GATEWAY_URL: http://litellm:4000
+  LLM_GATEWAY_URL: ${LLM_GATEWAY_URL:-http://litellm:4000}
   VOCABULARY_DIR: /data/vocabulary
   UPLOAD_DIR: /data/uploads
   CORS_ORIGINS: http://localhost:5173
@@ -52,6 +52,19 @@ services:
       - "4000:4000"
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
+
+  # OpenAI-compatible stand-in for the LiteLLM proxy, for running without provider keys.
+  #   docker compose -f docker-compose.dev.yaml --profile fake-llm up -d fake-llm
+  #   and set LLM_GATEWAY_URL=http://fake-llm:4000 (e.g. in .env) before starting backend/worker.
+  fake-llm:
+    image: omop-automapper-backend-dev
+    profiles: ["fake-llm"]
+    environment:
+      SKIP_DB_INIT: "1"
+    command: ["uvicorn", "tests.fake_llm.server:app", "--host", "0.0.0.0", "--port", "4000"]
+    volumes:
+      - ./backend:/app/backend
+      - /app/backend/.venv
 
   pgadmin:
     image: dpage/pgadmin4:latest

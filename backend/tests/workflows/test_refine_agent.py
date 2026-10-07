@@ -17,10 +17,16 @@ def scripted_agent(final_args: dict):
     """First turn: search with a reformulated (translated) query. Second turn: final answer."""
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        tool_returns = [p for m in messages for p in getattr(m, "parts", []) if p.part_kind == "tool-return"]
+        tool_returns = [
+            p for m in messages for p in getattr(m, "parts", []) if p.part_kind == "tool-return"
+        ]
         if not tool_returns:
             return ModelResponse(
-                parts=[ToolCallPart("search_concepts", {"query": "acetaminophen 500 mg tablet", "k": 5})]
+                parts=[
+                    ToolCallPart(
+                        "search_concepts", {"query": "acetaminophen 500 mg tablet", "k": 5}
+                    )
+                ]
             )
         output_tool = info.output_tools[0].name
         return ModelResponse(parts=[ToolCallPart(output_tool, final_args)])
@@ -44,7 +50,9 @@ async def test_agent_refines_rejected_mapping():
     ctx = make_context(
         LowConfidenceReranker(),
         searcher=searcher,
-        agent_model=scripted_agent({"concept_id": 3, "confidence": 9, "rationale": "paracetamol = acetaminophen"}),
+        agent_model=scripted_agent(
+            {"concept_id": 3, "confidence": 9, "rationale": "paracetamol = acetaminophen"}
+        ),
     )
     result = await run_pipeline(_state(), ctx, "automap_refine")
 
@@ -54,7 +62,12 @@ async def test_agent_refines_rejected_mapping():
     assert result["rationale"] == "paracetamol = acetaminophen"
     assert ("acetaminophen 500 mg tablet", 5, ("Drug",), ()) in searcher.calls
     assert [t["node"] for t in result["trace"]] == [
-        "extract_atc7", "retrieve", "rerank", "gate", "refine", "final_gate"
+        "extract_atc7",
+        "retrieve",
+        "rerank",
+        "gate",
+        "refine",
+        "final_gate",
     ]
 
 
@@ -62,7 +75,9 @@ async def test_agent_cannot_invent_concepts():
     """An id the agent never saw triggers a retry; a model that insists ends in an error, not a mapping."""
     ctx = make_context(
         LowConfidenceReranker(),
-        agent_model=scripted_agent({"concept_id": 424242, "confidence": 10, "rationale": "made up"}),
+        agent_model=scripted_agent(
+            {"concept_id": 424242, "confidence": 10, "rationale": "made up"}
+        ),
     )
     result = await run_pipeline(_state(), ctx, "automap_refine")
     assert result["outcome"] in ("error", "rejected")
@@ -72,7 +87,11 @@ async def test_agent_cannot_invent_concepts():
 async def test_agent_no_match():
     def respond(messages, info):
         return ModelResponse(
-            parts=[ToolCallPart(info.output_tools[0].name, {"concept_id": None, "rationale": "nothing fits"})]
+            parts=[
+                ToolCallPart(
+                    info.output_tools[0].name, {"concept_id": None, "rationale": "nothing fits"}
+                )
+            ]
         )
 
     ctx = make_context(LowConfidenceReranker(), agent_model=FunctionModel(respond))

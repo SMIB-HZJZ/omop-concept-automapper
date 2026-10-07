@@ -20,7 +20,7 @@ if [[ -f .env ]]; then
 fi
 PGUSER="${POSTGRES_USER:-postgres}"
 PGDB="${POSTGRES_DB:-auto_mapper}"
-TABLES="concept concept_relationship concept_ancestor concept_atc7 source_concepts source_standard_map auto_mapping_audit app_config vocabulary_imports embedded_concepts"
+TABLES="concept concept_relationship concept_ancestor concept_atc7 source_concepts source_standard_map auto_mapping_audit app_config vocabulary_imports"
 
 wait_healthy() {
   # A fresh volume is initialised by a temporary server that is restarted afterwards, so

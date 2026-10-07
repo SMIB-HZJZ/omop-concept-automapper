@@ -5,6 +5,7 @@ import logging
 from collections.abc import Sequence
 
 import numpy as np
+import openai
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
@@ -12,6 +13,17 @@ from app.core.redis import get_redis_bytes
 from app.llm.gateway import get_async_client, get_sync_client
 
 logger = logging.getLogger(__name__)
+
+
+class GatewayUnavailable(RuntimeError):
+    pass
+
+
+def _unreachable(exc: Exception) -> GatewayUnavailable:
+    url = get_settings().llm_gateway_url
+    return GatewayUnavailable(
+        f"Cannot reach the LLM gateway at {url}: {exc}. Is the litellm service running?"
+    )
 
 
 class Embedder:
@@ -39,7 +51,10 @@ class Embedder:
                 raise RuntimeError("The embedding provider returned no vectors")
             return [d.embedding for d in sorted(response.data, key=lambda d: d.index)]
 
-        return call()
+        try:
+            return call()
+        except openai.APIConnectionError as exc:
+            raise _unreachable(exc) from exc
 
     async def aembed(self, texts: Sequence[str]) -> list[list[float]]:
         @self._retry
@@ -49,7 +64,10 @@ class Embedder:
                 raise RuntimeError("The embedding provider returned no vectors")
             return [d.embedding for d in sorted(response.data, key=lambda d: d.index)]
 
-        return await call()
+        try:
+            return await call()
+        except openai.APIConnectionError as exc:
+            raise _unreachable(exc) from exc
 
     def _cache_key(self, text: str) -> str:
         digest = hashlib.sha1(text.strip().lower().encode()).hexdigest()

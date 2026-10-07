@@ -7,18 +7,46 @@ from app.core.config import get_settings
 from app.workflows.context import NodeContext
 
 CONCEPTS = {
-    1: {"concept_id": 1, "concept_name": "metformin 500 MG Oral Tablet", "domain_id": "Drug",
-        "concept_class_id": "Clinical Drug", "vocabulary_id": "RxNorm", "concept_code": "861007",
-        "standard_concept": "S", "atc7_codes": ["A10BA02"]},
-    2: {"concept_id": 2, "concept_name": "metformin 850 MG Oral Tablet", "domain_id": "Drug",
-        "concept_class_id": "Clinical Drug", "vocabulary_id": "RxNorm", "concept_code": "861010",
-        "standard_concept": "S", "atc7_codes": ["A10BA02"]},
-    3: {"concept_id": 3, "concept_name": "acetaminophen 500 MG Oral Tablet", "domain_id": "Drug",
-        "concept_class_id": "Clinical Drug", "vocabulary_id": "RxNorm", "concept_code": "198440",
-        "standard_concept": "S", "atc7_codes": ["N02BE01"]},
-    201: {"concept_id": 201, "concept_name": "Type 2 diabetes mellitus", "domain_id": "Condition",
-          "concept_class_id": "Clinical Finding", "vocabulary_id": "SNOMED", "concept_code": "44054006",
-          "standard_concept": "S", "atc7_codes": None},
+    1: {
+        "concept_id": 1,
+        "concept_name": "metformin 500 MG Oral Tablet",
+        "domain_id": "Drug",
+        "concept_class_id": "Clinical Drug",
+        "vocabulary_id": "RxNorm",
+        "concept_code": "861007",
+        "standard_concept": "S",
+        "atc7_codes": ["A10BA02"],
+    },
+    2: {
+        "concept_id": 2,
+        "concept_name": "metformin 850 MG Oral Tablet",
+        "domain_id": "Drug",
+        "concept_class_id": "Clinical Drug",
+        "vocabulary_id": "RxNorm",
+        "concept_code": "861010",
+        "standard_concept": "S",
+        "atc7_codes": ["A10BA02"],
+    },
+    3: {
+        "concept_id": 3,
+        "concept_name": "acetaminophen 500 MG Oral Tablet",
+        "domain_id": "Drug",
+        "concept_class_id": "Clinical Drug",
+        "vocabulary_id": "RxNorm",
+        "concept_code": "198440",
+        "standard_concept": "S",
+        "atc7_codes": ["N02BE01"],
+    },
+    201: {
+        "concept_id": 201,
+        "concept_name": "Type 2 diabetes mellitus",
+        "domain_id": "Condition",
+        "concept_class_id": "Clinical Finding",
+        "vocabulary_id": "SNOMED",
+        "concept_code": "44054006",
+        "standard_concept": "S",
+        "atc7_codes": None,
+    },
 }
 
 
@@ -53,5 +81,3 @@ def make_context(reranker, **kwargs) -> NodeContext:
         logger=logging.getLogger("test"),
         **kwargs,
     )
-
-

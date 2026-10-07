@@ -1,3 +1,8 @@
+from app.llm.embeddings import Embedder as _Embedder  # noqa: E402
+
+_real_embed = _Embedder.__dict__["embed"]
+
+
 def test_search_requires_collection(client, user_headers, loaded_vocabulary):
     from app.core.db import session_scope
     from app.vector import store
@@ -15,7 +20,9 @@ def test_embed_status_and_index(client, admin_headers, embedded):
     assert status["exists"] and status["embedded"] == status["total"] == 17
     assert status["percentage"] == 100.0 and status["dims"] == 64
 
-    drug = client.get("/api/embeddings/status", params={"domain": "Drug"}, headers=admin_headers).json()
+    drug = client.get(
+        "/api/embeddings/status", params={"domain": "Drug"}, headers=admin_headers
+    ).json()
     assert drug["total"] == 7
 
     from app.core.db import session_scope
@@ -41,13 +48,17 @@ def test_search_filters(client, user_headers, embedded):
     assert resp["results"][0]["atc7_codes"] == ["A10BA02"]
 
     cond = client.post(
-        "/api/search", json={"query": "diabetes", "domains": ["Condition"], "k": 50}, headers=user_headers
+        "/api/search",
+        json={"query": "diabetes", "domains": ["Condition"], "k": 50},
+        headers=user_headers,
     ).json()["results"]
     assert cond and all(r["domain_id"] == "Condition" for r in cond)
     assert all(r["standard_concept"] == "S" for r in cond)  # the ICD10 concept is never returned
 
     atc = client.post(
-        "/api/search", json={"query": "tablet", "atc7_codes": ["M01AE01"], "k": 50}, headers=user_headers
+        "/api/search",
+        json={"query": "tablet", "atc7_codes": ["M01AE01"], "k": 50},
+        headers=user_headers,
     ).json()
     assert atc["method"] == "ATC7 filtered (M01AE01)"
     assert {r["concept_id"] for r in atc["results"]} == {4, 9}
@@ -57,7 +68,9 @@ def test_search_filters(client, user_headers, embedded):
     ).json()["results"]
     assert {r["vocabulary_id"] for r in vocab} == {"LOINC"}
 
-    bad = client.post("/api/search", json={"query": "x", "atc7_codes": ["A10"]}, headers=user_headers)
+    bad = client.post(
+        "/api/search", json={"query": "x", "atc7_codes": ["A10"]}, headers=user_headers
+    )
     assert bad.status_code == 422
 
 
@@ -81,7 +94,9 @@ def test_clear_embeddings_in_other_collection(client, admin_headers, embedded):
     # Switch to another embedding space, embed one domain, clear it, switch back
     client.put("/api/config", json={"embedding_dims": 32}, headers=admin_headers)
     try:
-        resp = client.post("/api/embeddings/embed", json={"domain": "Condition"}, headers=admin_headers)
+        resp = client.post(
+            "/api/embeddings/embed", json={"domain": "Condition"}, headers=admin_headers
+        )
         task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
         assert task["result"]["embedded"] == 5
         status = client.get("/api/embeddings/status", headers=admin_headers).json()
@@ -91,3 +106,28 @@ def test_clear_embeddings_in_other_collection(client, admin_headers, embedded):
     finally:
         client.post("/api/config/reset", headers=admin_headers)
     assert client.get("/api/embeddings/status", headers=admin_headers).json()["embedded"] == 17
+
+
+def test_unreachable_gateway_returns_503(client, user_headers, embedded, monkeypatch):
+    import openai
+
+    from app.llm import embeddings
+
+    def connection_refused(*args, **kwargs):
+        raise openai.APIConnectionError(request=None)  # type: ignore[arg-type]
+
+    # Bypass the test fake and fail inside the real client call path
+    monkeypatch.setattr(
+        embeddings,
+        "get_sync_client",
+        lambda: type(
+            "C", (), {"embeddings": type("E", (), {"create": staticmethod(connection_refused)})()}
+        )(),
+    )
+    monkeypatch.setattr(embeddings.Embedder, "embed", _real_embed)
+    monkeypatch.setattr(embeddings.get_settings(), "embedding_max_retries", 1)
+    resp = client.post(
+        "/api/search", json={"query": "never embedded before xyz"}, headers=user_headers
+    )
+    assert resp.status_code == 503
+    assert "Cannot reach the LLM gateway" in resp.json()["detail"]
