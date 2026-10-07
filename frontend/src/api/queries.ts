@@ -1,0 +1,287 @@
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+
+import { api, unwrap } from "./client";
+import type { AutomapRequest, ConfigUpdate, SearchRequest, SuggestRequest } from "./types";
+
+/** Query keys. Everything about one source vocabulary lives under ["vocab", id]. */
+export const keys = {
+  me: ["me"] as const,
+  meta: ["meta"] as const,
+  config: ["config"] as const,
+  models: ["models"] as const,
+  collectionPreview: (model: string, dims: number | null) => ["collection-preview", model, dims] as const,
+  vocabularyStatus: ["vocabulary-status"] as const,
+  atc7Stats: ["atc7-stats"] as const,
+  sourceVocabularies: ["source-vocabularies"] as const,
+  vocab: (id: number) => ["vocab", id] as const,
+  unmapped: (id: number, page: number, perPage: number) => ["vocab", id, "unmapped", page, perPage] as const,
+  mapped: (id: number) => ["vocab", id, "mapped"] as const,
+  stats: (id: number) => ["vocab", id, "stats"] as const,
+  auditStats: (id: number) => ["vocab", id, "audit-stats"] as const,
+  auditRecent: (id: number) => ["vocab", id, "audit-recent"] as const,
+  suggestions: (id: number, params: object) => ["vocab", id, "suggestions", params] as const,
+  embeddingStatus: (domain: string | null) => ["embedding-status", domain] as const,
+  tasks: (params: object) => ["tasks", params] as const,
+  task: (id: string) => ["task", id] as const,
+  workflows: ["workflows"] as const,
+  users: ["users"] as const,
+  search: (body: object) => ["search", body] as const,
+  concepts: (ids: string) => ["concepts", ids] as const,
+};
+
+export function invalidateVocabulary(qc: QueryClient, id?: number) {
+  void qc.invalidateQueries({ queryKey: keys.sourceVocabularies });
+  void qc.invalidateQueries({ queryKey: id === undefined ? ["vocab"] : keys.vocab(id) });
+}
+
+// ----------------------------------------------------------------------------- meta / config
+
+export const useMeta = () =>
+  useQuery({ queryKey: keys.meta, queryFn: async () => unwrap(await api.GET("/api/meta")), staleTime: 5 * 60_000 });
+
+export const useConfig = () =>
+  useQuery({ queryKey: keys.config, queryFn: async () => unwrap(await api.GET("/api/config")) });
+
+export const useModelOptions = () =>
+  useQuery({
+    queryKey: keys.models,
+    queryFn: async () => unwrap(await api.GET("/api/config/models")),
+    staleTime: 60 * 60_000,
+  });
+
+export const useCollectionPreview = (model: string, dims: number | null, enabled: boolean) =>
+  useQuery({
+    queryKey: keys.collectionPreview(model, dims),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/config/collection-preview", {
+          params: { query: { model, dims: dims ?? undefined } },
+        }),
+      ),
+    enabled,
+  });
+
+export function useUpdateConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: ConfigUpdate) => unwrap(await api.PUT("/api/config", { body })),
+    onSuccess: (data) => {
+      qc.setQueryData(keys.config, data);
+      void qc.invalidateQueries({ queryKey: ["embedding-status"] });
+    },
+  });
+}
+
+export function useResetConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => unwrap(await api.POST("/api/config/reset")),
+    onSuccess: (data) => {
+      qc.setQueryData(keys.config, data);
+      void qc.invalidateQueries({ queryKey: ["embedding-status"] });
+    },
+  });
+}
+
+export const useWorkflows = () =>
+  useQuery({ queryKey: keys.workflows, queryFn: async () => unwrap(await api.GET("/api/workflows")) });
+
+// ----------------------------------------------------------------------------- vocabulary / atc7 / embeddings
+
+export const useVocabularyStatus = () =>
+  useQuery({ queryKey: keys.vocabularyStatus, queryFn: async () => unwrap(await api.GET("/api/vocabulary/status")) });
+
+export const useAtc7Stats = () =>
+  useQuery({ queryKey: keys.atc7Stats, queryFn: async () => unwrap(await api.GET("/api/atc7/stats")) });
+
+export const useEmbeddingStatus = (domain: string | null) =>
+  useQuery({
+    queryKey: keys.embeddingStatus(domain),
+    queryFn: async () =>
+      unwrap(await api.GET("/api/embeddings/status", { params: { query: { domain: domain ?? undefined } } })),
+  });
+
+// ----------------------------------------------------------------------------- source vocabularies / mapping
+
+export const useSourceVocabularies = () =>
+  useQuery({
+    queryKey: keys.sourceVocabularies,
+    queryFn: async () => unwrap(await api.GET("/api/source-vocabularies")),
+  });
+
+export const useUnmapped = (id: number | null, page: number, perPage: number) =>
+  useQuery({
+    queryKey: keys.unmapped(id ?? 0, page, perPage),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/source-vocabularies/{vocabulary_id}/unmapped", {
+          params: { path: { vocabulary_id: id! }, query: { page, per_page: perPage } },
+        }),
+      ),
+    enabled: id !== null,
+    placeholderData: keepPreviousData,
+  });
+
+export const useMapped = (id: number | null) =>
+  useQuery({
+    queryKey: keys.mapped(id ?? 0),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/source-vocabularies/{vocabulary_id}/mapped", {
+          params: { path: { vocabulary_id: id! } },
+        }),
+      ),
+    enabled: id !== null,
+  });
+
+export const useMappingStats = (id: number | null) =>
+  useQuery({
+    queryKey: keys.stats(id ?? 0),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/source-vocabularies/{vocabulary_id}/stats", { params: { path: { vocabulary_id: id! } } }),
+      ),
+    enabled: id !== null,
+  });
+
+export const useAuditStats = (id: number | null) =>
+  useQuery({
+    queryKey: keys.auditStats(id ?? 0),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/source-vocabularies/{vocabulary_id}/audit/stats", {
+          params: { path: { vocabulary_id: id! } },
+        }),
+      ),
+    enabled: id !== null,
+  });
+
+export const useAuditRecent = (id: number | null, limit = 10) =>
+  useQuery({
+    queryKey: [...keys.auditRecent(id ?? 0), limit],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/source-vocabularies/{vocabulary_id}/audit/recent", {
+          params: { path: { vocabulary_id: id! }, query: { limit } },
+        }),
+      ),
+    enabled: id !== null,
+  });
+
+export type SuggestionFilters = {
+  status: "pending" | "accepted" | "rejected";
+  min_confidence?: number;
+  page: number;
+  per_page: number;
+  sort: string;
+};
+
+export const useSuggestions = (id: number | null, filters: SuggestionFilters) =>
+  useQuery({
+    queryKey: keys.suggestions(id ?? 0, filters),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/source-vocabularies/{vocabulary_id}/suggestions", {
+          params: { path: { vocabulary_id: id! }, query: filters },
+        }),
+      ),
+    enabled: id !== null,
+    placeholderData: keepPreviousData,
+  });
+
+export function useMapConcepts(vocabularyId: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { source_id: number; concept_ids: number[] }) =>
+      unwrap(await api.POST("/api/mappings", { body })),
+    onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
+  });
+}
+
+export function useUnmap(vocabularyId: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (source_ids: number[]) => unwrap(await api.POST("/api/mappings/unmap", { body: { source_ids } })),
+    onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
+  });
+}
+
+export function useUpdateVocabulary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: { id: number; name?: string; description?: string; is_drug?: boolean }) =>
+      unwrap(await api.PATCH("/api/source-vocabularies/{vocabulary_id}", { params: { path: { vocabulary_id: id } }, body })),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.sourceVocabularies }),
+  });
+}
+
+export function useDeleteVocabulary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) =>
+      unwrap(await api.DELETE("/api/source-vocabularies/{vocabulary_id}", { params: { path: { vocabulary_id: id } } })),
+    onSuccess: (_, id) => {
+      qc.removeQueries({ queryKey: keys.vocab(id) });
+      void qc.invalidateQueries({ queryKey: keys.sourceVocabularies });
+    },
+  });
+}
+
+export function useDecideSuggestions(vocabularyId: number | null, decision: "accept" | "reject") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { ids?: number[]; vocabulary_id?: number; min_confidence?: number }) =>
+      unwrap(
+        decision === "accept"
+          ? await api.POST("/api/suggestions/accept", { body })
+          : await api.POST("/api/suggestions/reject", { body }),
+      ),
+    onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
+  });
+}
+
+export function useStartAutomap(vocabularyId: number | null) {
+  return useMutation({
+    mutationFn: async (body: AutomapRequest) =>
+      unwrap(
+        await api.POST("/api/source-vocabularies/{vocabulary_id}/automap", {
+          params: { path: { vocabulary_id: vocabularyId! } },
+          body,
+        }),
+      ),
+  });
+}
+
+export function useSuggest() {
+  return useMutation({
+    mutationFn: async ({ sourceId, ...body }: SuggestRequest & { sourceId: number }) =>
+      unwrap(
+        await api.POST("/api/source-concepts/{source_id}/suggest", { params: { path: { source_id: sourceId } }, body }),
+      ),
+  });
+}
+
+// ----------------------------------------------------------------------------- search / concepts
+
+export const useSearch = (body: SearchRequest | null) =>
+  useQuery({
+    queryKey: keys.search(body ?? {}),
+    queryFn: async () => unwrap(await api.POST("/api/search", { body: body! })),
+    enabled: body !== null && body.query.trim().length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+export const useConceptLookup = (ids: string) =>
+  useQuery({
+    queryKey: keys.concepts(ids),
+    queryFn: async () => unwrap(await api.GET("/api/concepts", { params: { query: { ids } } })),
+    enabled: ids.trim().length > 0,
+    retry: false,
+  });
+
+// ----------------------------------------------------------------------------- users
+
+export const useUsers = (enabled = true) =>
+  useQuery({ queryKey: keys.users, queryFn: async () => unwrap(await api.GET("/api/users")), enabled });

@@ -1,0 +1,32 @@
+import type { components } from "./schema";
+
+type S = components["schemas"];
+
+export type User = S["UserOut"];
+export type Role = User["role"];
+export type Meta = S["Meta"];
+export type Config = S["ConfigOut"];
+export type ConfigUpdate = S["ConfigUpdate"];
+export type ModelOptions = S["ModelOptions"];
+export type VocabularyStatus = S["VocabularyStatus"];
+export type Atc7Stats = S["Atc7Stats"];
+export type SourceVocabulary = S["SourceVocabularyOut"];
+export type UnmappedItem = S["UnmappedItem"];
+export type UnmappedPage = S["UnmappedPage"];
+export type MappedRow = S["MappedRow"];
+export type MappingStats = S["MappingStats"];
+export type AuditStat = S["AuditStat"];
+export type AuditEntry = S["AuditEntry"];
+export type Concept = S["ConceptOut"];
+export type SearchRequest = S["SearchRequest"];
+export type SearchResult = S["SearchResult"];
+export type SearchResponse = S["SearchResponse"];
+export type EmbeddingStatus = S["EmbeddingStatus"];
+export type Task = S["TaskOut"];
+export type TaskRef = S["TaskRef"];
+export type Suggestion = S["SuggestionOut"];
+export type SuggestionPage = S["SuggestionPage"];
+export type AutomapRequest = S["AutomapRequest"];
+export type SuggestRequest = S["SuggestRequest"];
+export type SuggestResponse = S["SuggestResponse"];
+export type WorkflowCatalog = S["WorkflowCatalog"];
