@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     llm_chat_model: str = "anthropic/claude-sonnet-5-5"
     llm_embedding_model: str = "gemini/gemini-embedding-2"
     embedding_dims: int | None = 1536
+    # What is embedded per concept: its name, plus "context" (class and domain) and/or up to
+    # 8 synonyms. Each choice is a separate embedding collection.
+    embedding_text: Literal["name", "name_context", "name_synonyms", "name_context_synonyms"] = (
+        "name"
+    )
+    # Send query/document task types (Gemini task_type, Voyage/Cohere input_type)
+    embedding_task_types: bool = False
     # Comma-separated model names offered in the Settings page (in addition to what the gateway lists)
     llm_model_options: str = (
         "anthropic/claude-sonnet-5-5,openai/gpt-6.1-terra,gemini/gemini-3.8-flash,"

@@ -43,7 +43,9 @@ def get_concept(concept_id: int, _: CurrentUser, session: SessionDep):
 def search(body: SearchRequest, _: CurrentUser, session: SessionDep):
     cfg = get_effective_config(session)
     vector_store = PgVectorStore(
-        session, cfg.collection_name, Embedder(cfg.embedding_model, cfg.embedding_dims)
+        session,
+        cfg.collection_name,
+        Embedder(cfg.embedding_model, cfg.embedding_dims, cfg.embedding_task_types),
     )
     filters = SearchFilters(
         domains=body.domains, vocabulary_id=body.vocabulary_id or None, atc7_codes=body.atc7_codes

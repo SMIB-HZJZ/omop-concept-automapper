@@ -32,7 +32,16 @@ const VALUE_LABELS: Record<string, string> = {
   "llm.model": "LLM model",
   "embedding.model": "Embedding model",
   "embedding.dims": "Dimensions",
+  "embedding.text": "Embedded text",
+  "embedding.task_types": "Query/document task types",
 };
+
+const EMBEDDING_TEXTS: { value: string; label: string }[] = [
+  { value: "name", label: "Name only" },
+  { value: "name_context", label: "Name + class and domain" },
+  { value: "name_synonyms", label: "Name + synonyms" },
+  { value: "name_context_synonyms", label: "Name + synonyms + class and domain" },
+];
 
 function CurrentConfig({ config }: { config: Config }) {
   const stale = config.values.filter((v) => v.stale_override);
@@ -40,6 +49,12 @@ function CurrentConfig({ config }: { config: Config }) {
     ["LLM model", config.llm_model, "llm.model"],
     ["Embedding model", config.embedding_model, "embedding.model"],
     ["Dimensions", config.embedding_dims ? String(config.embedding_dims) : "native", "embedding.dims"],
+    [
+      "Embedded text",
+      EMBEDDING_TEXTS.find((t) => t.value === config.embedding_text)?.label ?? config.embedding_text,
+      "embedding.text",
+    ],
+    ["Task types", config.embedding_task_types ? "on" : "off", "embedding.task_types"],
     ["Embedding collection", config.collection_name, null],
     ["LLM gateway", config.gateway_url, null],
     ["Default pipeline", config.automap_pipeline, null],
@@ -144,16 +159,28 @@ function UpdateForm({ config }: { config: Config }) {
   const [llm, setLlm] = useState(config.llm_model);
   const [embedding, setEmbedding] = useState(config.embedding_model);
   const [dims, setDims] = useState<number | null>(config.embedding_dims ?? null);
+  const [text, setText] = useState(config.embedding_text ?? "name");
+  const [taskTypes, setTaskTypes] = useState(config.embedding_task_types ?? false);
   const [confirmed, setConfirmed] = useState(false);
 
   const embeddingOptions = options.data?.embedding_models ?? [];
   const maxDims = embeddingOptions.find((m) => m.name === embedding)?.max_dims ?? null;
   const dimensionOptions = options.data?.dimension_options ?? [512, 1024, 1536, 2048, 3072];
   const llmChanged = llm !== config.llm_model;
-  const embeddingChanged = embedding !== config.embedding_model || dims !== (config.embedding_dims ?? null);
+  const embeddingChanged =
+    embedding !== config.embedding_model ||
+    dims !== (config.embedding_dims ?? null) ||
+    text !== (config.embedding_text ?? "name") ||
+    taskTypes !== (config.embedding_task_types ?? false);
   // Debounced: typing a custom model name would otherwise request a preview per keystroke
   const previewModel = useDebounce(embedding, 400);
-  const preview = useCollectionPreview(previewModel, dims, embeddingChanged && previewModel.length > 0);
+  const preview = useCollectionPreview(
+    previewModel,
+    dims,
+    text,
+    taskTypes,
+    embeddingChanged && previewModel.length > 0,
+  );
   const canSave = (llmChanged || embeddingChanged) && llm && embedding && (!embeddingChanged || confirmed);
 
   const save = () => {
@@ -161,6 +188,8 @@ function UpdateForm({ config }: { config: Config }) {
     if (llmChanged) body.llm_model = llm;
     if (embedding !== config.embedding_model) body.embedding_model = embedding;
     if (dims !== (config.embedding_dims ?? null)) body.embedding_dims = dims;
+    if (text !== (config.embedding_text ?? "name")) body.embedding_text = text as ConfigUpdate["embedding_text"];
+    if (taskTypes !== (config.embedding_task_types ?? false)) body.embedding_task_types = taskTypes;
     update.mutate(body, {
       onSuccess: () => {
         toast.success("Configuration updated successfully");
@@ -227,6 +256,28 @@ function UpdateForm({ config }: { config: Config }) {
               <p className="text-muted-foreground text-xs">
                 Higher dimensions can be more accurate but use more storage and are slower.
               </p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="embedding-text">Embedded text</Label>
+              <Select value={text} onValueChange={setText}>
+                <SelectTrigger id="embedding-text" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EMBEDDING_TEXTS.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                Synonyms need CONCEPT_SYNONYM.csv. Each choice is its own collection.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="embedding-task-types" checked={taskTypes} onCheckedChange={(v) => setTaskTypes(!!v)} />
+              <Label htmlFor="embedding-task-types">Query/document task types (Gemini, Voyage, Cohere)</Label>
             </div>
           </div>
         </div>
@@ -392,7 +443,7 @@ export function SettingsPage() {
       {config.data && isAdmin && (
         // Remount (and so reset the form) whenever the saved configuration changes
         <UpdateForm
-          key={`${config.data.llm_model}|${config.data.embedding_model}|${config.data.embedding_dims ?? ""}`}
+          key={`${config.data.llm_model}|${config.data.embedding_model}|${config.data.embedding_dims ?? ""}|${config.data.embedding_text}|${config.data.embedding_task_types}`}
           config={config.data}
         />
       )}

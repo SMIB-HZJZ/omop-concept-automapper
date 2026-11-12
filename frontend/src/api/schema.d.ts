@@ -909,6 +909,16 @@ export interface components {
             embedding_model: string;
             /** Embedding Dims */
             embedding_dims: number | null;
+            /**
+             * Embedding Text
+             * @default name
+             */
+            embedding_text: string;
+            /**
+             * Embedding Task Types
+             * @default false
+             */
+            embedding_task_types: boolean;
             /** Collection Name */
             collection_name: string;
             /** Values */
@@ -926,6 +936,10 @@ export interface components {
             embedding_model?: string | null;
             /** Embedding Dims */
             embedding_dims?: number | null;
+            /** Embedding Text */
+            embedding_text?: ("name" | "name_context" | "name_synonyms" | "name_context_synonyms") | null;
+            /** Embedding Task Types */
+            embedding_task_types?: boolean | null;
         };
         /** ConfigValue */
         ConfigValue: {
@@ -2148,6 +2162,8 @@ export interface operations {
             query: {
                 model: string;
                 dims?: number | null;
+                text?: string;
+                task_types?: boolean;
             };
             header?: never;
             path?: never;

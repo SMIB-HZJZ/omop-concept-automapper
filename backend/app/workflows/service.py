@@ -81,7 +81,8 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
     drug_parser = _drug_parser(cfg.llm_model)
     return NodeContext(
         searcher=SessionSearcher(
-            cfg.collection_name, Embedder(cfg.embedding_model, cfg.embedding_dims)
+            cfg.collection_name,
+            Embedder(cfg.embedding_model, cfg.embedding_dims, cfg.embedding_task_types),
         ),
         reranker=Reranker(cfg.llm_model),
         translator=Translator(cfg.llm_model),

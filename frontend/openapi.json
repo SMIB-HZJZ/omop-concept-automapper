@@ -523,6 +523,26 @@
               ],
               "title": "Dims"
             }
+          },
+          {
+            "name": "text",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "name",
+              "title": "Text"
+            }
+          },
+          {
+            "name": "task_types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Task Types"
+            }
           }
         ],
         "responses": {
@@ -2684,6 +2704,16 @@
             ],
             "title": "Embedding Dims"
           },
+          "embedding_text": {
+            "type": "string",
+            "title": "Embedding Text",
+            "default": "name"
+          },
+          "embedding_task_types": {
+            "type": "boolean",
+            "title": "Embedding Task Types",
+            "default": false
+          },
           "collection_name": {
             "type": "string",
             "title": "Collection Name"
@@ -2750,6 +2780,34 @@
               }
             ],
             "title": "Embedding Dims"
+          },
+          "embedding_text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "name",
+                  "name_context",
+                  "name_synonyms",
+                  "name_context_synonyms"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Text"
+          },
+          "embedding_task_types": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Task Types"
           }
         },
         "type": "object",

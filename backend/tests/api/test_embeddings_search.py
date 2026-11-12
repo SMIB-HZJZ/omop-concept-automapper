@@ -138,3 +138,56 @@ def test_unreachable_gateway_returns_503(client, user_headers, embedded, monkeyp
     )
     assert resp.status_code == 503
     assert "Cannot reach the LLM gateway" in resp.json()["detail"]
+
+
+def test_embedding_text_variants_are_separate_collections(client, admin_headers, embedded):
+    from tests.conftest import EMBED_CALLS
+
+    resp = client.put(
+        "/api/config",
+        json={"embedding_text": "name_context_synonyms", "embedding_task_types": True},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["collection_name"] == "test_embedder_64_name_context_synonyms_tt"
+    try:
+        EMBED_CALLS.clear()
+        resp = client.post(
+            "/api/embeddings/embed", json={"domain": "Condition"}, headers=admin_headers
+        )
+        task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
+        assert task["status"] == "SUCCESS", task
+        texts = [t for call in EMBED_CALLS for t in call]
+        # name; synonyms (not repeating the name); (class, domain)
+        assert (
+            "Type 2 diabetes mellitus; Diabetes mellitus type 2; šećerna bolest tip 2 "
+            "(Clinical Finding, Condition)"
+        ) in texts
+        assert "Headache; Cephalalgia (Clinical Finding, Condition)" in texts
+    finally:
+        client.delete(
+            "/api/embeddings",
+            params={"confirm": "test_embedder_64_name_context_synonyms_tt"},
+            headers=admin_headers,
+        )
+        client.post("/api/config/reset", headers=admin_headers)
+    assert client.get("/api/config", headers=admin_headers).json()["collection_name"] == (
+        "test_embedder_64"
+    )
+
+
+def test_invalid_embedding_text_is_rejected(client, admin_headers):
+    resp = client.put("/api/config", json={"embedding_text": "everything"}, headers=admin_headers)
+    assert resp.status_code == 422
+
+
+def test_task_params_per_provider():
+    from app.llm.embeddings import Embedder, task_params
+
+    assert task_params("gemini/gemini-embedding-2", "query") == {"task_type": "RETRIEVAL_QUERY"}
+    assert task_params("voyage/voyage-4-large", "document") == {"input_type": "document"}
+    assert task_params("cohere/embed-v5.0-pro", "query") == {"input_type": "search_query"}
+    assert task_params("openai/text-embedding-3-large", "query") == {}
+    params = Embedder("gemini/gemini-embedding-2", 768, task_types=True)._params(["x"], "query")
+    assert params["extra_body"] == {"task_type": "RETRIEVAL_QUERY"}
+    assert "extra_body" not in Embedder("gemini/gemini-embedding-2", 768)._params(["x"], "query")

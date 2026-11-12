@@ -25,6 +25,8 @@ def _out(cfg: settings_store.EffectiveConfig) -> ConfigOut:
         llm_model=cfg.llm_model,
         embedding_model=cfg.embedding_model,
         embedding_dims=cfg.embedding_dims,
+        embedding_text=cfg.embedding_text,
+        embedding_task_types=cfg.embedding_task_types,
         collection_name=cfg.collection_name,
         values=[v.__dict__ for v in cfg.values],
         automap_pipeline=settings.automap_pipeline,
@@ -47,6 +49,10 @@ def update_config(body: ConfigUpdate, _: AdminUser, session: SessionDep):
         updates["embedding.model"] = body.embedding_model
     if "embedding_dims" in fields:
         updates["embedding.dims"] = body.embedding_dims
+    if "embedding_text" in fields:
+        updates["embedding.text"] = body.embedding_text
+    if "embedding_task_types" in fields:
+        updates["embedding.task_types"] = body.embedding_task_types
     try:
         return _out(settings_store.update_config(session, updates))
     except ValueError as exc:
@@ -124,8 +130,10 @@ def collection_preview(
     session: SessionDep,
     model: str = Query(...),
     dims: int | None = Query(None),
+    text: str = Query("name"),
+    task_types: bool = Query(False),
 ):
-    name = settings_store.collection_name(model, dims)
+    name = settings_store.collection_name(model, dims, text, task_types)
     exists = store.collection_exists(session, name)
     count = store.embedding_status(session, name)["embedded"] if exists else None
     return CollectionPreview(name=name, exists=exists, embedded_count=count)

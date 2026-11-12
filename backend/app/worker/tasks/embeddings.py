@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 def _active_collection(probe: bool):
     with session_scope() as session:
         cfg = get_effective_config(session)
-        embedder = Embedder(cfg.embedding_model, cfg.embedding_dims)
+        embedder = Embedder(cfg.embedding_model, cfg.embedding_dims, cfg.embedding_task_types)
         col = store.get_collection(session, cfg.collection_name)
         if col is None and probe:
             dims = embedder.probe_dims()
@@ -76,7 +76,7 @@ def embed_standard_concepts(
             with read_conn.transaction(), read_conn.cursor(name="pending_concepts") as cur:
                 cur.itersize = batch_size
                 cur.execute(
-                    "SELECT c.concept_id, c.concept_name, dl.label "
+                    f"SELECT c.concept_id, {store.embedding_text_sql(cfg.embedding_text)}, dl.label "
                     + base_query
                     + " ORDER BY c.concept_id",
                     params,

@@ -33,6 +33,21 @@ CONCEPT_FIELDS = """
 """
 
 
+def embedding_text_sql(mode: str) -> str:
+    """SQL expression for the text embedded per concept ``c`` (see Settings.embedding_text)."""
+    expr = "c.concept_name"
+    if "synonyms" in mode:
+        expr += """ || COALESCE('; ' || (
+            SELECT string_agg(name, '; ') FROM (
+                SELECT DISTINCT s.concept_synonym_name AS name FROM concept_synonym s
+                WHERE s.concept_id = c.concept_id
+                  AND norm_text(s.concept_synonym_name) <> norm_text(c.concept_name)
+                ORDER BY 1 LIMIT 8) syn), '')"""
+    if "context" in mode:
+        expr += " || ' (' || c.concept_class_id || ', ' || c.domain_id || ')'"
+    return expr
+
+
 @dataclass
 class SearchFilters:
     domains: Sequence[str] = ()

@@ -49,13 +49,19 @@ export const useModelOptions = () =>
     staleTime: 60 * 60_000,
   });
 
-export const useCollectionPreview = (model: string, dims: number | null, enabled: boolean) =>
+export const useCollectionPreview = (
+  model: string,
+  dims: number | null,
+  text: string,
+  taskTypes: boolean,
+  enabled: boolean,
+) =>
   useQuery({
-    queryKey: keys.collectionPreview(model, dims),
+    queryKey: [...keys.collectionPreview(model, dims), text, taskTypes],
     queryFn: async () =>
       unwrap(
         await api.GET("/api/config/collection-preview", {
-          params: { query: { model, dims: dims ?? undefined } },
+          params: { query: { model, dims: dims ?? undefined, text, task_types: taskTypes } },
         }),
       ),
     enabled,

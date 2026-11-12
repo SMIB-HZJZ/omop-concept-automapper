@@ -74,12 +74,12 @@ EMBED_CALLS: list[list[str]] = []
 def fake_embedder():
     from app.llm.embeddings import Embedder
 
-    def embed(self, texts):
+    def embed(self, texts, kind="document"):
         EMBED_CALLS.append(list(texts))
         return [fake_embedding(t, self.dims or TEST_DIMS) for t in texts]
 
-    async def aembed(self, texts):
-        return embed(self, texts)
+    async def aembed(self, texts, kind="document"):
+        return embed(self, texts, kind)
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(Embedder, "embed", embed)

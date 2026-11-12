@@ -20,7 +20,10 @@ OVERRIDABLE: dict[str, tuple[str, type]] = {
     "llm.model": ("llm_chat_model", str),
     "embedding.model": ("llm_embedding_model", str),
     "embedding.dims": ("embedding_dims", int),
+    "embedding.text": ("embedding_text", str),
+    "embedding.task_types": ("embedding_task_types", bool),
 }
+EMBEDDING_TEXT_OPTIONS = ["name", "name_context", "name_synonyms", "name_context_synonyms"]
 
 DIMENSION_OPTIONS = [512, 1024, 1536, 2048, 3072]
 
@@ -41,10 +44,15 @@ class EffectiveConfig:
     embedding_dims: int | None
     collection_name: str
     values: list[SettingValue]
+    embedding_text: str = "name"
+    embedding_task_types: bool = False
 
     @property
     def version(self) -> str:
-        return f"{self.llm_model}|{self.embedding_model}|{self.embedding_dims}"
+        return (
+            f"{self.llm_model}|{self.embedding_model}|{self.embedding_dims}|"
+            f"{self.embedding_text}|{self.embedding_task_types}"
+        )
 
 
 def _env_value(key: str):
@@ -56,6 +64,8 @@ def _coerce(key: str, raw: str | None):
     if raw is None or raw == "":
         return None
     _, typ = OVERRIDABLE[key]
+    if typ is bool:
+        return raw.strip().lower() in ("true", "1", "yes")
     return typ(raw)
 
 
@@ -77,12 +87,18 @@ def get_effective_config(session: Session) -> EffectiveConfig:
 
     embedding_model = str(resolved["embedding.model"])
     dims = resolved["embedding.dims"]
+    text_mode = str(resolved["embedding.text"] or "name")
+    if text_mode not in EMBEDDING_TEXT_OPTIONS:
+        text_mode = "name"
+    task_types = bool(resolved["embedding.task_types"])
     return EffectiveConfig(
         llm_model=str(resolved["llm.model"]),
         embedding_model=embedding_model,
         embedding_dims=dims if dims is None else int(dims),  # type: ignore[arg-type]
-        collection_name=collection_name(embedding_model, dims),  # type: ignore[arg-type]
+        collection_name=collection_name(embedding_model, dims, text_mode, task_types),  # type: ignore[arg-type]
         values=values,
+        embedding_text=text_mode,
+        embedding_task_types=task_types,
     )
 
 
@@ -91,6 +107,8 @@ def update_config(session: Session, updates: dict[str, object]) -> EffectiveConf
         if key not in OVERRIDABLE:
             raise ValueError(f"Unknown setting: {key}")
         env_value = _env_value(key)
+        if key == "embedding.text" and value is not None and value not in EMBEDDING_TEXT_OPTIONS:
+            raise ValueError(f"embedding_text must be one of {EMBEDDING_TEXT_OPTIONS}")
         if value is None or _stringify(value) == _stringify(env_value):
             # Setting a value back to the env default removes the override
             session.exec(delete(AppConfig).where(AppConfig.key.in_([key, key + BASELINE_SUFFIX])))  # type: ignore[attr-defined]
@@ -126,7 +144,17 @@ def _stringify(value: object) -> str:
     return "" if value is None else str(value)
 
 
-def collection_name(model: str, dims: int | None) -> str:
-    """Name of the embedding space for a model + dimension pair, e.g. ``openai_text_embedding_3_large_1024``."""
+def collection_name(
+    model: str, dims: int | None, text_mode: str = "name", task_types: bool = False
+) -> str:
+    """Name of the embedding space, e.g. ``openai_text_embedding_3_large_1024``.
+
+    Non-default embedding text and task types get a suffix (``…_1024_name_synonyms_tt``), so
+    every variant is its own collection and can be compared side by side."""
     slug = re.sub(r"[^a-z0-9]+", "_", model.lower()).strip("_")
-    return f"{slug}_{dims or 'native'}"
+    name = f"{slug}_{dims or 'native'}"
+    if text_mode and text_mode != "name":
+        name += f"_{text_mode}"
+    if task_types:
+        name += "_tt"
+    return name

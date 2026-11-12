@@ -85,6 +85,8 @@ class ConfigOut(BaseModel):
     llm_model: str
     embedding_model: str
     embedding_dims: int | None
+    embedding_text: str = "name"
+    embedding_task_types: bool = False
     collection_name: str
     values: list[ConfigValue]
     automap_pipeline: str
@@ -95,6 +97,10 @@ class ConfigUpdate(BaseModel):
     llm_model: str | None = None
     embedding_model: str | None = None
     embedding_dims: int | None = None
+    embedding_text: (
+        Literal["name", "name_context", "name_synonyms", "name_context_synonyms"] | None
+    ) = None
+    embedding_task_types: bool | None = None
 
 
 class EmbeddingModelOption(BaseModel):

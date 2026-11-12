@@ -40,10 +40,24 @@ def _unreachable(exc: Exception) -> GatewayUnavailable:
     )
 
 
+def task_params(model: str, kind: str) -> dict:
+    """Provider-specific query/document hints (sent through the gateway as extra body fields)."""
+    m = model.lower()
+    query = kind == "query"
+    if m.startswith(("gemini/", "vertex_ai/")):
+        return {"task_type": "RETRIEVAL_QUERY" if query else "RETRIEVAL_DOCUMENT"}
+    if m.startswith("voyage/"):
+        return {"input_type": "query" if query else "document"}
+    if m.startswith("cohere/"):
+        return {"input_type": "search_query" if query else "search_document"}
+    return {}
+
+
 class Embedder:
-    def __init__(self, model: str, dims: int | None):
+    def __init__(self, model: str, dims: int | None, task_types: bool = False):
         self.model = model
         self.dims = dims
+        self.task_types = task_types
         retries = get_settings().embedding_max_retries
         self._retry = retry(
             stop=stop_after_attempt(retries),
@@ -52,16 +66,19 @@ class Embedder:
             reraise=True,
         )
 
-    def _params(self, texts: Sequence[str]) -> dict:
+    def _params(self, texts: Sequence[str], kind: str = "document") -> dict:
         params: dict = {"model": self.model, "input": list(texts)}
         if self.dims:
             params["dimensions"] = self.dims
+        extra = task_params(self.model, kind) if self.task_types else {}
+        if extra:
+            params["extra_body"] = extra
         return params
 
-    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+    def embed(self, texts: Sequence[str], kind: str = "document") -> list[list[float]]:
         @self._retry
         def call():
-            response = get_sync_client().embeddings.create(**self._params(texts))
+            response = get_sync_client().embeddings.create(**self._params(texts, kind))
             if not response.data:
                 raise EmptyEmbeddingResponse("The embedding provider returned no vectors")
             return [d.embedding for d in sorted(response.data, key=lambda d: d.index)]
@@ -71,10 +88,10 @@ class Embedder:
         except openai.APIConnectionError as exc:
             raise _unreachable(exc) from exc
 
-    async def aembed(self, texts: Sequence[str]) -> list[list[float]]:
+    async def aembed(self, texts: Sequence[str], kind: str = "document") -> list[list[float]]:
         @self._retry
         async def call():
-            response = await get_async_client().embeddings.create(**self._params(texts))
+            response = await get_async_client().embeddings.create(**self._params(texts, kind))
             if not response.data:
                 raise EmptyEmbeddingResponse("The embedding provider returned no vectors")
             return [d.embedding for d in sorted(response.data, key=lambda d: d.index)]
@@ -86,7 +103,7 @@ class Embedder:
 
     def _cache_key(self, text: str) -> str:
         digest = hashlib.sha1(text.strip().lower().encode()).hexdigest()
-        return f"emb:{self.model}:{self.dims}:{digest}"
+        return f"emb:{self.model}:{self.dims}:{int(self.task_types)}:{digest}"
 
     def embed_query(self, text: str) -> list[float]:
         key = self._cache_key(text)
@@ -96,7 +113,7 @@ class Embedder:
                 return np.frombuffer(hit, dtype=np.float32).tolist()
         except Exception:
             logger.debug("Query embedding cache read failed", exc_info=True)
-        vector = self.embed([text])[0]
+        vector = self.embed([text], kind="query")[0]
         self._store(key, vector)
         return vector
 
@@ -108,7 +125,7 @@ class Embedder:
                 return np.frombuffer(hit, dtype=np.float32).tolist()
         except Exception:
             logger.debug("Query embedding cache read failed", exc_info=True)
-        vector = (await self.aembed([text]))[0]
+        vector = (await self.aembed([text], kind="query"))[0]
         self._store(key, vector)
         return vector
 
