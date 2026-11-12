@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { MultiSelect } from "@/components/MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 
@@ -70,6 +71,23 @@ export function VocabularySelector({ selection, showDrug = true }: { selection: 
           )}
         </div>
       )}
+      {vocabulary && (
+        <div className="grid gap-1.5">
+          <Label htmlFor="code-vocabularies">Source codes are</Label>
+          <MultiSelect
+            id="code-vocabularies"
+            className="w-56"
+            options={CODE_VOCABULARIES}
+            value={vocabulary.code_vocabularies ?? []}
+            onChange={(code_vocabularies) => update.mutate({ id: vocabulary.id, code_vocabularies })}
+            placeholder="no code mapping"
+          />
+        </div>
+      )}
     </div>
   );
 }
+
+/** OMOP vocabularies whose codes can appear in source_value (MKB-10 = ICD10). Codes found in
+ * these are mapped deterministically through "Maps to". */
+const CODE_VOCABULARIES = ["ICD10", "ICD10CM", "ICD9CM", "ICD10PCS", "LOINC", "SNOMED", "ATC", "NDC", "CPT4", "Read"];

@@ -210,7 +210,16 @@ export function useUnmap(vocabularyId: number | null) {
 export function useUpdateVocabulary() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: number; name?: string; description?: string; is_drug?: boolean }) =>
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: number;
+      name?: string;
+      description?: string;
+      is_drug?: boolean;
+      code_vocabularies?: string[];
+    }) =>
       unwrap(
         await api.PATCH("/api/source-vocabularies/{vocabulary_id}", { params: { path: { vocabulary_id: id } }, body }),
       ),

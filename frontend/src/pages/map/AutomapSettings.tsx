@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Slider } from "@/components/ui/slider";
 import { DEFAULT_THRESHOLD, useAutomapThreshold } from "@/hooks/useAutomapThreshold";
+import { DOMAIN_MODES, type DomainMode, useDomainMode } from "@/hooks/useDomainMode";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import { useStartTask } from "@/hooks/useStartTask";
 import { useLatestTask } from "@/hooks/useTasks";
@@ -28,6 +29,7 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
   const { run, busy } = useStartTask();
   const [domains, setDomains] = usePersistentState<string[]>("automap-domains", []);
   const [threshold, setThreshold] = useAutomapThreshold();
+  const [domainMode, setDomainMode] = useDomainMode();
   // Follows the vocabulary's drug flag until the user overrides it
   const [drugOverride, setDrugOverride] = useState<boolean | null>(null);
   const drugSpecific = drugOverride ?? isDrug;
@@ -50,6 +52,7 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
             params: { path: { vocabulary_id: vocabularyId } },
             body: {
               domains,
+              domain_mode: domainMode,
               threshold,
               drug_specific: drugSpecific,
               mode,
@@ -87,6 +90,24 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
               onChange={setDomains}
               placeholder="Select domains…"
             />
+          </div>
+          <div className="grid gap-1.5">
+            <Label id="domain-mode-label">Domains are</Label>
+            <RadioGroup
+              aria-labelledby="domain-mode-label"
+              value={domainMode}
+              onValueChange={(v) => setDomainMode(v as DomainMode)}
+            >
+              {DOMAIN_MODES.map((m) => (
+                <div key={m.value} className="flex items-start gap-2">
+                  <RadioGroupItem value={m.value} id={`domain-mode-${m.value}`} className="mt-0.5" />
+                  <Label htmlFor={`domain-mode-${m.value}`} className="grid gap-0.5 font-normal">
+                    <span className="font-medium">{m.label}</span>
+                    <span className="text-muted-foreground text-xs">{m.hint}</span>
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
           </div>
           <div className="grid gap-2">
             <Label>

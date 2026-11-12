@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { useAutomapThreshold } from "@/hooks/useAutomapThreshold";
+import { useDomainMode } from "@/hooks/useDomainMode";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import { isValidAtc7 } from "@/lib/atc7";
@@ -75,6 +76,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
   const [selected, setSelected] = useState<Map<number, ConceptLike>>(new Map());
   const [suggestion, setSuggestion] = useState<SuggestResponse | null>(null);
   const [threshold] = useAutomapThreshold();
+  const [domainMode] = useDomainMode();
   // No reset effect: the parent keys this component by source_id, so state starts fresh per concept
 
   const manualValid = manualAtc7 === "" || isValidAtc7(manualAtc7);
@@ -124,6 +126,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
         sourceId: concept.source_id,
         query: name.trim() !== concept.source_concept_name ? name.trim() : null,
         domains,
+        domain_mode: domainMode,
         drug_specific: isDrug,
         atc7_codes: atc7Codes.length ? atc7Codes : null,
         threshold,
