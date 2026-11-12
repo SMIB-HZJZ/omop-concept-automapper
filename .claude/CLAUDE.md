@@ -4,7 +4,7 @@
 - Commit regularly: after each logical, working step (a fix, a feature slice, a refactor),
   not one large commit at the end of a session.
 - Only commit when the checks for the touched area pass (see below). Never commit secrets
-  (`.env`, `.env.litellm`) or evaluation outputs that contain source terms.
+  (`.env`, `.env.litellm`) or files that contain source vocabulary terms.
 - Commit messages in English, imperative mood, a short subject line plus a body explaining why.
 - Work on a feature branch, never directly on `main`. Do not push unless asked.
 

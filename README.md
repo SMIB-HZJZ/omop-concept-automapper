@@ -137,7 +137,7 @@ Prices are from LiteLLM's model registry (v1.104) and the providers' pricing pag
 | Only Google | `gemini/gemini-3.8-flash` ($0.75/$3.75 introductory, $1.50/$7.50 from 2027) | `gemini/gemini-embedding-2` | One key |
 | EU provider | `mistral/mistral-large-latest` ($0.50/$1.50) | `mistral/mistral-embed` ($0.10, 1024 dims) | Mistral is EU-based; its embedder is weaker on retrieval than the default |
 | Other embedders | — | `voyage/voyage-4-large`, `cohere/embed-v5.0-pro` ($0.12) | Multilingual retrieval models; no independent multilingual scores found |
-| Budget | `anthropic/claude-haiku-5-5` or `openai/gpt-6-luna` ($0.10/$0.50) | — | ~20× cheaper; measure the accuracy loss with `evaluate` |
+| Budget | `anthropic/claude-haiku-5-5` or `openai/gpt-6-luna` ($0.10/$0.50) | — | ~20× cheaper; check the accuracy loss on known mappings first |
 | Local (Ollama) | `ollama/mistral-small` | `ollama/bge-m3` (1024 dims) | No data leaves your network. Needs a GPU for usable speed. For local models set `INSTRUCTOR_MODE=json` if tool calling fails |
 | Azure / Vertex / Bedrock | deployment names | deployment names | For EU data residency; add a deployment entry to `litellm/config.yaml` |
 
@@ -154,7 +154,7 @@ OLLAMA_API_BASE=http://host.docker.internal:11434
 
 **Languages and translation.** The default `automap` pipeline embeds the source term as is and relies on the multilingual embedding model; the reranker sees the original term next to the English OMOP candidates. The `automap_translated` pipeline adds a `translate` step: the term is rendered in English OMOP wording (cached per term and model), retrieval searches both the original and the English term, and the reranker sees both. `automap_refine` lets an agent reformulate and translate when the first pass is not confident.
 
-There is no published OMOP-specific benchmark for these models. Measure on your own data instead (next section).
+There is no published OMOP-specific benchmark for these models. Before relying on a model choice, run auto-mapping in review mode on a sample with known correct mappings and compare.
 
 ### Drug mapping
 
@@ -183,39 +183,6 @@ N02BE01-1,Paracetamol 500 mg tbl,paracetamol,500,mg,,,,,tablet
 J01CR02-3,Amoksiklav 875/125,amoxicillin;clavulanate,875;125,mg,,,,,Oral Tablet
 N02BE01-7,Paracetamol sirup 120 mg/5 ml,paracetamol,,,120,mg,5,mL,Oral Solution
 ```
-
-Compare it with the plain pipelines on known mappings: `evaluate <vocabulary_id> --pipelines automap,automap_translated,automap_drug`.
-
-### Measuring mapping accuracy
-
-`evaluate` grades pipelines and models against the existing mappings of a source vocabulary. Nothing is written to the database. Mappings from unreviewed auto-map runs are not used as the answer key (add `--include-unreviewed-auto` to change that).
-
-```bash
-# Does translation help? Same 300 concepts, both pipelines, configured model
-docker compose exec worker python -m app.cli evaluate 3 --sample 300 \
-    --pipelines automap,automap_translated
-# Compare reranker models as well (every pipeline x every model)
-docker compose exec worker python -m app.cli evaluate 3 --sample 300 \
-    --pipelines automap,automap_translated \
-    --llm-models anthropic/claude-sonnet-5-5,openai/gpt-6.1-terra,anthropic/claude-haiku-5-5
-```
-
-The easiest answer key is a source CSV whose `concept_id` column holds the known mappings: import it as a new vocabulary and evaluate it. The command prints a table and writes `summary.json` and `items.csv` (per concept, including source terms) to `/data/uploads/evaluation-<time>`:
-
-- **retrieval recall:** a correct concept is among the candidates (what translation and the embedding model can improve);
-- **top-1 accuracy:** the pick is correct;
-- **accepted / precision of accepted:** how many picks pass the confidence threshold, and how many of those are right (what auto-mapping in commit mode would get right);
-- **comparison:** for each variant against the first one, on how many concepts it is better or worse, with an exact paired sign test (p < 0.05: unlikely to be chance).
-
-The embedding model is the configured one; to compare embedders, embed each one and run `evaluate` after switching the configuration.
-
-```bash
-docker compose up -d   # recreates the containers with the new environment
-```
-
-Notes:
-- Overrides made on the Configuration page remember which `.env` value they replaced. After a provider switch they are ignored automatically and flagged, so no database edit is needed.
-- Each embedding model and dimension combination has its own collection. After changing the embedding model, embed again under **Import → Embedding Management**.
 
 ### Mapping pipelines (LangGraph)
 
