@@ -419,6 +419,29 @@ class SuggestionPage(BaseModel):
     pages: int
 
 
+class CalibrationLevel(BaseModel):
+    confidence: int
+    accepted: int
+    rejected: int
+    # Share accepted among all decided suggestions with this or a higher confidence
+    precision_at_or_above: float
+
+
+class CalibrationMethod(BaseModel):
+    method: str
+    accepted: int
+    rejected: int
+    precision: float | None
+
+
+class Calibration(BaseModel):
+    decided: int
+    target_precision: float
+    recommended_threshold: int | None
+    levels: list[CalibrationLevel]
+    methods: list[CalibrationMethod]
+
+
 class SuggestionDecision(BaseModel):
     ids: list[int] | None = None
     vocabulary_id: int | None = None

@@ -1470,6 +1470,73 @@
         }
       }
     },
+    "/api/suggestions/calibration": {
+      "get": {
+        "tags": [
+          "mapping"
+        ],
+        "summary": "Calibration",
+        "description": "How often reviewers accepted suggestions per confidence level; the recommended threshold\nis the lowest confidence that keeps precision at or above the target.",
+        "operationId": "calibration_api_suggestions_calibration_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vocabulary_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vocabulary Id"
+            }
+          },
+          {
+            "name": "target_precision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 1,
+              "exclusiveMinimum": 0,
+              "default": 0.95,
+              "title": "Target Precision"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Calibration"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/source-vocabularies/{vocabulary_id}/suggestions": {
       "get": {
         "tags": [
@@ -2512,6 +2579,115 @@
           "file"
         ],
         "title": "Body_import_concepts_api_source_vocabularies__vocabulary_id__concepts_import_post"
+      },
+      "Calibration": {
+        "properties": {
+          "decided": {
+            "type": "integer",
+            "title": "Decided"
+          },
+          "target_precision": {
+            "type": "number",
+            "title": "Target Precision"
+          },
+          "recommended_threshold": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Threshold"
+          },
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/CalibrationLevel"
+            },
+            "type": "array",
+            "title": "Levels"
+          },
+          "methods": {
+            "items": {
+              "$ref": "#/components/schemas/CalibrationMethod"
+            },
+            "type": "array",
+            "title": "Methods"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decided",
+          "target_precision",
+          "recommended_threshold",
+          "levels",
+          "methods"
+        ],
+        "title": "Calibration"
+      },
+      "CalibrationLevel": {
+        "properties": {
+          "confidence": {
+            "type": "integer",
+            "title": "Confidence"
+          },
+          "accepted": {
+            "type": "integer",
+            "title": "Accepted"
+          },
+          "rejected": {
+            "type": "integer",
+            "title": "Rejected"
+          },
+          "precision_at_or_above": {
+            "type": "number",
+            "title": "Precision At Or Above"
+          }
+        },
+        "type": "object",
+        "required": [
+          "confidence",
+          "accepted",
+          "rejected",
+          "precision_at_or_above"
+        ],
+        "title": "CalibrationLevel"
+      },
+      "CalibrationMethod": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "accepted": {
+            "type": "integer",
+            "title": "Accepted"
+          },
+          "rejected": {
+            "type": "integer",
+            "title": "Rejected"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method",
+          "accepted",
+          "rejected",
+          "precision"
+        ],
+        "title": "CalibrationMethod"
       },
       "ChangePassword": {
         "properties": {

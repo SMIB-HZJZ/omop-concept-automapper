@@ -502,6 +502,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/suggestions/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calibration
+         * @description How often reviewers accepted suggestions per confidence level; the recommended threshold
+         *     is the lowest confidence that keeps precision at or above the target.
+         */
+        get: operations["calibration_api_suggestions_calibration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/source-vocabularies/{vocabulary_id}/suggestions": {
         parameters: {
             query?: never;
@@ -847,6 +868,41 @@ export interface components {
             name?: string | null;
             /** Is Drug */
             is_drug?: boolean | null;
+        };
+        /** Calibration */
+        Calibration: {
+            /** Decided */
+            decided: number;
+            /** Target Precision */
+            target_precision: number;
+            /** Recommended Threshold */
+            recommended_threshold: number | null;
+            /** Levels */
+            levels: components["schemas"]["CalibrationLevel"][];
+            /** Methods */
+            methods: components["schemas"]["CalibrationMethod"][];
+        };
+        /** CalibrationLevel */
+        CalibrationLevel: {
+            /** Confidence */
+            confidence: number;
+            /** Accepted */
+            accepted: number;
+            /** Rejected */
+            rejected: number;
+            /** Precision At Or Above */
+            precision_at_or_above: number;
+        };
+        /** CalibrationMethod */
+        CalibrationMethod: {
+            /** Method */
+            method: string;
+            /** Accepted */
+            accepted: number;
+            /** Rejected */
+            rejected: number;
+            /** Precision */
+            precision: number | null;
         };
         /** ChangePassword */
         ChangePassword: {
@@ -2741,6 +2797,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuggestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calibration_api_suggestions_calibration_get: {
+        parameters: {
+            query?: {
+                vocabulary_id?: number | null;
+                target_precision?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Calibration"];
                 };
             };
             /** @description Validation Error */

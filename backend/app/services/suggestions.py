@@ -13,6 +13,8 @@ SORTS = {
     "confidence_asc": "ms.confidence ASC, sc.freq DESC NULLS LAST",
     "freq_desc": "sc.freq DESC NULLS LAST, ms.confidence DESC",
     "newest": "ms.created_at DESC",
+    # Most patient records affected by the least certain decisions first
+    "priority": "COALESCE(sc.freq, 1) * (11 - ms.confidence) DESC, sc.freq DESC NULLS LAST",
 }
 
 
@@ -162,3 +164,62 @@ def reject(
 def _invalidate(session: Session, source_ids: list[int]) -> None:
     for vocabulary_id in mapping.vocabulary_of_sources(session, source_ids):
         mapping.invalidate_vocabulary(vocabulary_id)
+
+
+def calibration(
+    session: Session, vocabulary_id: int | None, target_precision: float = 0.95
+) -> dict:
+    """Precision of auto-map suggestions per confidence level, from review decisions.
+
+    A suggestion counts as correct when it was accepted. The recommended threshold is the lowest
+    confidence from which on the accepted share is at least ``target_precision``."""
+    where = "ms.status IN ('accepted', 'rejected')"
+    params: dict = {}
+    if vocabulary_id is not None:
+        where += " AND sc.source_vocabulary_id = :v"
+        params["v"] = vocabulary_id
+    rows = session.execute(
+        text(
+            f"""
+            SELECT ms.confidence, ms.method,
+                   COUNT(*) FILTER (WHERE ms.status = 'accepted') AS accepted,
+                   COUNT(*) FILTER (WHERE ms.status = 'rejected') AS rejected
+            FROM mapping_suggestion ms JOIN source_concepts sc ON sc.source_id = ms.source_id
+            WHERE {where}
+            GROUP BY ms.confidence, ms.method
+            ORDER BY ms.confidence DESC, ms.method
+            """
+        ),
+        params,
+    ).mappings()
+    levels: dict[int, dict] = {}
+    methods: dict[str, dict] = {}
+    for r in rows:
+        level = levels.setdefault(
+            r["confidence"], {"confidence": r["confidence"], "accepted": 0, "rejected": 0}
+        )
+        level["accepted"] += r["accepted"]
+        level["rejected"] += r["rejected"]
+        method = methods.setdefault(
+            r["method"], {"method": r["method"], "accepted": 0, "rejected": 0}
+        )
+        method["accepted"] += r["accepted"]
+        method["rejected"] += r["rejected"]
+    recommended = None
+    accepted = decided = 0
+    for confidence in sorted(levels, reverse=True):
+        accepted += levels[confidence]["accepted"]
+        decided += levels[confidence]["accepted"] + levels[confidence]["rejected"]
+        levels[confidence]["precision_at_or_above"] = accepted / decided
+        if accepted / decided >= target_precision:
+            recommended = confidence
+    for m in methods.values():
+        total = m["accepted"] + m["rejected"]
+        m["precision"] = m["accepted"] / total if total else None
+    return {
+        "decided": sum(lv["accepted"] + lv["rejected"] for lv in levels.values()),
+        "target_precision": target_precision,
+        "recommended_threshold": recommended,
+        "levels": sorted(levels.values(), key=lambda lv: -lv["confidence"]),
+        "methods": sorted(methods.values(), key=lambda m: m["method"]),
+    }

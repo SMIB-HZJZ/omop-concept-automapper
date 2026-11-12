@@ -18,10 +18,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CalibrationPanel } from "./review/CalibrationPanel";
 
 type Status = SuggestionFilters["status"];
 
 const SORTS = [
+  { value: "priority", label: "Priority (frequent × uncertain)" },
   { value: "confidence_desc", label: "Highest confidence" },
   { value: "confidence_asc", label: "Lowest confidence" },
   { value: "freq_desc", label: "Most frequent" },
@@ -171,6 +173,7 @@ export function ReviewPage() {
         description="Auto-mapping in review mode queues its confident matches here. Accepting a suggestion maps the source concept and records it in the audit trail."
       />
       <VocabularySelector selection={selection} showDrug={false} />
+      <CalibrationPanel vocabularyId={vocabularyId} />
 
       {vocabularyId !== null && (
         <>

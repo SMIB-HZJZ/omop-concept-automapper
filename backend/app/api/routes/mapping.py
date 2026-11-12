@@ -8,6 +8,7 @@ from app.core.db import session_scope
 from app.models import SourceVocabulary
 from app.schemas.api import (
     AutomapRequest,
+    Calibration,
     CountResult,
     MapRequest,
     SuggestionDecision,
@@ -128,6 +129,18 @@ async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser):
         candidates=result.get("candidates") or [],
         trace=result.get("trace") or [],
     )
+
+
+@router.get("/suggestions/calibration", response_model=Calibration)
+def calibration(
+    _: CurrentUser,
+    session: SessionDep,
+    vocabulary_id: int | None = Query(None),
+    target_precision: float = Query(0.95, gt=0, le=1),
+):
+    """How often reviewers accepted suggestions per confidence level; the recommended threshold
+    is the lowest confidence that keeps precision at or above the target."""
+    return suggestions.calibration(session, vocabulary_id, target_precision)
 
 
 @router.get("/source-vocabularies/{vocabulary_id}/suggestions", response_model=SuggestionPage)

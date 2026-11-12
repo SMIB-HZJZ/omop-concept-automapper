@@ -14,6 +14,8 @@ Optional:
 
 4. **DRUG_STRENGTH.csv**: enables deterministic drug mapping by ingredient, strength and dose form
    (the `automap_drug` pipeline). Without it, drugs are mapped by similarity search and the LLM.
+5. **CONCEPT_SYNONYM.csv**: synonyms (also non-English ones) for exact name matching, keyword
+   search and, optionally, the embedded text.
 
 They must be in the Athena download format: tab-delimited, with a header row. Missing files are skipped and reported.
 

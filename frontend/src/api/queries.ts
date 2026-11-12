@@ -254,7 +254,10 @@ export function useDecideSuggestions(vocabularyId: number | null, decision: "acc
           ? await api.POST("/api/suggestions/accept", { body })
           : await api.POST("/api/suggestions/reject", { body }),
       ),
-    onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
+    onSuccess: () => {
+      invalidateVocabulary(qc, vocabularyId ?? undefined);
+      void qc.invalidateQueries({ queryKey: ["calibration"] });
+    },
   });
 }
 

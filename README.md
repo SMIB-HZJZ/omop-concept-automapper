@@ -189,8 +189,26 @@ N02BE01-7,Paracetamol sirup 120 mg/5 ml,paracetamol,,,120,mg,5,mL,Oral Solution
 
 Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workflows/definitions/`](backend/app/workflows/definitions):
 
-- **`automap`** (default) reproduces the original behaviour: ATC7 extraction (drug mode), then vector retrieval (k=15, or 30 for drugs), then the LLM reranker, then a confidence gate.
-- **`automap_refine`** works the same way, but rejected concepts go to a Pydantic AI agent. The agent reformulates the query (translations, synonyms, ingredient splits) using search and hierarchy tools, and a second gate decides.
+- **`automap`** (default). Deterministic steps first, the search and the LLM only for what is left:
+  1. `extract_atc7`: ATC7 code at the start of the source value (drug mode).
+  2. `match_previous`: the reviewed mapping of another source concept with the same name (case, accents and punctuation ignored). Confidence 10, method `auto_previous`.
+  3. `match_code`: the source value looked up in the vocabulary's code systems (**Source codes are** on the vocabulary bar, e.g. `ICD10` for MKB-10), followed through `Maps to`. Confidence 10, `auto_code`.
+  4. `match_name`: exact name or synonym (CONCEPT_SYNONYM) of any concept, followed through `Maps to`. Confidence 9, `auto_exact_name`.
+  5. `retrieve`: vector search plus keyword (trigram) search on names and synonyms, fused by reciprocal rank (k=15, or 30 for drugs).
+  6. `llm_rerank`: the LLM picks a candidate, with reviewed mappings of similar source terms as examples. It also states the match type (exact / broader / narrower / related) and may map a combined term to several concepts.
+  7. `confidence_gate`.
+  Ambiguous deterministic hits (different targets) go to the reranker as the first candidates.
+- **`automap_translated`**: the same, with a `translate` step before the name match; searches and the reranker use the original and the English term.
+- **`automap_drug`**: the same, with the structured drug match (see [Drug mapping](#drug-mapping)) before translation.
+- **`automap_refine`**: like `automap`, but rejected concepts go to a Pydantic AI agent. The agent reformulates the query (translations, synonyms, ingredient splits) using search and hierarchy tools, and a second gate decides.
+
+**Domains** (Auto map settings, also used by AI suggest): *only these domains* (default), *prefer these domains* (a few candidates from other domains are added and the reranker is told the preference) or *all domains*.
+
+**Embeddings** (Configuration page): the embedded text can be the name, the name with class and domain, the name with synonyms, or both; query/document task types can be sent to Gemini, Voyage and Cohere. Each combination is its own collection, so variants can be compared without losing the others.
+
+**Review queue**: sort by *Priority* (frequency × uncertainty) to review what affects most records first. After 20 or more decisions, the Review page shows how often suggestions were accepted per confidence level and recommends the threshold that keeps at least 95 % of auto-accepted mappings correct.
+
+**Cost**: identical reranker prompts reuse the cached answer (`LLM_CACHE_TTL`), translations are cached per term, and auto-map decides each distinct source term once per run.
 
 The libraries are used as follows:
 - **Instructor** runs the reranker as a one-shot structured call with validation. An out-of-range candidate id is re-asked, and "no match" is allowed.
