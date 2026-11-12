@@ -185,3 +185,76 @@ async def test_rationale_is_kept():
     )
     result = await run_pipeline(_state(), make_context(reranker_with(provider)))
     assert result["rationale"] == "same ingredient and strength"
+
+
+async def test_match_type_and_combined_concepts():
+    provider = MockProvider(
+        {
+            "rationale": "metformin with a second listed product",
+            "most_similar_item_id": 0,
+            "confidence_score": 9,
+            "match_type": "broader",
+            "additional_item_ids": [1, 0],
+        }
+    )
+    result = await run_pipeline(_state(), make_context(reranker_with(provider)))
+    assert result["match_type"] == "broader"
+    # The pick itself is not repeated in the combined list
+    assert [c["concept_id"] for c in result["selected_concepts"]] == [1, 2]
+
+
+async def test_out_of_range_additional_id_is_reasked():
+    provider = MockProvider(
+        {"most_similar_item_id": 0, "confidence_score": 9, "additional_item_ids": [9]},
+        {"most_similar_item_id": 0, "confidence_score": 9},
+    )
+    result = await run_pipeline(_state(), make_context(reranker_with(provider)))
+    assert len(provider.requests) == 2 and result["selected_concepts"] == []
+
+
+class ExamplesOnly:
+    """Stands in for app.services.lexical: no text matches, one reviewed example."""
+
+    def match_previous(self, *args):
+        from app.services.lexical import TextMatch
+
+        return TextMatch()
+
+    match_code = match_name = match_previous
+
+    def keyword_search(self, *args):
+        return []
+
+    def similar_examples(self, term, exclude, limit):
+        return [
+            {
+                "source_name": "metformin 850 mg tbl",
+                "mapped_to": "metformin 850 MG Oral Tablet [Clinical Drug]",
+            }
+        ]
+
+
+async def test_examples_reach_the_prompt():
+    provider = MockProvider({"most_similar_item_id": 0, "confidence_score": 9})
+    await run_pipeline(_state(), make_context(reranker_with(provider), lexical=ExamplesOnly()))
+    user = provider.requests[0]["messages"][1]["content"]
+    assert user.startswith(
+        "Reviewed mappings of similar source terms:\n- metformin 850 mg tbl -> metformin 850 MG"
+    )
+
+
+async def test_rerank_answers_are_cached(monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "llm_cache_ttl", 60)
+    provider = MockProvider(
+        {"most_similar_item_id": 0, "confidence_score": 9, "rationale": "cached-run"}
+    )
+    first = await run_pipeline(
+        _state(name="metformin 500 mg cache test"), make_context(reranker_with(provider))
+    )
+    again = MockProvider({"most_similar_item_id": 1, "confidence_score": 2})
+    second = await run_pipeline(
+        _state(name="metformin 500 mg cache test"), make_context(reranker_with(again))
+    )
+    assert again.requests == [] and second["rationale"] == first["rationale"] == "cached-run"

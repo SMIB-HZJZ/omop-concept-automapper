@@ -58,6 +58,7 @@ def persist_outcome(
                 pipeline=pipeline,
                 task_id=task_id,
                 rationale=state.get("rationale"),
+                match_type=state.get("match_type"),
                 commit=False,
                 only_if_unmapped=True,
             )
@@ -68,9 +69,9 @@ def persist_outcome(
                 """
                 INSERT INTO mapping_suggestion
                     (source_id, concept_id, extra_concept_ids, confidence, method, pipeline,
-                     target_domains, rationale, task_id)
+                     target_domains, rationale, task_id, match_type)
                 SELECT :s, :c, CAST(:extra AS integer[]), :conf, :method, :pipeline, :domains,
-                       :rationale, :task
+                       :rationale, :task, :match_type
                 WHERE NOT EXISTS (SELECT 1 FROM source_standard_map WHERE source_id = :s)
                 ON CONFLICT (source_id) WHERE status = 'pending' DO NOTHING
                 """
@@ -85,6 +86,7 @@ def persist_outcome(
                 "domains": domains,
                 "rationale": state.get("rationale"),
                 "task": task_id,
+                "match_type": state.get("match_type"),
             },
         ).rowcount
         return "queued" if inserted else "skipped"

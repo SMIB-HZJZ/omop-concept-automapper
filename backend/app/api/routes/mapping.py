@@ -124,6 +124,7 @@ async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser):
         ],
         confidence=result.get("confidence"),
         rationale=result.get("rationale"),
+        match_type=result.get("match_type"),
         candidates=result.get("candidates") or [],
         trace=result.get("trace") or [],
     )

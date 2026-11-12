@@ -1,12 +1,25 @@
+import asyncio
+
+from pydantic import BaseModel, ConfigDict, Field
+
 from app.workflows.context import NodeContext
 from app.workflows.registry import node
 from app.workflows.state import AutomapState
 
 
+class RerankParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Reviewed mappings of similar source terms shown to the LLM as examples (0 = none)
+    examples: int = Field(default=5, ge=0, le=20)
+
+
 @node(
-    "llm_rerank", description="LLM picks the best candidate and rates its confidence (Instructor)"
+    "llm_rerank",
+    params=RerankParams,
+    description="LLM picks the best candidate and rates its confidence (Instructor)",
 )
-async def llm_rerank(state: AutomapState, ctx: NodeContext, params) -> dict:
+async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams) -> dict:
     candidates = state.get("candidates") or []
     if not candidates:
         return {"selected": None, "confidence": None, "_summary": "no candidates to rerank"}
@@ -16,6 +29,12 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params) -> dict:
         extra: dict = {"translation": translation} if translation else {}
         if state.get("notes"):
             extra["notes"] = state["notes"]
+        if params.examples and ctx.lexical is not None:
+            examples = await asyncio.to_thread(
+                ctx.lexical.similar_examples, term, state.get("source_id"), params.examples
+            )
+            if examples:
+                extra["examples"] = examples
         result = await ctx.reranker.rerank(
             term, candidates, bool(state.get("drug_specific")), **extra
         )
@@ -37,9 +56,12 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params) -> dict:
             "_summary": "LLM found no match",
         }
     selected = candidates[result.index]
+    additional = [candidates[i] for i in getattr(result, "additional", None) or []]
     return {
         "selected": selected,
+        "selected_concepts": [selected, *additional] if additional else [],
         "confidence": result.confidence,
+        "match_type": getattr(result, "match_type", None),
         "outcome": "selected",
         "rationale": result.rationale,
         "_summary": f"picked #{result.index} '{selected['concept_name']}' (confidence {result.confidence})",

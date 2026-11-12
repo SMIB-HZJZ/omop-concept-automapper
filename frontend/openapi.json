@@ -3801,6 +3801,17 @@
             ],
             "title": "Rationale"
           },
+          "match_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Type"
+          },
           "candidates": {
             "items": {
               "$ref": "#/components/schemas/SearchResult"
@@ -3956,6 +3967,17 @@
               }
             ],
             "title": "Rationale"
+          },
+          "match_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Type"
           },
           "target_domains": {
             "anyOf": [

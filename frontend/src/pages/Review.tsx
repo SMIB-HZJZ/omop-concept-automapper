@@ -119,7 +119,14 @@ export function ReviewPage() {
       {
         accessorKey: "method",
         header: "Method",
-        cell: ({ getValue }) => <span className="text-xs">{String(getValue())}</span>,
+        cell: ({ row }) => (
+          <div className="text-xs">
+            <div>{row.original.method}</div>
+            {row.original.match_type && row.original.match_type !== "exact" && (
+              <div className="text-amber-700 dark:text-amber-400">{row.original.match_type} match</div>
+            )}
+          </div>
+        ),
       },
       {
         accessorKey: "pipeline",

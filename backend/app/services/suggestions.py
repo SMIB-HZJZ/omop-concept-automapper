@@ -46,7 +46,7 @@ def list_suggestions(
             f"""
             SELECT ms.id, ms.source_id, sc.source_value, sc.source_concept_name, sc.freq,
                    ms.concept_id, c.concept_name, c.domain_id, c.vocabulary_id, c.concept_class_id,
-                   c.concept_code, ms.confidence, ms.method, ms.pipeline, ms.rationale,
+                   c.concept_code, ms.confidence, ms.method, ms.pipeline, ms.rationale, ms.match_type,
                    ms.target_domains, ms.status, ms.created_at, ms.decided_at,
                    u.username AS decided_by,
                    COALESCE((
@@ -114,6 +114,7 @@ def accept(
             pipeline=row["pipeline"],
             task_id=row["task_id"],
             rationale=row["rationale"],
+            match_type=row.get("match_type"),
             commit=False,
         )
         # map_concepts removed the pending row; keep a decided record instead
@@ -122,9 +123,11 @@ def accept(
                 """
                 INSERT INTO mapping_suggestion
                     (source_id, concept_id, extra_concept_ids, confidence, method, pipeline,
-                     target_domains, rationale, task_id, status, decided_by, created_at, decided_at)
+                     target_domains, rationale, task_id, match_type, status, decided_by,
+                     created_at, decided_at)
                 VALUES (:source_id, :concept_id, :extra_concept_ids, :confidence, :method, :pipeline,
-                        :target_domains, :rationale, :task_id, 'accepted', :u, :created_at, :now)
+                        :target_domains, :rationale, :task_id, :match_type, 'accepted', :u,
+                        :created_at, :now)
                 """
             ),
             {**row, "u": user_id, "now": now},

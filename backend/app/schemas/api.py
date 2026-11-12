@@ -395,6 +395,7 @@ class SuggestionOut(BaseModel):
     method: str
     pipeline: str | None
     rationale: str | None
+    match_type: str | None = None
     target_domains: list[str] | None
     status: str
     created_at: datetime | None
@@ -459,6 +460,7 @@ class SuggestResponse(BaseModel):
     selected_concepts: list[SearchResult] = []
     confidence: int | None
     rationale: str | None
+    match_type: str | None = None
     candidates: list[SearchResult]
     trace: list[TraceStep]
 

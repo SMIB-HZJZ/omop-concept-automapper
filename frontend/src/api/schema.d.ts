@@ -1287,6 +1287,8 @@ export interface components {
             confidence: number | null;
             /** Rationale */
             rationale: string | null;
+            /** Match Type */
+            match_type?: string | null;
             /** Candidates */
             candidates: components["schemas"]["SearchResult"][];
             /** Trace */
@@ -1333,6 +1335,8 @@ export interface components {
             pipeline: string | null;
             /** Rationale */
             rationale: string | null;
+            /** Match Type */
+            match_type?: string | null;
             /** Target Domains */
             target_domains: string[] | null;
             /** Status */

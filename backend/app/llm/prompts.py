@@ -54,19 +54,28 @@ The source term may be in a language other than English, abbreviated or misspell
 candidates are standard OMOP concepts in English, found by semantic search and listed as
 `<id>: <concept name> [<concept class> | <domain> | <vocabulary>]`.
 
-Select the id of the single candidate that best matches the source term under the rules below,
-rate your confidence on the scale below, and give a one-sentence rationale naming the attribute
-that decided it. Select only an id from the list. Select nothing if no candidate fits."""
+Select the id of the candidate that best matches the source term under the rules below, rate
+your confidence on the scale below, and give a one-sentence rationale naming the attribute that
+decided it. Select only ids from the list. Select nothing if no candidate fits.
+
+Also state how the selected concept relates to the source term: exact (same meaning), broader
+(more general), narrower (more specific), or related. If the source term combines several
+concepts that OMOP keeps separate (e.g. a condition and its manifestation), list the ids of the
+further candidates that must be mapped together with the first; otherwise leave that list empty.
+
+Reviewed mappings of similar source terms, when given, show the conventions to follow."""
 
 DRUG_SYSTEM_PROMPT = f"{_RERANK_TASK}\n\n{DRUG_CRITERIA}\n\n{CONFIDENCE_SCALE}\n"
 
 CONCEPT_SYSTEM_PROMPT = f"{_RERANK_TASK}\n\n{CONCEPT_CRITERIA}\n\n{CONFIDENCE_SCALE}\n"
 
 INPUT_PROMPT = """\
-Source term: {input_term}
+{examples}Source term: {input_term}
 {translation_line}
 Candidates:
 {candidate_list}"""
+
+EXAMPLES_BLOCK = "Reviewed mappings of similar source terms:\n{lines}\n\n"
 
 TRANSLATION_LINE = "English rendering (machine translation, may be imperfect): {translation}\n"
 

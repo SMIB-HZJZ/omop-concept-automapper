@@ -1,10 +1,11 @@
 """Instructor-based structured calls: the reranker and the term translator."""
 
 import asyncio
+import dataclasses
 import hashlib
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import instructor
 
@@ -14,6 +15,7 @@ from app.llm.gateway import chat_model_settings, get_async_client
 from app.llm.prompts import (
     CONCEPT_SYSTEM_PROMPT,
     DRUG_SYSTEM_PROMPT,
+    EXAMPLES_BLOCK,
     INPUT_PROMPT,
     TRANSLATE_SYSTEM_PROMPT,
     TRANSLATION_LINE,
@@ -41,6 +43,8 @@ class RerankResult:
     index: int | None
     confidence: int | None
     rationale: str | None = None
+    match_type: str | None = None
+    additional: list[int] = field(default_factory=list)
 
 
 def format_candidates(candidates: list[dict]) -> str:
@@ -68,39 +72,76 @@ class Reranker:
         drug_specific: bool,
         translation: str | None = None,
         notes: list[str] | None = None,
+        examples: list[dict] | None = None,
     ) -> RerankResult:
         if not candidates:
             return RerankResult(None, None)
+        messages = [
+            {
+                "role": "system",
+                "content": DRUG_SYSTEM_PROMPT if drug_specific else CONCEPT_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": INPUT_PROMPT.format(
+                    examples=(
+                        EXAMPLES_BLOCK.format(
+                            lines="\n".join(
+                                f"- {e['source_name']} -> {e['mapped_to']}" for e in examples
+                            )
+                        )
+                        if examples
+                        else ""
+                    ),
+                    input_term=term,
+                    translation_line=(
+                        TRANSLATION_LINE.format(translation=translation)
+                        if translation and translation.strip().lower() != term.strip().lower()
+                        else ""
+                    )
+                    + "".join(f"{note}\n" for note in notes or []),
+                    candidate_list=format_candidates(candidates),
+                ),
+            },
+        ]
+        # Same prompt, same model -> same answer (temperature 0): reuse it across runs
+        key = (
+            "rerank:"
+            + hashlib.sha1(json.dumps([self.model, messages], sort_keys=True).encode()).hexdigest()
+        )
+        ttl = get_settings().llm_cache_ttl
+        try:
+            hit = await asyncio.to_thread(get_redis().get, key) if ttl else None
+            if hit:
+                return RerankResult(**json.loads(hit))
+        except Exception:
+            logger.debug("Rerank cache read failed", exc_info=True)
         client = self._client or get_instructor()
         response: RerankerResponse = await client.chat.completions.create(
             model=self.model,
             response_model=RerankerResponse,
-            messages=[
-                {
-                    "role": "system",
-                    "content": DRUG_SYSTEM_PROMPT if drug_specific else CONCEPT_SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "content": INPUT_PROMPT.format(
-                        input_term=term,
-                        translation_line=(
-                            TRANSLATION_LINE.format(translation=translation)
-                            if translation and translation.strip().lower() != term.strip().lower()
-                            else ""
-                        )
-                        + "".join(f"{note}\n" for note in notes or []),
-                        candidate_list=format_candidates(candidates),
-                    ),
-                },
-            ],
+            messages=messages,
             max_retries=get_settings().llm_max_retries,
             context={"n_candidates": len(candidates)},
             **chat_model_settings(),
         )
-        return RerankResult(
-            response.most_similar_item_id, response.confidence_score, response.rationale
+        result = RerankResult(
+            response.most_similar_item_id,
+            response.confidence_score,
+            response.rationale,
+            response.match_type,
+            [i for i in response.additional_item_ids if i != response.most_similar_item_id]
+            if response.most_similar_item_id is not None
+            else [],
         )
+        try:
+            if ttl:
+                await asyncio.to_thread(
+                    get_redis().set, key, json.dumps(dataclasses.asdict(result)), ex=ttl
+                )
+        except Exception:
+            logger.debug("Rerank cache write failed", exc_info=True)
+        return result
 
 
 @dataclass

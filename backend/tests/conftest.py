@@ -41,6 +41,7 @@ os.environ.update(
         "AUTOMAP_CONCURRENCY": "3",
         "DISKANN_REBUILD_THRESHOLD": "5",
         "LOG_FORMAT": "text",
+        "LLM_CACHE_TTL": "0",
         "WORKFLOW_PLUGINS": "",
         "WORKFLOW_DEFINITIONS_DIR": "",
         "LLM_GATEWAY_URL": "http://127.0.0.1:9",  # nothing listens: any real LLM call fails fast

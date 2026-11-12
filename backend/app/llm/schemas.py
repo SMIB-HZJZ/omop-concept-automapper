@@ -1,5 +1,7 @@
 """Structured-output schemas for LLM calls."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 
@@ -25,6 +27,23 @@ class RerankerResponse(BaseModel):
         le=10,
         description="Confidence in the match on the 1-10 scale, or null if nothing was selected",
     )
+    match_type: Literal["exact", "broader", "narrower", "related"] | None = Field(
+        default=None, description="How the selected concept relates to the source term"
+    )
+    additional_item_ids: list[int] = Field(
+        default_factory=list,
+        max_length=5,
+        description="Further candidate ids to map together with the first (combined terms only)",
+    )
+
+    @field_validator("additional_item_ids")
+    @classmethod
+    def _additional_in_range(cls, value: list[int], info: ValidationInfo) -> list[int]:
+        n = (info.context or {}).get("n_candidates")
+        bad = [v for v in value if n is not None and not 0 <= v < n]
+        if bad:
+            raise ValueError(f"additional_item_ids must be listed ids (0 to {n - 1}), got {bad}")
+        return list(dict.fromkeys(value))
 
     @field_validator("most_similar_item_id")
     @classmethod

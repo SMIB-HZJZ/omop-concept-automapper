@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 120.0
     embedding_max_retries: int = 3
     query_embedding_cache_ttl: int = 7 * 24 * 3600
+    # Reranker answers are reused for an identical prompt and model (0 = never cache)
+    llm_cache_ttl: int = 30 * 24 * 3600
 
     # --- Workflows / auto-mapping ---
     automap_pipeline: str = "automap"

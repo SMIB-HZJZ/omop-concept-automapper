@@ -403,6 +403,7 @@ def map_concepts(
     rationale: str | None = None,
     commit: bool = True,
     only_if_unmapped: bool = False,
+    match_type: str | None = None,
 ) -> bool:
     """Replace the mappings of one source concept and write one audit row per concept.
 
@@ -442,8 +443,9 @@ def map_concepts(
                 """
                 INSERT INTO auto_mapping_audit
                     (source_id, concept_id, confidence_score, mapping_method, target_domains,
-                     pipeline, task_id, rationale, created_by)
-                VALUES (:s, :c, :conf, :method, :domains, :pipeline, :task, :rationale, :u)
+                     pipeline, task_id, rationale, created_by, match_type)
+                VALUES (:s, :c, :conf, :method, :domains, :pipeline, :task, :rationale, :u,
+                        :match_type)
                 """
             ),
             {
@@ -454,6 +456,7 @@ def map_concepts(
                 "pipeline": pipeline,
                 "task": task_id,
                 "rationale": rationale,
+                "match_type": match_type,
             },
         )
     if commit:

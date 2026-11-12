@@ -59,6 +59,7 @@ class AutoMappingAudit(SQLModel, table=True):
     target_domains: list[str] | None = Field(default=None, sa_column=Column(ARRAY(Text)))
     pipeline: str | None = None
     task_id: str | None = None
+    match_type: str | None = None
     rationale: str | None = None
     created_by: int | None = Field(default=None, foreign_key="app_user.id")
     created_at: datetime | None = Field(
@@ -76,6 +77,7 @@ class MappingSuggestion(SQLModel, table=True):
     method: str
     pipeline: str | None = None
     target_domains: list[str] | None = Field(default=None, sa_column=Column(ARRAY(Text)))
+    match_type: str | None = None
     # Further concepts mapped together with concept_id (combined match)
     extra_concept_ids: list[int] = Field(
         default_factory=list, sa_column=Column(ARRAY(Integer), server_default="{}", nullable=False)

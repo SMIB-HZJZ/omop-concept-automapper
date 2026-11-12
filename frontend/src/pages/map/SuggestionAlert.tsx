@@ -47,6 +47,7 @@ export function SuggestionAlert({
                 </span>
               ))}{" "}
               · {suggested.domain_id} · confidence <b>{suggestion.confidence ?? "—"}</b>
+              {suggestion.match_type && ` · ${suggestion.match_type} match`}
             </span>
           ) : (
             <span>No concept suggested</span>
