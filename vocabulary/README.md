@@ -10,6 +10,11 @@ The vocabulary import expects these files:
 2. **CONCEPT_RELATIONSHIP.csv**
 3. **CONCEPT_ANCESTOR.csv**
 
+Optional:
+
+4. **DRUG_STRENGTH.csv**: enables deterministic drug mapping by ingredient, strength and dose form
+   (the `automap_drug` pipeline). Without it, drugs are mapped by similarity search and the LLM.
+
 They must be in the Athena download format: tab-delimited, with a header row. Missing files are skipped and reported.
 
 ## Usage

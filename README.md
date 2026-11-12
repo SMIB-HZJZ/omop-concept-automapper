@@ -69,7 +69,7 @@ This version starts from an empty database: import the vocabulary and embed conc
 ## Using the app
 
 1. **Import → OMOP Vocabulary Tables** (admin).
-   - Put `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv` and `CONCEPT_ANCESTOR.csv` (tab-delimited Athena export) in `vocabulary/`.
+   - Put `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv` and `CONCEPT_ANCESTOR.csv` (tab-delimited Athena export) in `vocabulary/`. Add `DRUG_STRENGTH.csv` (optional) to enable deterministic drug mapping.
    - Start the import. It runs in the background with a progress bar, and you can leave the page.
    - Re-importing upserts concepts and removes mappings to concepts that are no longer standard.
 2. **Import → ATC7 Processing** (admin). Computes the 7-character ATC codes of every standard drug. These are used to narrow drug searches.
@@ -77,6 +77,7 @@ This version starts from an empty database: import the vocabulary and embed conc
    - Required columns: `source_value` and `source_concept_name`.
    - Optional: `freq` (empty means 1), and `concept_id` for existing mappings (`;`-separated, for example `1234;5678`).
    - If a `source_value` starts with an ATC7 code (for example `A10BA02…`), drug mapping uses it.
+   - Optional drug columns, in the shape of OMOP `drug_strength` (see [Drug mapping](#drug-mapping)).
 4. **Import → Embedding Management** (admin). Embeds the standard concepts with the configured embedding model. You can filter by domain and set the batch size.
 5. **Search**. Semantic search with domain, vocabulary and ATC7 filters.
 6. **Map Concepts**. Work through unmapped source concepts:
@@ -154,6 +155,36 @@ OLLAMA_API_BASE=http://host.docker.internal:11434
 **Languages and translation.** The default `automap` pipeline embeds the source term as is and relies on the multilingual embedding model; the reranker sees the original term next to the English OMOP candidates. The `automap_translated` pipeline adds a `translate` step: the term is rendered in English OMOP wording (cached per term and model), retrieval searches both the original and the English term, and the reranker sees both. `automap_refine` lets an agent reformulate and translate when the first pass is not confident.
 
 There is no published OMOP-specific benchmark for these models. Measure on your own data instead (next section).
+
+### Drug mapping
+
+For drug vocabularies (the vocabulary's drug flag) the default pipeline is `automap_drug` once `DRUG_STRENGTH.csv` is imported (`AUTOMAP_DRUG_PIPELINE`):
+
+1. **Structure.** Taken from the optional CSV columns when present, otherwise extracted from the name by the LLM (ingredients as English INN, strengths, RxNorm dose form). Local names in the columns (`paracetamol`, `tableta`) are translated when they do not match.
+2. **Deterministic match** on `drug_strength` in RxNorm and RxNorm Extension, at the level of detail the source has:
+
+   | Source has | Target |
+   |---|---|
+   | ingredients + strengths + dose form | Clinical Drug (else Quant Clinical Drug) |
+   | one ingredient + strength | Clinical Drug Comp |
+   | ingredients + dose form | Clinical Drug Form |
+   | one ingredient | Ingredient |
+
+   The ingredient set must be identical, strengths equal after unit conversion (0.5 g = 500 mg; 500 mcg/5 mL = 0.1 mg/mL; 1 % = 10 mg/g or mL; 1 % tolerance) and the dose form identical. RxNorm wins over an RxNorm Extension duplicate. A unique match is accepted with confidence 10 (`auto_drug_structured`).
+3. **Fallback.** No match, or several equally good ones: translation, similarity search (tied matches first) and the LLM reranker, which also sees the parsed structure.
+
+Branded drugs (brand names) are not matched deterministically yet; they go through the fallback.
+
+CSV example:
+
+```csv
+source_value,source_concept_name,ingredient,amount_value,amount_unit,numerator_value,numerator_unit,denominator_value,denominator_unit,dose_form
+N02BE01-1,Paracetamol 500 mg tbl,paracetamol,500,mg,,,,,tablet
+J01CR02-3,Amoksiklav 875/125,amoxicillin;clavulanate,875;125,mg,,,,,Oral Tablet
+N02BE01-7,Paracetamol sirup 120 mg/5 ml,paracetamol,,,120,mg,5,mL,Oral Solution
+```
+
+Compare it with the plain pipelines on known mappings: `evaluate <vocabulary_id> --pipelines automap,automap_translated,automap_drug`.
 
 ### Measuring mapping accuracy
 

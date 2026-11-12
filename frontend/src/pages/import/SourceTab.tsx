@@ -37,6 +37,9 @@ function SourceImportResult({ task }: { task: Task }) {
         {formatNumber(r.premapped_sources)} concepts came with existing mappings ({formatNumber(r.premapped_links)}{" "}
         links).
       </div>
+      {(r.with_drug_structure ?? 0) > 0 && (
+        <div>{formatNumber(r.with_drug_structure ?? 0)} concepts came with a structured drug form.</div>
+      )}
       {invalid.length > 0 && (
         <div className="text-destructive">
           Unknown concept IDs ignored: {invalid.slice(0, 20).join(", ")}
@@ -147,6 +150,14 @@ export function SourceTab() {
                 Optional columns: <code>freq</code> (frequency/count of usage; empty means 1), <code>concept_id</code>{" "}
                 (OMOP concept ID(s) for existing mappings; separate multiple IDs with semicolons, e.g.
                 "1234;5678;9012").
+              </p>
+              <p>
+                Optional drug columns (shape of OMOP <code>drug_strength</code>, one value per ingredient separated by
+                semicolons): <code>ingredient</code>, <code>amount_value</code>, <code>amount_unit</code>,{" "}
+                <code>numerator_value</code>, <code>numerator_unit</code>, <code>denominator_value</code>,{" "}
+                <code>denominator_unit</code>, <code>dose_form</code>, <code>brand_name</code>. When present, drugs are
+                matched deterministically from these instead of parsing the name, e.g. ingredient
+                "amoxicillin;clavulanate", amount_value "875;125", amount_unit "mg", dose_form "Oral Tablet".
               </p>
             </div>
           </CardDescription>
