@@ -94,7 +94,7 @@ class FakeReranker:
         self.overrides = overrides or {}
         self.calls: list[str] = []
 
-    async def rerank(self, term, candidates, drug_specific):
+    async def rerank(self, term, candidates, drug_specific, **kwargs):
         from app.llm.structured import RerankResult
 
         self.calls.append(term)

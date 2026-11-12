@@ -1,7 +1,8 @@
 """A tiny OpenAI-compatible server for running the whole stack without an LLM provider.
 
 - /v1/embeddings: deterministic bag-of-words vectors (texts sharing words are similar)
-- /v1/chat/completions: answers the reranker's tool call by picking the candidate with the
+- /v1/chat/completions: answers the translation tool call by echoing the term, and the
+  reranker's tool call by picking the candidate with the
   largest word overlap with the input term (confidence 9 for a strong overlap, 6 otherwise);
   any other request gets a plain text reply
 - /v1/models and /health/liveliness for the settings page and health checks
@@ -62,11 +63,12 @@ async def embeddings(request: Request):
 
 
 def _rerank(user_text: str) -> dict:
-    term = re.search(r"Input Term:\*\*\s*`([^`]*)`", user_text)
-    term_words = set(WORD.findall((term.group(1) if term else "").lower()))
+    # Prompt format: "Source term: …", optional "English rendering …: …", "<id>: <name> [<class> | …]"
+    terms = re.findall(r"^(?:Source term|English rendering[^:]*): (.*)$", user_text, re.MULTILINE)
+    term_words = set(WORD.findall(" ".join(terms).lower()))
     best, best_overlap = None, 0
     for line in user_text.splitlines():
-        match = re.match(r"\s*`?(\d+): (.*)", line)
+        match = re.match(r"\s*(\d+): ([^\[]*)", line)
         if match:
             overlap = len(term_words & set(WORD.findall(match.group(2).lower())))
             if overlap > best_overlap:
@@ -89,7 +91,14 @@ async def chat(request: Request):
     finish = "stop"
     if tools:
         name = tools[0]["function"]["name"]
-        args = _rerank(user_text) if name == "RerankerResponse" else {}
+        if name == "RerankerResponse":
+            args = _rerank(user_text)
+        elif name == "TranslationResponse":
+            # No real translation: echo the term (enough to exercise the pipeline)
+            term = re.search(r"^Term: (.*)$", user_text, re.MULTILINE)
+            args = {"english": term.group(1) if term else "", "language": "en"}
+        else:
+            args = {}
         message["tool_calls"] = [
             {
                 "id": "call_fake",

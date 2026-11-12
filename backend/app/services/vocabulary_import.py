@@ -2,8 +2,10 @@
 
 Behaviour is ported from the Streamlit app:
 - ``concept`` is upserted through a temp table (existing concepts are updated, not deleted)
-- ``concept_relationship`` and ``concept_ancestor`` are truncated and reloaded
-- non-primary-key indexes are dropped during the load and recreated afterwards
+- ``concept_relationship`` and ``concept_ancestor`` are replaced completely
+
+Unlike the Streamlit app, nothing is locked for the length of the import: concept indexes stay in
+place, and the other two tables are built next to the live ones and swapped in at the end.
 - files are tab-delimited with a header, using backspace as the quote character
 - each table import is logged to ``vocabulary_imports``
 """
@@ -37,24 +39,24 @@ class ByteProgress:
             self.progress.check_cancelled()
 
 
-def _drop_indexes(cur: psycopg.Cursor, table: str) -> list[tuple[str, str]]:
+def _index_defs(cur: psycopg.Cursor, table: str) -> list[tuple[str, str]]:
     cur.execute(
-        """
-        SELECT indexname, indexdef FROM pg_indexes
-        WHERE tablename = %s AND schemaname = 'public' AND indexname NOT LIKE '%%_pkey'
-        """,
+        "SELECT indexname, indexdef FROM pg_indexes WHERE tablename = %s AND schemaname = 'public'",
         (table,),
     )
-    dropped = cur.fetchall()
-    for name, _ in dropped:
-        cur.execute(f'DROP INDEX IF EXISTS "{name}"')
-    return dropped
+    return cur.fetchall()
 
 
-def _recreate_indexes(cur: psycopg.Cursor, dropped: list[tuple[str, str]]) -> None:
-    for name, definition in dropped:
-        logger.info("Recreating index %s", name)
-        cur.execute(definition)
+def _constraint_defs(cur: psycopg.Cursor, table: str) -> list[tuple[str, str]]:
+    """Foreign-key and check constraints (primary/unique keys come with their indexes)."""
+    cur.execute(
+        """
+        SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+        WHERE conrelid = %s::regclass AND contype IN ('f', 'c')
+        """,
+        (f"public.{table}",),
+    )
+    return cur.fetchall()
 
 
 def _copy_file(
@@ -87,33 +89,38 @@ def _log_import(
 def import_concept_upsert(
     conn: psycopg.Connection, path: str, tracker: ByteProgress, task_id: str | None
 ) -> int:
+    """Upsert CONCEPT.csv. Indexes stay in place so searches keep working during the import;
+    only rows that actually changed are written, which keeps a release-to-release update cheap."""
     with conn.transaction(), conn.cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM concept")
-        before = cur.fetchone()[0]
-        dropped = _drop_indexes(cur, "concept")
         cur.execute(
             "CREATE TEMP TABLE temp_concept (LIKE concept INCLUDING DEFAULTS) ON COMMIT DROP"
         )
         _copy_file(cur, "temp_concept", path, tracker, "CONCEPT.csv")
         if tracker.progress:
             tracker.progress.update(message="Upserting concepts", force=True)
+        cur.execute("ANALYZE temp_concept")
         cur.execute(
             """
-            INSERT INTO concept SELECT * FROM temp_concept
+            INSERT INTO concept AS c SELECT * FROM temp_concept
             ON CONFLICT (concept_id) DO UPDATE SET
                 concept_name = EXCLUDED.concept_name, domain_id = EXCLUDED.domain_id,
                 vocabulary_id = EXCLUDED.vocabulary_id, concept_class_id = EXCLUDED.concept_class_id,
                 standard_concept = EXCLUDED.standard_concept, concept_code = EXCLUDED.concept_code,
                 valid_start_date = EXCLUDED.valid_start_date, valid_end_date = EXCLUDED.valid_end_date,
                 invalid_reason = EXCLUDED.invalid_reason
+            WHERE (c.concept_name, c.domain_id, c.vocabulary_id, c.concept_class_id,
+                   c.standard_concept, c.concept_code, c.valid_start_date, c.valid_end_date,
+                   c.invalid_reason)
+                  IS DISTINCT FROM
+                  (EXCLUDED.concept_name, EXCLUDED.domain_id, EXCLUDED.vocabulary_id,
+                   EXCLUDED.concept_class_id, EXCLUDED.standard_concept, EXCLUDED.concept_code,
+                   EXCLUDED.valid_start_date, EXCLUDED.valid_end_date, EXCLUDED.invalid_reason)
+            RETURNING (xmax = 0) AS inserted
             """
         )
-        if tracker.progress:
-            tracker.progress.update(message="Rebuilding concept indexes", force=True)
-        _recreate_indexes(cur, dropped)
-        cur.execute("SELECT COUNT(*) FROM concept")
-        after = cur.fetchone()[0]
-        records = after - before
+        written = cur.fetchall()
+        records = sum(1 for (inserted,) in written if inserted)
+        logger.info("concept: %d inserted, %d updated", records, len(written) - records)
         _log_import(cur, "concept", path, records, "completed", None, task_id)
     return records
 
@@ -121,15 +128,42 @@ def import_concept_upsert(
 def import_truncate_copy(
     conn: psycopg.Connection, table: str, path: str, tracker: ByteProgress, task_id: str | None
 ) -> int:
+    """Replace ``table`` with the file's contents without blocking readers.
+
+    The data is loaded into a shadow table, indexed and constrained there, and swapped in with a
+    rename. Readers keep using the old table until the swap, which takes milliseconds.
+    """
+    shadow = f"{table}_new"
     with conn.transaction(), conn.cursor() as cur:
-        dropped = _drop_indexes(cur, table)
-        cur.execute(f"TRUNCATE TABLE {table}")
-        _copy_file(cur, table, path, tracker, VOCABULARY_FILES[table])
+        indexes = _index_defs(cur, table)
+        constraints = _constraint_defs(cur, table)
+        cur.execute(f"DROP TABLE IF EXISTS {shadow}")
+        cur.execute(f"CREATE TABLE {shadow} (LIKE {table} INCLUDING DEFAULTS)")
+        _copy_file(cur, shadow, path, tracker, VOCABULARY_FILES[table])
         if tracker.progress:
-            tracker.progress.update(message=f"Rebuilding {table} indexes", force=True)
-        _recreate_indexes(cur, dropped)
-        cur.execute(f"SELECT COUNT(*) FROM {table}")
+            tracker.progress.update(message=f"Building {table} indexes", force=True)
+        for name, definition in indexes:
+            cur.execute(
+                definition.replace(f"INDEX {name} ON", f'INDEX "{name}_new" ON', 1).replace(
+                    f" ON public.{table} ", f" ON public.{shadow} ", 1
+                )
+            )
+        for name, definition in constraints:
+            cur.execute(f'ALTER TABLE {shadow} ADD CONSTRAINT "{name}_new" {definition}')
+        cur.execute(f"ANALYZE {shadow}")
+        cur.execute(f"SELECT COUNT(*) FROM {shadow}")
         records = cur.fetchone()[0]
+
+    if tracker.progress:
+        tracker.progress.update(message=f"Swapping in the new {table}", force=True)
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute("SET LOCAL lock_timeout = '60s'")
+        cur.execute(f"DROP TABLE {table}")
+        cur.execute(f"ALTER TABLE {shadow} RENAME TO {table}")
+        for name, _ in indexes:
+            cur.execute(f'ALTER INDEX "{name}_new" RENAME TO "{name}"')
+        for name, _ in constraints:
+            cur.execute(f'ALTER TABLE {table} RENAME CONSTRAINT "{name}_new" TO "{name}"')
         _log_import(cur, table, path, records, "completed", None, task_id)
     return records
 
@@ -158,9 +192,6 @@ def import_all(
             else:
                 records = import_truncate_copy(conn, table, info["path"], tracker, task_id)
             results[table] = {"status": "success", "records_imported": records, "error": None}
-            with conn.cursor() as cur:
-                cur.execute(f"ANALYZE {table}")
-            conn.commit()
         except TaskCancelled:
             raise
         except Exception as exc:

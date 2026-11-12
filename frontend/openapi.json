@@ -977,6 +977,46 @@
               "type": "integer",
               "title": "Vocabulary Id"
             }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
           }
         ],
         "responses": {
@@ -985,11 +1025,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/MappedRow"
-                  },
-                  "title": "Response Mapped Api Source Vocabularies  Vocabulary Id  Mapped Get"
+                  "$ref": "#/components/schemas/MappedPage"
                 }
               }
             }
@@ -1916,6 +1952,24 @@
         ],
         "summary": "Clear Embeddings",
         "operationId": "clear_embeddings_api_embeddings_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "confirm",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The current collection name, typed by the user",
+              "title": "Confirm"
+            },
+            "description": "The current collection name, typed by the user"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1923,42 +1977,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Message"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/embeddings/migrate-from-qdrant": {
-      "post": {
-        "tags": [
-          "embeddings"
-        ],
-        "summary": "Migrate From Qdrant",
-        "operationId": "migrate_from_qdrant_api_embeddings_migrate_from_qdrant_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/QdrantMigrationRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskRef"
                 }
               }
             }
@@ -1973,12 +1991,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/tasks": {
@@ -2956,10 +2969,14 @@
         "properties": {
           "username": {
             "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
             "title": "Username"
           },
           "password": {
             "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
             "title": "Password"
           }
         },
@@ -3018,6 +3035,42 @@
           "concept_ids"
         ],
         "title": "MapRequest"
+      },
+      "MappedPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MappedRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page"
+          },
+          "pages": {
+            "type": "integer",
+            "title": "Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "per_page",
+          "pages"
+        ],
+        "title": "MappedPage"
       },
       "MappedRow": {
         "properties": {
@@ -3254,29 +3307,6 @@
           "gateway_models_available"
         ],
         "title": "ModelOptions"
-      },
-      "QdrantMigrationRequest": {
-        "properties": {
-          "qdrant_url": {
-            "type": "string",
-            "title": "Qdrant Url",
-            "default": "http://qdrant:6333"
-          },
-          "collection": {
-            "type": "string",
-            "title": "Collection",
-            "default": "omop_vocab"
-          },
-          "batch_size": {
-            "type": "integer",
-            "maximum": 5000.0,
-            "minimum": 50.0,
-            "title": "Batch Size",
-            "default": 1000
-          }
-        },
-        "type": "object",
-        "title": "QdrantMigrationRequest"
       },
       "SearchRequest": {
         "properties": {
@@ -4684,6 +4714,391 @@
           "description"
         ],
         "title": "WorkflowNodeInfo"
+      },
+      "Atc7Result": {
+        "additionalProperties": true,
+        "properties": {
+          "drugs_with_atc7": {
+            "title": "Drugs With Atc7",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "drugs_with_atc7"
+        ],
+        "title": "Atc7Result",
+        "type": "object"
+      },
+      "AutomapResult": {
+        "additionalProperties": true,
+        "properties": {
+          "vocabulary_id": {
+            "title": "Vocabulary Id",
+            "type": "integer"
+          },
+          "total_concepts": {
+            "title": "Total Concepts",
+            "type": "integer"
+          },
+          "processed": {
+            "title": "Processed",
+            "type": "integer"
+          },
+          "mapped": {
+            "title": "Mapped",
+            "type": "integer"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "skipped": {
+            "default": 0,
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "errors": {
+            "default": 0,
+            "title": "Errors",
+            "type": "integer"
+          },
+          "outcomes": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Outcomes",
+            "type": "object"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mode"
+          },
+          "pipeline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Pipeline"
+          },
+          "mapping_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mapping Method"
+          },
+          "confidence_threshold": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confidence Threshold"
+          },
+          "target_domains": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Domains",
+            "type": "array"
+          },
+          "llm_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Llm Model"
+          }
+        },
+        "required": [
+          "vocabulary_id",
+          "total_concepts",
+          "processed",
+          "mapped",
+          "queued"
+        ],
+        "title": "AutomapResult",
+        "type": "object"
+      },
+      "EmbedResult": {
+        "additionalProperties": true,
+        "properties": {
+          "collection": {
+            "title": "Collection",
+            "type": "string"
+          },
+          "embedded": {
+            "title": "Embedded",
+            "type": "integer"
+          },
+          "pending_before": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Pending Before"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message"
+          }
+        },
+        "required": [
+          "collection",
+          "embedded"
+        ],
+        "title": "EmbedResult",
+        "type": "object"
+      },
+      "SourceImportResult": {
+        "additionalProperties": true,
+        "properties": {
+          "inserted": {
+            "title": "Inserted",
+            "type": "integer"
+          },
+          "premapped_sources": {
+            "title": "Premapped Sources",
+            "type": "integer"
+          },
+          "premapped_links": {
+            "title": "Premapped Links",
+            "type": "integer"
+          },
+          "invalid_concept_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Invalid Concept Ids",
+            "type": "array"
+          },
+          "with_drug_structure": {
+            "default": 0,
+            "title": "With Drug Structure",
+            "type": "integer"
+          },
+          "vocabulary_id": {
+            "title": "Vocabulary Id",
+            "type": "integer"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filename"
+          }
+        },
+        "required": [
+          "inserted",
+          "premapped_sources",
+          "premapped_links",
+          "invalid_concept_ids",
+          "vocabulary_id"
+        ],
+        "title": "SourceImportResult",
+        "type": "object"
+      },
+      "SyncAtc7Result": {
+        "additionalProperties": true,
+        "properties": {
+          "collection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Collection"
+          },
+          "embedded_with_atc7": {
+            "title": "Embedded With Atc7",
+            "type": "integer"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message"
+          }
+        },
+        "required": [
+          "embedded_with_atc7"
+        ],
+        "title": "SyncAtc7Result",
+        "type": "object"
+      },
+      "SyncMetadataResult": {
+        "additionalProperties": true,
+        "properties": {
+          "collection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Collection"
+          },
+          "removed": {
+            "title": "Removed",
+            "type": "integer"
+          },
+          "relabeled": {
+            "title": "Relabeled",
+            "type": "integer"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message"
+          }
+        },
+        "required": [
+          "removed",
+          "relabeled"
+        ],
+        "title": "SyncMetadataResult",
+        "type": "object"
+      },
+      "TableImportResult": {
+        "additionalProperties": true,
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "records_imported": {
+            "title": "Records Imported",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          }
+        },
+        "required": [
+          "status",
+          "records_imported"
+        ],
+        "title": "TableImportResult",
+        "type": "object"
+      },
+      "VocabularyImportResult": {
+        "additionalProperties": true,
+        "properties": {
+          "tables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TableImportResult"
+            },
+            "title": "Tables",
+            "type": "object"
+          },
+          "tables_imported": {
+            "title": "Tables Imported",
+            "type": "integer"
+          },
+          "records_imported": {
+            "title": "Records Imported",
+            "type": "integer"
+          },
+          "non_standard_mappings_removed": {
+            "title": "Non Standard Mappings Removed",
+            "type": "integer"
+          },
+          "vectors_pruned": {
+            "default": 0,
+            "title": "Vectors Pruned",
+            "type": "integer"
+          },
+          "vectors_relabeled": {
+            "default": 0,
+            "title": "Vectors Relabeled",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tables",
+          "tables_imported",
+          "records_imported",
+          "non_standard_mappings_removed"
+        ],
+        "title": "VocabularyImportResult",
+        "type": "object"
       }
     },
     "securitySchemes": {

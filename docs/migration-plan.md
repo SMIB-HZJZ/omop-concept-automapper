@@ -1,5 +1,10 @@
 <!-- Status: approved 2026-10-05; implemented on branch rewrite/fastapi-react. See docs/feature-checklist.md for the verification checklist. -->
 
+> **Update 2026-11-12:** no data is migrated from the Streamlit installation. The Qdrant → pgvector
+> migration task and the PostgreSQL 15 → 18 upgrade path described below were removed; new
+> installations embed from scratch. This document is kept as the historical plan. Changes made after
+> the code review are listed in `docs/feature-checklist.md` → "Review follow-up".
+
 # Migration plan: Streamlit → FastAPI + Celery + React
 
 ## Context

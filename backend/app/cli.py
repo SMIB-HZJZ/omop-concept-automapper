@@ -7,6 +7,8 @@ Commands:
   init             wait-db + migrate + bootstrap (used by the container entrypoint)
   create-user      create a user: create-user <username> [--role admin] (password from prompt or --password)
   export-openapi   write the OpenAPI schema to a file (default: ../frontend/openapi.json)
+  evaluate         measure mapping accuracy against existing mappings, e.g. with vs. without
+                   translation: evaluate <vocabulary_id> --pipelines automap,automap_translated
 """
 
 import argparse
@@ -61,11 +63,17 @@ def migrate() -> None:
         command.stamp(cfg, "0001")
     command.upgrade(cfg, "head")
     with get_engine().connect() as conn:
-        stats = {
-            t: conn.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
-            for t in ("concept", "source_concepts", "source_standard_map")
-        }
-    logger.info("Database ready: %s", stats)
+        # Planner estimates: a COUNT(*) over millions of concepts would slow every start
+        stats = dict(
+            conn.execute(
+                text(
+                    "SELECT relname, GREATEST(reltuples, 0)::bigint FROM pg_class "
+                    "WHERE relname IN ('concept', 'source_concepts', 'source_standard_map') "
+                    "AND relkind = 'r'"
+                )
+            ).all()
+        )
+    logger.info("Database ready (approximate rows): %s", stats)
 
 
 def bootstrap() -> None:
@@ -96,6 +104,84 @@ def export_openapi(path: str) -> None:
     print(f"Wrote {path}")
 
 
+def evaluate(args: argparse.Namespace) -> None:
+    import asyncio
+    import dataclasses
+    from datetime import datetime
+
+    from sqlmodel import Session
+
+    from app.llm.structured import Reranker, Translator
+    from app.models import SourceVocabulary
+    from app.services import evaluation
+    from app.services.settings_store import get_effective_config
+    from app.workflows.service import build_context
+
+    with Session(get_engine()) as session:
+        vocab = session.get(SourceVocabulary, args.vocabulary_id)
+        if vocab is None:
+            sys.exit(f"Source vocabulary {args.vocabulary_id} not found")
+        cfg = get_effective_config(session)
+        items = evaluation.load_gold(
+            session, args.vocabulary_id, args.sample, args.seed, args.include_unreviewed_auto
+        )
+    if not items:
+        sys.exit("No mapped concepts to evaluate against in this vocabulary")
+    drug = vocab.is_drug if args.drug is None else args.drug == "yes"
+    domains = _split(args.domains) or sorted({d for i in items for d in i.gold_domains})
+    pipelines = _split(args.pipelines)
+    variants = evaluation.build_variants(pipelines, _split(args.llm_models), cfg)
+
+    def make_context(llm_model: str):
+        ctx = build_context(cfg)
+        return dataclasses.replace(
+            ctx,
+            llm_model=llm_model,
+            reranker=Reranker(llm_model),
+            translator=Translator(llm_model),
+        )
+
+    logger.info(
+        "Evaluating %d concepts of vocabulary %s (drug=%s, domains=%s, embeddings=%s)",
+        len(items),
+        vocab.name,
+        drug,
+        domains,
+        cfg.collection_name,
+    )
+    summaries, per_variant, comparisons = asyncio.run(
+        evaluation.evaluate(
+            items,
+            variants,
+            make_context,
+            domains=domains,
+            drug_specific=drug,
+            threshold=args.threshold,
+            concurrency=args.concurrency,
+        )
+    )
+    out = Path(args.out or f"/data/uploads/evaluation-{datetime.now():%Y%m%d-%H%M%S}")
+    settings = {
+        "vocabulary_id": args.vocabulary_id,
+        "sample": len(items),
+        "seed": args.seed,
+        "drug_specific": drug,
+        "domains": domains,
+        "threshold": args.threshold,
+        "embedding_collection": cfg.collection_name,
+        "include_unreviewed_auto": args.include_unreviewed_auto,
+    }
+    summary_path, items_path = evaluation.write_report(
+        out, summaries, per_variant, comparisons, items, settings
+    )
+    print(evaluation.format_table(summaries, comparisons))
+    print(f"\nSummary: {summary_path}\nPer concept (contains source terms): {items_path}")
+
+
+def _split(value: str | None) -> list[str]:
+    return [v.strip() for v in (value or "").split(",") if v.strip()]
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -109,11 +195,29 @@ def main(argv: list[str] | None = None) -> None:
     eo.add_argument(
         "path", nargs="?", default=str(BACKEND_DIR.parent / "frontend" / "openapi.json")
     )
+    ev = sub.add_parser("evaluate", help="measure mapping accuracy against existing mappings")
+    ev.add_argument("vocabulary_id", type=int)
+    ev.add_argument("--pipelines", default="automap,automap_translated")
+    ev.add_argument("--llm-models", help="comma-separated; default: the configured LLM model")
+    ev.add_argument("--sample", type=int, default=200)
+    ev.add_argument("--seed", type=int, default=42)
+    ev.add_argument("--threshold", type=int, default=8)
+    ev.add_argument("--domains", help="comma-separated; default: the domains of the gold concepts")
+    ev.add_argument("--drug", choices=["yes", "no"], help="default: the vocabulary's drug flag")
+    ev.add_argument("--concurrency", type=int, default=4)
+    ev.add_argument(
+        "--include-unreviewed-auto",
+        action="store_true",
+        help="also grade against mappings written by unreviewed auto-map runs",
+    )
+    ev.add_argument("--out", help="output directory (default: /data/uploads/evaluation-<time>)")
     args = parser.parse_args(argv)
 
     if args.command != "export-openapi":
         setup_logging()
-    if args.command == "wait-db":
+    if args.command == "evaluate":
+        evaluate(args)
+    elif args.command == "wait-db":
         wait_db()
     elif args.command == "migrate":
         migrate()

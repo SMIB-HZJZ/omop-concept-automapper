@@ -3,13 +3,14 @@
 import csv
 import io
 import math
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from decimal import Decimal
 
 from sqlalchemy import text
 from sqlmodel import Session
 
 from app.core import cache
+from app.core.db import session_scope
 from app.models import SourceVocabulary
 from app.services.atc7 import extract_atc7_codes_from_source
 
@@ -118,11 +119,13 @@ def get_unmapped(session: Session, vocabulary_id: int, page: int, per_page: int)
     return {"items": items, "total": total, "page": page, "per_page": per_page, "pages": pages}
 
 
-def get_unmapped_concepts_for_automap(session: Session, vocabulary_id: int) -> list[dict]:
+def get_unmapped_concepts_for_automap(
+    session: Session, vocabulary_id: int, limit: int | None = None
+) -> list[dict]:
     rows = session.execute(
         text(
             """
-            SELECT sc.source_id, sc.source_value, sc.source_concept_name, sc.freq
+            SELECT sc.source_id, sc.source_value, sc.source_concept_name, sc.freq, sc.drug_structure
             FROM source_concepts sc
             WHERE sc.source_vocabulary_id = :v
               AND NOT EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
@@ -131,9 +134,10 @@ def get_unmapped_concepts_for_automap(session: Session, vocabulary_id: int) -> l
                   WHERE ms.source_id = sc.source_id AND ms.status = 'pending'
               )
             ORDER BY sc.freq DESC NULLS LAST, sc.source_id
+            LIMIT :limit
             """
         ),
-        {"v": vocabulary_id},
+        {"v": vocabulary_id, "limit": limit},
     ).mappings()
     return [dict(r) for r in rows]
 
@@ -144,7 +148,7 @@ def get_source_concept(session: Session, source_id: int) -> dict | None:
             text(
                 """
             SELECT sc.source_id, sc.source_value, sc.source_concept_name,
-                   sc.source_vocabulary_id, sc.freq, v.is_drug
+                   sc.source_vocabulary_id, sc.freq, v.is_drug, sc.drug_structure
             FROM source_concepts sc JOIN source_vocabulary v ON v.id = sc.source_vocabulary_id
             WHERE sc.source_id = :s
             """
@@ -168,37 +172,80 @@ MAPPED_COLUMNS = [
 ]
 
 
-@cache.cached(lambda session, vocabulary_id: vocab_ns(vocabulary_id))
-def get_mapped(session: Session, vocabulary_id: int) -> list[dict]:
+_MAPPED_FROM = """
+    FROM source_concepts sc
+    JOIN source_standard_map ssm ON sc.source_id = ssm.source_id
+    JOIN concept c ON ssm.concept_id = c.concept_id
+    LEFT JOIN app_user u ON u.id = ssm.created_by
+    WHERE sc.source_vocabulary_id = :v
+      AND (CAST(:q AS text) IS NULL
+           OR sc.source_value ILIKE :q OR sc.source_concept_name ILIKE :q
+           OR c.concept_name ILIKE :q OR CAST(c.concept_id AS text) = :q_exact)
+"""
+_MAPPED_SELECT = """
+    SELECT sc.source_id, sc.source_value, sc.source_concept_name,
+           c.concept_name, c.concept_id, c.domain_id, c.vocabulary_id, sc.freq,
+           u.username AS mapped_by, ssm.created_at AS mapped_at
+"""
+_MAPPED_ORDER = " ORDER BY sc.freq DESC NULLS LAST, sc.source_id, c.concept_id"
+
+
+def _search_params(q: str | None) -> dict:
+    q = (q or "").strip()
+    if not q:
+        return {"q": None, "q_exact": None}
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return {"q": f"%{escaped}%", "q_exact": q}
+
+
+def get_mapped_page(
+    session: Session, vocabulary_id: int, page: int, per_page: int, q: str | None = None
+) -> dict:
+    """One page of mapped rows (one row per source → standard concept pair)."""
+    params = {"v": vocabulary_id, **_search_params(q)}
+    total = session.execute(text("SELECT COUNT(*)" + _MAPPED_FROM), params).scalar_one()
+    pages = max(1, math.ceil(total / per_page))
+    page = min(max(page, 1), pages)
     rows = session.execute(
-        text(
-            """
-            SELECT sc.source_id, sc.source_value, sc.source_concept_name,
-                   c.concept_name, c.concept_id, c.domain_id, c.vocabulary_id, sc.freq,
-                   u.username AS mapped_by, ssm.created_at AS mapped_at
-            FROM source_concepts sc
-            JOIN source_standard_map ssm ON sc.source_id = ssm.source_id
-            JOIN concept c ON ssm.concept_id = c.concept_id
-            LEFT JOIN app_user u ON u.id = ssm.created_by
-            WHERE sc.source_vocabulary_id = :v
-            ORDER BY sc.freq DESC NULLS LAST, sc.source_id
-            """
-        ),
-        {"v": vocabulary_id},
+        text(_MAPPED_SELECT + _MAPPED_FROM + _MAPPED_ORDER + " LIMIT :limit OFFSET :offset"),
+        {**params, "limit": per_page, "offset": (page - 1) * per_page},
     ).mappings()
-    return [dict(r) for r in rows]
+    return {
+        "items": [dict(r) for r in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+    }
 
 
-def mapped_csv(session: Session, vocabulary_id: int) -> str:
-    """CSV export with the same columns as the Streamlit app's download."""
+def iter_mapped_csv(vocabulary_id: int) -> Iterator[str]:
+    """CSV export with the same columns as the Streamlit app's download, streamed row by row.
+
+    Uses its own session: the request's session may already be closed while the body streams."""
     buffer = io.StringIO()
     writer = csv.DictWriter(
         buffer, fieldnames=MAPPED_COLUMNS, extrasaction="ignore", lineterminator="\n"
     )
+
+    def flush() -> str:
+        value = buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+        return value
+
     writer.writeheader()
-    for row in get_mapped(session, vocabulary_id):
-        writer.writerow(row)
-    return buffer.getvalue()
+    yield flush()
+    with session_scope() as session:
+        result = session.execute(
+            text(_MAPPED_SELECT + _MAPPED_FROM + _MAPPED_ORDER).execution_options(yield_per=5000),
+            {"v": vocabulary_id, **_search_params(None)},
+        ).mappings()
+        for i, row in enumerate(result, 1):
+            writer.writerow(row)
+            if i % 5000 == 0:
+                yield flush()
+    yield flush()
 
 
 @cache.cached(lambda session, vocabulary_id: vocab_ns(vocabulary_id))
@@ -354,9 +401,26 @@ def map_concepts(
     task_id: str | None = None,
     rationale: str | None = None,
     commit: bool = True,
-) -> None:
-    """Replace the mappings of one source concept and write one audit row per concept."""
+    only_if_unmapped: bool = False,
+) -> bool:
+    """Replace the mappings of one source concept and write one audit row per concept.
+
+    With ``only_if_unmapped`` (auto-map in commit mode) nothing is written when the concept was
+    mapped in the meantime, e.g. by hand while a long run was going. Returns whether it wrote.
+    """
     concept_ids = list(dict.fromkeys(concept_ids))
+    # Serialise writers of the same source concept (manual mapping vs. a running auto-map)
+    session.execute(
+        text("SELECT 1 FROM source_concepts WHERE source_id = :s FOR UPDATE"), {"s": source_id}
+    )
+    if (
+        only_if_unmapped
+        and session.execute(
+            text("SELECT EXISTS (SELECT 1 FROM source_standard_map WHERE source_id = :s)"),
+            {"s": source_id},
+        ).scalar_one()
+    ):
+        return False
     session.execute(text("DELETE FROM source_standard_map WHERE source_id = :s"), {"s": source_id})
     # A manual/accepted mapping supersedes a pending suggestion
     session.execute(
@@ -393,6 +457,7 @@ def map_concepts(
         )
     if commit:
         session.commit()
+    return True
 
 
 def unmap(session: Session, source_ids: Sequence[int]) -> int:

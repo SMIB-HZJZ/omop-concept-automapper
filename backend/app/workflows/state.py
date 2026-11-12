@@ -11,6 +11,14 @@ class AutomapState(TypedDict, total=False):
     source_name: str
     # Search inputs (nodes may rewrite `query`)
     query: str
+    # English rendering of the source term (set by the `translate` step)
+    translated_query: str | None
+    # Drugs: structure provided with the source concept (ingredients, strengths, dose form)
+    drug_structure: dict | None
+    # Drugs: deterministic matches that tied; retrieval puts them first for the reranker
+    structured_candidates: list[dict]
+    # Extra context lines for the reranker (e.g. the parsed drug structure)
+    notes: list[str]
     domains: list[str]
     drug_specific: bool
     atc7_codes: list[str] | None
@@ -28,3 +36,7 @@ class AutomapState(TypedDict, total=False):
     # Bookkeeping
     trace: Annotated[list[dict], operator.add]
     meta: Annotated[dict[str, Any], lambda a, b: {**(a or {}), **(b or {})}]
+
+
+# Minimum confidence (1-10) for an automatic decision; see CONFIDENCE_SCALE in app.llm.prompts
+DEFAULT_CONFIDENCE_THRESHOLD = 8

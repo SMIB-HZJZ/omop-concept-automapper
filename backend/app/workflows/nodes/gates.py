@@ -2,7 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.workflows.context import NodeContext
 from app.workflows.registry import router
-from app.workflows.state import AutomapState
+from app.workflows.state import DEFAULT_CONFIDENCE_THRESHOLD, AutomapState
 
 
 class GateParams(BaseModel):
@@ -19,7 +19,7 @@ class GateParams(BaseModel):
     description="Accept the selection if its confidence reaches the threshold",
 )
 def confidence_gate(state: AutomapState, ctx: NodeContext, params: GateParams):
-    threshold = params.threshold or state.get("threshold") or 8
+    threshold = params.threshold or state.get("threshold") or DEFAULT_CONFIDENCE_THRESHOLD
     confidence = state.get("confidence")
     if state.get("selected") and confidence is not None and confidence >= threshold:
         return "accept", {

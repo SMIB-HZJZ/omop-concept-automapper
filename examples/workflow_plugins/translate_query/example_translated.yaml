@@ -1,6 +1,8 @@
-# The default automap pipeline with the custom `translate_query` step inserted before retrieval.
+# Example plugin pipeline: the default automap with the custom `translate_query` step from this plugin.
+# (The core ships a built-in `translate` step and `automap_translated` pipeline; this shows how a
+# plugin adds its own step without touching the core.)
 # Nothing in the core changes: the step comes from the plugin module, the wiring from this file.
-name: automap_translated
+name: example_translated
 description: translate the source term to English, then ATC7 → retrieval → LLM rerank → gate
 entry: extract_atc7
 nodes:

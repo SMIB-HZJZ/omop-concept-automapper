@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models import Model
 
-from app.llm.prompts import AGENT_INSTRUCTIONS, CONCEPT_SYSTEM_PROMPT, DRUG_SYSTEM_PROMPT
+from app.llm.prompts import AGENT_INSTRUCTIONS, agent_criteria
 from app.llm.schemas import MappingDecision
 from app.vector.store import SearchFilters, VectorSearcher
 
@@ -46,9 +46,11 @@ mapping_agent = Agent(
 
 @mapping_agent.instructions
 def _instructions(ctx: RunContext[AgentDeps]) -> str:
-    criteria = DRUG_SYSTEM_PROMPT if ctx.deps.drug_specific else CONCEPT_SYSTEM_PROMPT
     domains = ", ".join(ctx.deps.domains) or "any"
-    return f"{AGENT_INSTRUCTIONS}\nTarget domains: {domains}.\n\nEvaluation criteria:\n{criteria}"
+    return (
+        f"{AGENT_INSTRUCTIONS}\n\nTarget domains: {domains}.\n\n"
+        f"{agent_criteria(ctx.deps.drug_specific)}"
+    )
 
 
 @mapping_agent.tool

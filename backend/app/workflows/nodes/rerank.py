@@ -12,7 +12,13 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params) -> dict:
         return {"selected": None, "confidence": None, "_summary": "no candidates to rerank"}
     term = state.get("source_name") or state.get("query", "")
     try:
-        result = await ctx.reranker.rerank(term, candidates, bool(state.get("drug_specific")))
+        translation = state.get("translated_query")
+        extra: dict = {"translation": translation} if translation else {}
+        if state.get("notes"):
+            extra["notes"] = state["notes"]
+        result = await ctx.reranker.rerank(
+            term, candidates, bool(state.get("drug_specific")), **extra
+        )
     except Exception as exc:
         ctx.logger.warning("Reranker failed for %r: %s", term, exc)
         return {
@@ -27,6 +33,7 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params) -> dict:
             "selected": None,
             "confidence": None,
             "outcome": "no_match",
+            "rationale": result.rationale,
             "_summary": "LLM found no match",
         }
     selected = candidates[result.index]
@@ -34,5 +41,6 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params) -> dict:
         "selected": selected,
         "confidence": result.confidence,
         "outcome": "selected",
+        "rationale": result.rationale,
         "_summary": f"picked #{result.index} '{selected['concept_name']}' (confidence {result.confidence})",
     }

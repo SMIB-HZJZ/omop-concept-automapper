@@ -52,3 +52,40 @@ def test_meta(client, user_headers):
     meta = client.get("/api/meta", headers=user_headers).json()
     assert {"Condition", "Drug", "Procedure"} <= set(meta["domains"])
     assert meta["dimension_options"] == [512, 1024, 1536, 2048, 3072]
+
+
+def test_gateway_models_are_classified():
+    from app.api.routes.config import classify_gateway_models
+
+    llm, embedding = classify_gateway_models(
+        [
+            "openai/*",
+            "gpt-5-mini",
+            "openai/gpt-4.1",
+            "whisper-1",
+            "tts-1",
+            "dall-e-3",
+            "text-embedding-3-small",
+            "gpt-4o-realtime-preview",
+            "omni-moderation-latest",
+            "claude-sonnet-4-5",
+            "openai/gpt-5-2025-08-07",
+            "voyage/voyage-4-lite",
+            "voyage/rerank-2.5",
+            "mistral/mistral-small-latest",
+        ],
+        ["openai/gpt-5-mini"],
+        {"openai/text-embedding-3-large": 3072},
+    )
+    assert llm == [
+        "openai/gpt-5-mini",
+        "claude-sonnet-4-5",
+        "gpt-5-mini",
+        "mistral/mistral-small-latest",
+        "openai/gpt-4.1",
+    ]
+    assert embedding == {
+        "openai/text-embedding-3-large": 3072,
+        "text-embedding-3-small": None,
+        "voyage/voyage-4-lite": None,
+    }

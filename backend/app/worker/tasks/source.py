@@ -1,3 +1,4 @@
+import logging
 import os
 
 from app.core.db import raw_connection
@@ -5,6 +6,8 @@ from app.services import mapping
 from app.services.source_import import import_source_csv
 from app.worker.base import TrackedTask
 from app.worker.celery_app import celery_app
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, base=TrackedTask, name="source.import_csv")
@@ -18,6 +21,6 @@ def import_source_concepts(
         try:
             os.remove(path)
         except OSError:
-            pass
+            logger.warning("Could not delete the uploaded file %s", path, exc_info=True)
     mapping.invalidate_vocabulary(vocabulary_id)
     return {**result, "vocabulary_id": vocabulary_id, "filename": filename}

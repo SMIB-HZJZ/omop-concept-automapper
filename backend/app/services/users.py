@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.core.config import get_settings
 from app.core.redis import get_redis
-from app.core.security import hash_password, verify_password
+from app.core.security import burn_password_check, hash_password, verify_password
 from app.models import AppUser
 
 logger = logging.getLogger(__name__)
@@ -38,40 +38,61 @@ def create_user(session: Session, username: str, password: str, role: str = "use
     return user
 
 
-def _lock_key(username: str, ip: str) -> str:
+def _ip_key(username: str, ip: str) -> str:
     return f"login:fail:{username.lower()}:{ip}"
 
 
-def authenticate(session: Session, username: str, password: str, ip: str) -> AppUser | None:
-    settings = get_settings()
-    key = _lock_key(username, ip)
+def _user_key(username: str) -> str:
+    return f"login:fail:{username.lower()}"
+
+
+def _failures(key: str) -> int:
     try:
-        failures = int(get_redis().get(key) or 0)
+        return int(get_redis().get(key) or 0)
     except Exception:
-        failures = 0
-    if failures >= settings.login_max_failures:
+        logger.warning("Could not read failed-login counter", exc_info=True)
+        return 0
+
+
+def authenticate(session: Session, username: str, password: str, ip: str) -> AppUser | None:
+    """Check credentials with two lockouts: per username+IP (LOGIN_MAX_FAILURES) and per username
+    across all IPs (LOGIN_MAX_FAILURES_PER_USER), so rotating the client IP does not help."""
+    settings = get_settings()
+    ip_key, user_key = _ip_key(username, ip), _user_key(username)
+    if (
+        _failures(ip_key) >= settings.login_max_failures
+        or _failures(user_key) >= settings.login_max_failures_per_user
+    ):
         raise LoginLocked()
 
     user = get_by_username(session, username)
+    if user is None:
+        burn_password_check(password)
     if user is None or not user.is_active or not verify_password(password, user.hashed_password):
         try:
             pipe = get_redis().pipeline()
-            pipe.incr(key)
-            pipe.expire(key, settings.login_lockout_seconds)
+            for key in (ip_key, user_key):
+                pipe.incr(key)
+                pipe.expire(key, settings.login_lockout_seconds)
             pipe.execute()
         except Exception:
             logger.warning("Could not record failed login", exc_info=True)
         return None
 
     try:
-        get_redis().delete(key)
+        get_redis().delete(ip_key, user_key)
     except Exception:
-        pass
+        logger.warning("Could not reset failed-login counters", exc_info=True)
     user.last_login_at = datetime.now(UTC)
     session.add(user)
     session.commit()
     session.refresh(user)
     return user
+
+
+def revoke_sessions(user: AppUser) -> None:
+    """Invalidate every token issued to ``user`` (the caller commits)."""
+    user.token_version = (user.token_version or 0) + 1
 
 
 def ensure_bootstrap_admin(session: Session) -> None:
@@ -93,8 +114,8 @@ def ensure_bootstrap_admin(session: Session) -> None:
 
 
 def count_admins(session: Session) -> int:
-    return len(
-        session.exec(
-            select(AppUser).where(AppUser.role == "admin", AppUser.is_active == True)  # noqa: E712
-        ).all()
-    )
+    return session.exec(
+        select(func.count())
+        .select_from(AppUser)
+        .where(AppUser.role == "admin", AppUser.is_active == True)  # noqa: E712
+    ).one()

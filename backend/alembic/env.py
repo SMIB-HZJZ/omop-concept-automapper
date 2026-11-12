@@ -1,10 +1,17 @@
-from sqlmodel import SQLModel
+"""Alembic environment.
 
-import app.models  # noqa: F401  (registers all tables on SQLModel.metadata)
+Migrations in this project are hand-written SQL (see ``alembic/versions``); they, not the SQLModel
+classes, define the schema (indexes, FK actions, the ``standard_concepts`` view, the runtime
+``emb_*`` vector tables). Autogenerate is therefore disabled on purpose: comparing against the
+models would propose dropping all of that. ``tests/test_schema.py`` checks that every model column
+exists in the migrated database instead.
+"""
+
 from alembic import context
 from app.core.db import get_engine
 
-target_metadata = SQLModel.metadata
+# None makes `alembic revision --autogenerate` fail loudly instead of generating destructive diffs
+target_metadata = None
 
 
 def run_migrations_online() -> None:

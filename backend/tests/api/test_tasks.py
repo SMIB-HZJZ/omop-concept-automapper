@@ -29,18 +29,60 @@ def test_lock_conflict(client, admin_headers):
     from sqlmodel import Session
 
     from app.core.db import get_engine
+    from app.core.redis import get_redis
     from app.models import TaskRun
+    from app.worker.progress import heartbeat_key
 
     with Session(get_engine()) as session:
         session.add(TaskRun(id="running-embed", kind="embeddings.embed", status="PROGRESS"))
         session.commit()
+    get_redis().set(heartbeat_key("running-embed"), "1", ex=60)
     try:
         resp = client.post("/api/embeddings/sync-metadata", headers=admin_headers)
         assert resp.status_code == 409
         active = client.get("/api/tasks", params={"active": True}, headers=admin_headers).json()
         assert any(t["id"] == "running-embed" for t in active)
+        # A live task is never treated as orphaned
+        assert task_service.fail_orphaned_tasks() == 0
     finally:
-        assert task_service.fail_orphaned_tasks() >= 1
+        # Its worker "dies": the heartbeat expires and the task no longer blocks the group
+        get_redis().delete(heartbeat_key("running-embed"))
+    resp = client.post("/api/embeddings/sync-metadata", headers=admin_headers)
+    assert resp.status_code == 202
+    task = client.get("/api/tasks/running-embed", headers=admin_headers).json()
+    assert task["status"] == "FAILURE" and "worker stopped" in task["error"]
+
+
+def test_task_lock_released_and_heartbeat_cleared(client, admin_headers):
+    from app.core.redis import get_redis
+    from app.worker.base import lock_key
+    from app.worker.progress import heartbeat_key
+
+    resp = client.post("/api/embeddings/sync-atc7", headers=admin_headers)
+    task_id = resp.json()["task_id"]
+    assert client.get(f"/api/tasks/{task_id}", headers=admin_headers).json()["status"] == "SUCCESS"
+    assert not get_redis().exists(lock_key("embed"))
+    assert not get_redis().exists(heartbeat_key(task_id))
+
+
+def test_broker_failure_marks_task_failed(client, admin_headers, monkeypatch):
+    from app.worker.tasks.embeddings import sync_atc7
+
+    def broken(*args, **kwargs):
+        raise ConnectionError("broker down")
+
+    monkeypatch.setattr(sync_atc7, "apply_async", broken)
+    resp = client.post("/api/embeddings/sync-atc7", headers=admin_headers)
+    assert resp.status_code == 503
+    failed = client.get(
+        "/api/tasks",
+        params={"kind": "embeddings.sync_atc7", "active": False},
+        headers=admin_headers,
+    ).json()[0]
+    assert failed["status"] == "FAILURE" and "broker down" in failed["error"]
+    # The failed launch does not block the next one
+    monkeypatch.undo()
+    assert client.post("/api/embeddings/sync-atc7", headers=admin_headers).status_code == 202
 
 
 def test_cooperative_cancel(client, user_headers, embedded, fake_reranker, monkeypatch):

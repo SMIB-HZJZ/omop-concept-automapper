@@ -10,12 +10,10 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, delete, select
 
-from app.core import cache
 from app.core.config import get_settings
 from app.models import AppConfig
 
 BASELINE_SUFFIX = ".__env_baseline"
-CACHE_NS = "config"
 
 # key -> (settings attribute, type)
 OVERRIDABLE: dict[str, tuple[str, type]] = {
@@ -100,7 +98,6 @@ def update_config(session: Session, updates: dict[str, object]) -> EffectiveConf
         _upsert(session, key, _stringify(value))
         _upsert(session, key + BASELINE_SUFFIX, _stringify(env_value))
     session.commit()
-    cache.invalidate(CACHE_NS)
     return get_effective_config(session)
 
 
@@ -108,7 +105,6 @@ def reset_config(session: Session) -> EffectiveConfig:
     keys = [k for key in OVERRIDABLE for k in (key, key + BASELINE_SUFFIX)]
     session.exec(delete(AppConfig).where(AppConfig.key.in_(keys)))  # type: ignore[attr-defined]
     session.commit()
-    cache.invalidate(CACHE_NS)
     return get_effective_config(session)
 
 

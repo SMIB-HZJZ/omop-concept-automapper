@@ -1,9 +1,8 @@
 import os
-import shutil
 import uuid
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.api.routes._tasks import start_task
@@ -13,7 +12,7 @@ from app.schemas.api import (
     AuditEntry,
     AuditStat,
     CountResult,
-    MappedRow,
+    MappedPage,
     MappingStats,
     SourceVocabularyCreate,
     SourceVocabularyOut,
@@ -28,6 +27,20 @@ from app.worker.tasks.source import import_source_concepts
 router = APIRouter(prefix="/source-vocabularies", tags=["source vocabularies"])
 
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+_CHUNK = 1024 * 1024
+
+
+def _save_upload(file: UploadFile, path: str) -> None:
+    """Copy the upload to disk, stopping as soon as it exceeds MAX_UPLOAD_BYTES."""
+    written = 0
+    with open(path, "wb") as out:
+        while chunk := file.file.read(_CHUNK):
+            written += len(chunk)
+            if written > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "File is larger than 500 MB"
+                )
+            out.write(chunk)
 
 
 def _get_vocab(session, vocabulary_id: int) -> SourceVocabulary:
@@ -98,32 +111,33 @@ def import_concepts(
     upload_dir = get_settings().upload_dir
     os.makedirs(upload_dir, exist_ok=True)
     path = os.path.join(upload_dir, f"{uuid.uuid4()}.csv")
-    with open(path, "wb") as out:
-        shutil.copyfileobj(file.file, out, length=1024 * 1024)
-    if os.path.getsize(path) > MAX_UPLOAD_BYTES:
-        os.remove(path)
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "File is larger than 500 MB")
     try:
-        validate_header(read_header(path))
-    except (SourceImportError, UnicodeDecodeError, StopIteration) as exc:
-        os.remove(path)
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        _save_upload(file, path)
+        try:
+            validate_header(read_header(path))
+        except (SourceImportError, UnicodeDecodeError, StopIteration) as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    vocab = mapping.get_or_create_vocabulary(session, vocabulary_id, name)
-    if name or is_drug is not None:
-        if name:
-            vocab.name = name
-        if is_drug is not None:
-            vocab.is_drug = is_drug
-        session.add(vocab)
-        session.commit()
-    return start_task(
-        session,
-        "source.import",
-        import_source_concepts,
-        {"path": path, "vocabulary_id": vocabulary_id, "filename": file.filename},
-        user,
-    )
+        vocab = mapping.get_or_create_vocabulary(session, vocabulary_id, name)
+        if name or is_drug is not None:
+            if name:
+                vocab.name = name
+            if is_drug is not None:
+                vocab.is_drug = is_drug
+            session.add(vocab)
+            session.commit()
+        return start_task(
+            session,
+            "source.import",
+            import_source_concepts,
+            {"path": path, "vocabulary_id": vocabulary_id, "filename": file.filename},
+            user,
+        )
+    except BaseException:
+        # The worker owns (and deletes) the file only once the task has been queued
+        if os.path.exists(path):
+            os.remove(path)
+        raise
 
 
 @router.get("/{vocabulary_id}/unmapped", response_model=UnmappedPage)
@@ -138,17 +152,24 @@ def unmapped(
     return mapping.get_unmapped(session, vocabulary_id, page, per_page)
 
 
-@router.get("/{vocabulary_id}/mapped", response_model=list[MappedRow])
-def mapped(vocabulary_id: int, _: CurrentUser, session: SessionDep):
+@router.get("/{vocabulary_id}/mapped", response_model=MappedPage)
+def mapped(
+    vocabulary_id: int,
+    _: CurrentUser,
+    session: SessionDep,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=500),
+    q: str | None = Query(None, max_length=200),
+):
     _get_vocab(session, vocabulary_id)
-    return mapping.get_mapped(session, vocabulary_id)
+    return mapping.get_mapped_page(session, vocabulary_id, page, per_page, q)
 
 
-@router.get("/{vocabulary_id}/mapped.csv", response_class=Response)
+@router.get("/{vocabulary_id}/mapped.csv", response_class=StreamingResponse)
 def mapped_csv(vocabulary_id: int, _: CurrentUser, session: SessionDep):
     _get_vocab(session, vocabulary_id)
-    return Response(
-        content=mapping.mapped_csv(session, vocabulary_id),
+    return StreamingResponse(
+        mapping.iter_mapped_csv(vocabulary_id),
         media_type="text/csv",
         headers={
             "Content-Disposition": f'attachment; filename="vocabulary_{vocabulary_id}_mappings.csv"'

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy import text
 
+from app import __version__
 from app.api.deps import CurrentUser, SessionDep
 from app.core.redis import get_redis
 from app.llm.gateway import gateway_healthy
@@ -14,7 +15,6 @@ router = APIRouter(tags=["meta"])
 
 # The domains offered by the Streamlit app; domains found in the vocabulary are added to these
 DEFAULT_DOMAINS = ["Condition", "Device", "Drug", "Measurement", "Observation", "Procedure"]
-VERSION = "2.0.0"
 
 
 @router.get("/health")
@@ -44,5 +44,5 @@ def meta(_: CurrentUser, session: SessionDep):
         atc7_pattern=ATC7_PATTERN,
         dimension_options=DIMENSION_OPTIONS,
         roles=list(ROLES),
-        version=VERSION,
+        version=__version__,
     )

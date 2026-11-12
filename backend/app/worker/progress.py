@@ -1,5 +1,6 @@
 """Progress reporting and cooperative cancellation for background tasks."""
 
+import logging
 import time
 
 from sqlalchemy import text
@@ -7,13 +8,33 @@ from sqlalchemy import text
 from app.core.db import get_engine
 from app.core.redis import get_redis
 
+logger = logging.getLogger(__name__)
+
+
+# A running task refreshes its heartbeat (and its lock) every interval; both expire after the TTL,
+# so a dead worker releases them quickly.
+HEARTBEAT_INTERVAL_SECONDS = 15
+HEARTBEAT_TTL_SECONDS = 60
+
 
 class TaskCancelled(Exception):
     """Raised inside a task when the user asked to cancel it."""
 
 
+class TaskFailed(Exception):
+    """Raised by a task that did part of its work: it ends as FAILURE but keeps ``result``."""
+
+    def __init__(self, message: str, result: dict | None = None):
+        super().__init__(message)
+        self.result = result
+
+
 def cancel_key(task_id: str) -> str:
     return f"task:cancel:{task_id}"
+
+
+def heartbeat_key(task_id: str) -> str:
+    return f"task:alive:{task_id}"
 
 
 class ProgressReporter:
@@ -48,14 +69,17 @@ class ProgressReporter:
             self._last_write = now
             self._write()
 
-    def phase(self, message: str, total: int | None = None) -> None:
-        """Start a new phase: resets the counter and writes immediately."""
+    def phase(self, message: str, total: int | None = None, *, cancellable: bool = True) -> None:
+        """Start a new phase: resets the counter and writes immediately.
+
+        Pass ``cancellable=False`` for cleanup phases that must run even after a cancel."""
         self.current = 0
         self.total = total
         self.message = message
         self._last_write = time.monotonic()
         self._write()
-        self.check_cancelled()
+        if cancellable:
+            self.check_cancelled()
 
     def _write(self) -> None:
         with get_engine().begin() as conn:
@@ -75,6 +99,7 @@ class ProgressReporter:
         try:
             return bool(get_redis().exists(cancel_key(self.task_id)))
         except Exception:
+            logger.warning("Could not read the cancel flag of %s", self.task_id, exc_info=True)
             return False
 
     def check_cancelled(self) -> None:

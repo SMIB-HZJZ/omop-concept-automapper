@@ -689,23 +689,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/embeddings/migrate-from-qdrant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Migrate From Qdrant */
-        post: operations["migrate_from_qdrant_api_embeddings_migrate_from_qdrant_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -1038,6 +1021,19 @@ export interface components {
             /** Concept Ids */
             concept_ids: number[];
         };
+        /** MappedPage */
+        MappedPage: {
+            /** Items */
+            items: components["schemas"]["MappedRow"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Per Page */
+            per_page: number;
+            /** Pages */
+            pages: number;
+        };
         /** MappedRow */
         MappedRow: {
             /** Source Id */
@@ -1114,24 +1110,6 @@ export interface components {
             dimension_options: number[];
             /** Gateway Models Available */
             gateway_models_available: boolean;
-        };
-        /** QdrantMigrationRequest */
-        QdrantMigrationRequest: {
-            /**
-             * Qdrant Url
-             * @default http://qdrant:6333
-             */
-            qdrant_url: string;
-            /**
-             * Collection
-             * @default omop_vocab
-             */
-            collection: string;
-            /**
-             * Batch Size
-             * @default 1000
-             */
-            batch_size: number;
         };
         /** SearchRequest */
         SearchRequest: {
@@ -1555,6 +1533,194 @@ export interface components {
             routes?: string[] | null;
             /** Plugin */
             plugin?: string | null;
+        };
+        /** Atc7Result */
+        Atc7Result: {
+            /** Drugs With Atc7 */
+            drugs_with_atc7: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AutomapResult */
+        AutomapResult: {
+            /** Vocabulary Id */
+            vocabulary_id: number;
+            /** Total Concepts */
+            total_concepts: number;
+            /** Processed */
+            processed: number;
+            /** Mapped */
+            mapped: number;
+            /** Queued */
+            queued: number;
+            /**
+             * Skipped
+             * @default 0
+             */
+            skipped: number;
+            /**
+             * Errors
+             * @default 0
+             */
+            errors: number;
+            /**
+             * Outcomes
+             * @default {}
+             */
+            outcomes: {
+                [key: string]: number;
+            };
+            /**
+             * Mode
+             * @default null
+             */
+            mode: string | null;
+            /**
+             * Pipeline
+             * @default null
+             */
+            pipeline: string | null;
+            /**
+             * Mapping Method
+             * @default null
+             */
+            mapping_method: string | null;
+            /**
+             * Confidence Threshold
+             * @default null
+             */
+            confidence_threshold: number | null;
+            /**
+             * Target Domains
+             * @default []
+             */
+            target_domains: string[];
+            /**
+             * Llm Model
+             * @default null
+             */
+            llm_model: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** EmbedResult */
+        EmbedResult: {
+            /** Collection */
+            collection: string;
+            /** Embedded */
+            embedded: number;
+            /**
+             * Pending Before
+             * @default null
+             */
+            pending_before: number | null;
+            /**
+             * Message
+             * @default null
+             */
+            message: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** SourceImportResult */
+        SourceImportResult: {
+            /** Inserted */
+            inserted: number;
+            /** Premapped Sources */
+            premapped_sources: number;
+            /** Premapped Links */
+            premapped_links: number;
+            /** Invalid Concept Ids */
+            invalid_concept_ids: number[];
+            /**
+             * With Drug Structure
+             * @default 0
+             */
+            with_drug_structure: number;
+            /** Vocabulary Id */
+            vocabulary_id: number;
+            /**
+             * Filename
+             * @default null
+             */
+            filename: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** SyncAtc7Result */
+        SyncAtc7Result: {
+            /**
+             * Collection
+             * @default null
+             */
+            collection: string | null;
+            /** Embedded With Atc7 */
+            embedded_with_atc7: number;
+            /**
+             * Message
+             * @default null
+             */
+            message: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** SyncMetadataResult */
+        SyncMetadataResult: {
+            /**
+             * Collection
+             * @default null
+             */
+            collection: string | null;
+            /** Removed */
+            removed: number;
+            /** Relabeled */
+            relabeled: number;
+            /**
+             * Message
+             * @default null
+             */
+            message: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TableImportResult */
+        TableImportResult: {
+            /** Status */
+            status: string;
+            /** Records Imported */
+            records_imported: number;
+            /**
+             * Error
+             * @default null
+             */
+            error: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** VocabularyImportResult */
+        VocabularyImportResult: {
+            /** Tables */
+            tables: {
+                [key: string]: components["schemas"]["TableImportResult"];
+            };
+            /** Tables Imported */
+            tables_imported: number;
+            /** Records Imported */
+            records_imported: number;
+            /** Non Standard Mappings Removed */
+            non_standard_mappings_removed: number;
+            /**
+             * Vectors Pruned
+             * @default 0
+             */
+            vectors_pruned: number;
+            /**
+             * Vectors Relabeled
+             * @default 0
+             */
+            vectors_relabeled: number;
+        } & {
+            [key: string]: unknown;
         };
     };
     responses: never;
@@ -2227,7 +2393,11 @@ export interface operations {
     };
     mapped_api_source_vocabularies__vocabulary_id__mapped_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                per_page?: number;
+                q?: string | null;
+            };
             header?: never;
             path: {
                 vocabulary_id: number;
@@ -2242,7 +2412,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MappedRow"][];
+                    "application/json": components["schemas"]["MappedPage"];
                 };
             };
             /** @description Validation Error */
@@ -2821,7 +2991,10 @@ export interface operations {
     };
     clear_embeddings_api_embeddings_delete: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description The current collection name, typed by the user */
+                confirm: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2835,30 +3008,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Message"];
-                };
-            };
-        };
-    };
-    migrate_from_qdrant_api_embeddings_migrate_from_qdrant_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QdrantMigrationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TaskRef"];
                 };
             };
             /** @description Validation Error */

@@ -3,7 +3,6 @@
 import json
 
 import instructor
-import pytest
 from openai import AsyncOpenAI
 from openai.types.chat import (
     ChatCompletion,
@@ -87,8 +86,15 @@ async def test_accepts_confident_match_with_atc7_filter():
     assert searcher.calls[0][1] == 30 and searcher.calls[0][3] == ("A10BA02",)
     # The drug prompt and a numbered candidate list were sent
     messages = provider.requests[0]["messages"]
-    assert "Match the given drug name" in messages[0]["content"]
-    assert "0: metformin 500 MG Oral Tablet" in messages[1]["content"]
+    assert "Matching rules for drugs" in messages[0]["content"]
+    assert "Confidence scale" in messages[0]["content"]
+    # Candidates carry class, domain and vocabulary (the branded/generic rule needs the class)
+    assert (
+        "0: metformin 500 MG Oral Tablet [Clinical Drug | Drug | RxNorm]" in messages[1]["content"]
+    )
+    assert messages[1]["content"].startswith("Source term: metformin 500 mg tableta")
+    # Deterministic by default
+    assert provider.requests[0].get("temperature") == 0
     assert [t["node"] for t in result["trace"]] == ["extract_atc7", "retrieve", "rerank", "gate"]
 
 
@@ -138,13 +144,36 @@ async def test_standard_mode_without_candidates():
     assert result["outcome"] == "no_candidates" and provider.requests == []
 
 
-@pytest.mark.parametrize("fallback", [True])
-async def test_atc7_fallback_when_filtered_search_is_empty(fallback):
+async def test_no_atc7_fallback_by_default():
+    """As in the Streamlit app: no candidate in the ATC7 class means no match."""
     provider = MockProvider({"most_similar_item_id": 0, "confidence_score": 9})
     searcher = FakeSearcher()
-    # Source claims an ATC7 code no candidate has; retrieval retries without the filter
     result = await run_pipeline(
         _state(value="Z99ZZ99-1"), make_context(reranker_with(provider), searcher=searcher)
     )
+    assert len(searcher.calls) == 1 and searcher.calls[0][3] == ("Z99ZZ99",)
+    assert result["outcome"] == "no_candidates" and provider.requests == []
+
+
+async def test_atc7_fallback_can_be_enabled():
+    from app.workflows.nodes.retrieve import RetrieveParams, retrieve
+
+    searcher = FakeSearcher()
+    state = {**_state(value="Z99ZZ99-1"), "atc7_codes": ["Z99ZZ99"]}
+    update = await retrieve(
+        state, make_context(None, searcher=searcher), RetrieveParams(atc7_fallback=True)
+    )
     assert len(searcher.calls) == 2 and searcher.calls[1][3] == ()
-    assert result["outcome"] == "accepted"
+    assert update["candidates"] and "fell back" in update["_summary"]
+
+
+async def test_rationale_is_kept():
+    provider = MockProvider(
+        {
+            "rationale": "same ingredient and strength",
+            "most_similar_item_id": 0,
+            "confidence_score": 9,
+        }
+    )
+    result = await run_pipeline(_state(), make_context(reranker_with(provider)))
+    assert result["rationale"] == "same ingredient and strength"

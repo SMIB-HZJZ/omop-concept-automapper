@@ -18,6 +18,7 @@ from pgvector.psycopg import register_vector
 from sqlalchemy import text
 from sqlmodel import Session, select
 
+from app.core import cache
 from app.core.config import get_settings
 from app.models import EmbeddingCollection
 
@@ -122,7 +123,11 @@ def index_name(table: str) -> str:
 def create_index(conn: psycopg.Connection, table: str) -> None:
     settings = get_settings()
     with conn.cursor() as cur:
-        cur.execute("SET maintenance_work_mem = '1GB'")
+        # Parameterised: the value comes from the environment
+        cur.execute(
+            "SELECT set_config('maintenance_work_mem', %s, false)",
+            (settings.diskann_maintenance_work_mem,),
+        )
         cur.execute(
             f"CREATE INDEX IF NOT EXISTS {index_name(table)} ON {_ident(table)} "
             f"USING diskann (embedding vector_cosine_ops, labels)"
@@ -175,8 +180,10 @@ def bulk_upsert(
     table = _ident(table)
     count = 0
     with conn.cursor() as cur:
+        # Created per batch and dropped on commit: a stage table kept on a pooled connection
+        # would keep the vector size of the first collection loaded through it
         cur.execute(
-            f"CREATE TEMP TABLE IF NOT EXISTS _emb_stage (LIKE {table} INCLUDING DEFAULTS) ON COMMIT DELETE ROWS"
+            f"CREATE TEMP TABLE _emb_stage (LIKE {table} INCLUDING DEFAULTS) ON COMMIT DROP"
         )
         with cur.copy(
             "COPY _emb_stage (concept_id, embedding, labels) FROM STDIN WITH (FORMAT BINARY)"
@@ -235,7 +242,10 @@ def refresh_labels(conn: psycopg.Connection, table: str) -> int:
 # --------------------------------------------------------------------------- reads
 
 
+@cache.cached("embeddings", ttl=30)
 def embedding_status(session: Session, collection: str, domain: str | None = None) -> dict:
+    """Counts for the Embeddings tab. Counting the concept table is slow, so it is cached briefly
+    (the namespace is invalidated whenever embeddings change)."""
     col = get_collection(session, collection)
     exists = col is not None and collection_exists(session, collection)
     domain_sql = " AND c.domain_id = :domain" if domain else ""
@@ -320,8 +330,13 @@ def search_vectors(
             )
             if not labels:
                 return []
+            # Labels drive the filtered DiskANN search; the live domain check guards against
+            # labels that are stale after a vocabulary update (StreamingDiskANN keeps streaming
+            # candidates until LIMIT rows pass every condition, so this does not cut results short)
             where.append("e.labels && CAST(:labels AS smallint[])")
+            where.append("c.domain_id = ANY(:domains)")
             params["labels"] = list(labels)
+            params["domains"] = list(filters.domains)
         sql = f"""
             SELECT {CONCEPT_FIELDS}, ca.atc7_codes,
                    1 - (e.embedding <=> CAST(:q AS vector)) AS score

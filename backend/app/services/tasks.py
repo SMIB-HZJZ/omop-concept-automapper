@@ -5,12 +5,13 @@ from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.core.db import get_engine
 from app.core.redis import get_redis
 from app.models import AppUser, TaskRun
-from app.worker.progress import cancel_key
+from app.schemas.task_results import check_result
+from app.worker.progress import cancel_key, heartbeat_key
 
 ACTIVE_STATUSES = ("PENDING", "STARTED", "PROGRESS")
 TERMINAL_STATUSES = ("SUCCESS", "FAILURE", "CANCELLED")
@@ -22,12 +23,27 @@ LOCK_GROUPS = {
     "embeddings.embed": "embed",
     "embeddings.sync_metadata": "embed",
     "embeddings.sync_atc7": "embed",
-    "embeddings.migrate_qdrant": "embed",
 }
 
 
 class TaskConflict(Exception):
     pass
+
+
+class TaskLaunchError(Exception):
+    """The task could not be queued (broker unreachable)."""
+
+
+def running_in_group(session: Session, group: str) -> str | None:
+    """Kind of an active task in ``group``, if any (stale rows of dead workers are ignored)."""
+    fail_orphaned_tasks()
+    kinds = [k for k, g in LOCK_GROUPS.items() if g == group]
+    return session.execute(
+        text(
+            "SELECT kind FROM task_run WHERE kind = ANY(:kinds) AND status = ANY(:active) LIMIT 1"
+        ),
+        {"kinds": kinds, "active": list(ACTIVE_STATUSES)},
+    ).scalar()
 
 
 def launch(
@@ -39,14 +55,13 @@ def launch(
 ) -> TaskRun:
     group = LOCK_GROUPS.get(kind)
     if group:
-        kinds = [k for k, g in LOCK_GROUPS.items() if g == group]
-        running = session.execute(
-            text(
-                "SELECT kind FROM task_run WHERE kind = ANY(:kinds) AND status = ANY(:active) LIMIT 1"
-            ),
-            {"kinds": kinds, "active": list(ACTIVE_STATUSES)},
-        ).scalar()
+        # Serialise launches per group so two requests cannot both pass the check below
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": f"task-group:{group}"}
+        )
+        running = running_in_group(session, group)
         if running:
+            session.rollback()
             raise TaskConflict(
                 f"A '{running}' task is already running; wait for it to finish or cancel it"
             )
@@ -61,14 +76,27 @@ def launch(
     )
     session.add(run)
     session.commit()
-    celery_task.apply_async(
-        kwargs={**params, "user_id": user.id if user else None}, task_id=task_id
-    )
+    try:
+        celery_task.apply_async(
+            kwargs={**params, "user_id": user.id if user else None}, task_id=task_id
+        )
+    except Exception as exc:
+        # Otherwise the row would stay PENDING forever and block its group
+        session.execute(
+            text(
+                "UPDATE task_run SET status = 'FAILURE', error = :e, finished_at = now() "
+                "WHERE id = :id AND status = 'PENDING'"
+            ),
+            {"id": task_id, "e": f"Could not queue the task: {exc}"},
+        )
+        session.commit()
+        raise TaskLaunchError(f"Could not queue the task: {exc}") from exc
     session.refresh(run)
     return run
 
 
 def to_dict(run: TaskRun, username: str | None = None) -> dict:
+    check_result(run.kind, run.result)
     data = run.model_dump()
     total = run.progress_total
     data["percentage"] = (
@@ -104,18 +132,16 @@ def list_tasks(
         params["uid"] = user_id
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     rows = session.execute(
-        text(
-            f"SELECT t.id, u.username FROM task_run t LEFT JOIN app_user u ON u.id = t.user_id "
-            f"{where} ORDER BY t.created_at DESC LIMIT :limit"
-        ),
-        params,
+        select(TaskRun, AppUser.username)
+        .from_statement(
+            text(
+                f"SELECT t.*, u.username FROM task_run t LEFT JOIN app_user u ON u.id = t.user_id "
+                f"{where} ORDER BY t.created_at DESC LIMIT :limit"
+            )
+        )
+        .params(params)
     ).all()
-    result = []
-    for task_id, username in rows:
-        run = session.get(TaskRun, task_id)
-        if run:
-            result.append(to_dict(run, username))
-    return result
+    return [to_dict(run, username) for run, username in rows]
 
 
 def get_task(session: Session, task_id: str) -> dict | None:
@@ -159,10 +185,27 @@ def cancel(session: Session, task_id: str) -> dict | None:
 
 
 def fail_orphaned_tasks() -> int:
+    """Mark running tasks whose worker stopped sending heartbeats as failed.
+
+    Safe with several workers: a task is orphaned only when its own heartbeat has expired."""
     with get_engine().begin() as conn:
+        running = (
+            conn.execute(text("SELECT id FROM task_run WHERE status IN ('STARTED', 'PROGRESS')"))
+            .scalars()
+            .all()
+        )
+        if not running:
+            return 0
+        redis = get_redis()
+        alive = redis.mget([heartbeat_key(t) for t in running])
+        dead = [t for t, beat in zip(running, alive, strict=True) if beat is None]
+        if not dead:
+            return 0
         return conn.execute(
             text(
-                "UPDATE task_run SET status = 'FAILURE', error = 'Worker restarted while the task was running', "
-                "finished_at = now() WHERE status IN ('STARTED', 'PROGRESS')"
-            )
+                "UPDATE task_run SET status = 'FAILURE', "
+                "error = 'The worker stopped while the task was running', finished_at = now() "
+                "WHERE id = ANY(:ids) AND status IN ('STARTED', 'PROGRESS')"
+            ),
+            {"ids": dead},
         ).rowcount

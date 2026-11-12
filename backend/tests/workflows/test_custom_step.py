@@ -58,7 +58,7 @@ async def test_translate_step_runs_before_retrieval(with_plugin):
         drug_specific=False,
         threshold=8,
     )
-    result = await run_pipeline(state, ctx, "automap_translated")
+    result = await run_pipeline(state, ctx, "example_translated")
 
     assert [t["node"] for t in result["trace"]] == [
         "extract_atc7",
@@ -75,10 +75,10 @@ async def test_translate_step_runs_before_retrieval(with_plugin):
     info = catalog()
     step = next(n for n in info["nodes"] if n["name"] == "translate_query")
     assert step["plugin"] == "examples.workflow_plugins.translate_query.nodes"
-    assert "automap_translated" in [p["name"] for p in info["pipelines"]]
+    assert "example_translated" in [p["name"] for p in info["pipelines"]]
 
 
 def test_pipeline_unknown_without_plugin():
     plugins.load_plugins(force=True)
     with pytest.raises(builder.PipelineError):
-        builder.get_pipeline("automap_translated")
+        builder.get_pipeline("example_translated")

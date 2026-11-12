@@ -1,4 +1,4 @@
-"""Embedding tasks: embed standard concepts, keep metadata in sync, copy vectors from Qdrant."""
+"""Embedding tasks: embed standard concepts and keep their metadata in sync."""
 
 import logging
 
@@ -64,13 +64,15 @@ def embed_standard_concepts(
             }
 
         rebuild = pending > get_settings().diskann_rebuild_threshold
-        if rebuild:
-            progress.phase("Dropping the DiskANN index for the bulk load")
-            store.drop_index(write_conn, table)
-
-        progress.phase(f"Embedding {pending:,} concepts with {cfg.embedding_model}", total=pending)
         embedded = 0
         try:
+            if rebuild:
+                # Bulk loads are much faster without the index; the finally block rebuilds it
+                progress.phase("Dropping the DiskANN index for the bulk load", cancellable=False)
+                store.drop_index(write_conn, table)
+            progress.phase(
+                f"Embedding {pending:,} concepts with {cfg.embedding_model}", total=pending
+            )
             with read_conn.transaction(), read_conn.cursor(name="pending_concepts") as cur:
                 cur.itersize = batch_size
                 cur.execute(
@@ -91,9 +93,16 @@ def embed_standard_concepts(
                     )
                     progress.check_cancelled()
         finally:
-            # Always leave a usable index behind, even after a cancel or an error
-            progress.phase("Building the DiskANN index")
-            store.create_index(write_conn, table)
+            # Always leave a usable index behind, even after a cancel or an error. A failed batch
+            # leaves write_conn in an aborted transaction, and the phase must not re-raise the
+            # cancel (that would skip the index build).
+            write_conn.rollback()
+            progress.phase("Building the DiskANN index", cancellable=False)
+            try:
+                store.create_index(write_conn, table)
+            except Exception:
+                logger.exception("Could not build the DiskANN index on %s", table)
+                write_conn.rollback()
             cache.invalidate("embeddings")
 
     return {"collection": col.name, "embedded": embedded, "pending_before": pending}

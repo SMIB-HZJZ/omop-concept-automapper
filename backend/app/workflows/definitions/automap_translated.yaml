@@ -1,0 +1,24 @@
+# `automap` with a translation step: the source term is rendered in English OMOP wording, retrieval
+# searches both the original and the English term, and the reranker sees both.
+# Measure whether it helps on your data: python -m app.cli evaluate (see README).
+name: automap_translated
+description: translate to English → ATC7 extraction → retrieval (original + English) → LLM rerank → confidence gate
+entry: extract_atc7
+nodes:
+  extract_atc7:
+    uses: extract_atc7
+  translate:
+    uses: translate
+  retrieve:
+    uses: retrieve
+    params: { k_default: 15, k_drug: 30 }
+  rerank:
+    uses: llm_rerank
+  gate:
+    uses: confidence_gate
+    routes: { accept: END, reject: END }
+edges:
+  - [extract_atc7, translate]
+  - [translate, retrieve]
+  - [retrieve, rerank]
+  - [rerank, gate]

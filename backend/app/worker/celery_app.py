@@ -20,7 +20,6 @@ celery_app = Celery(
         "app.worker.tasks.source",
         "app.worker.tasks.embeddings",
         "app.worker.tasks.automap",
-        "app.worker.tasks.migration",
     ],
 )
 celery_app.conf.update(

@@ -2,6 +2,12 @@
 
 Columns: ``source_value`` and ``source_concept_name`` (required), ``freq`` (empty/NaN -> 1)
 and ``concept_id`` (one or more OMOP concept ids separated by ';' used as existing mappings).
+
+Optional drug structure columns, in the shape of OMOP ``drug_strength`` (one value per
+ingredient separated by ';'; a single unit applies to every ingredient):
+``ingredient`` (name or concept id), ``amount_value``, ``amount_unit``, ``numerator_value``,
+``numerator_unit``, ``denominator_value``, ``denominator_unit``, ``dose_form``, ``brand_name``.
+When present, drug mapping uses them instead of parsing the name.
 """
 
 import csv
@@ -9,7 +15,10 @@ import io
 import re
 
 import psycopg
+from psycopg.types.json import Jsonb
+from pydantic import ValidationError
 
+from app.llm.schemas import DrugStructure
 from app.worker.progress import ProgressReporter
 
 REQUIRED = ("source_value", "source_concept_name")
@@ -36,6 +45,65 @@ def _parse_concept_ids(raw: str | None) -> list[int]:
     if not raw:
         return []
     return [int(part) for part in re.split(r"[;,]", raw) if part.strip().isdigit()]
+
+
+DRUG_COMPONENT_COLUMNS = (
+    "ingredient",
+    "amount_value",
+    "amount_unit",
+    "numerator_value",
+    "numerator_unit",
+    "denominator_value",
+    "denominator_unit",
+)
+DRUG_COLUMNS = (*DRUG_COMPONENT_COLUMNS, "dose_form", "brand_name")
+
+
+def _split(raw: str | None) -> list[str]:
+    return [p.strip() for p in (raw or "").split(";")] if raw and raw.strip() else []
+
+
+def _number(raw: str, column: str) -> float | None:
+    if not raw:
+        return None
+    try:
+        return float(raw.replace(",", "."))  # decimal comma, e.g. 0,5
+    except ValueError as exc:
+        raise SourceImportError(f"{column}: {raw!r} is not a number") from exc
+
+
+def parse_drug_structure(row: dict) -> dict | None:
+    """The drug columns of one CSV row as a DrugStructure dict, or None if they are empty."""
+    ingredients = _split(row.get("ingredient"))
+    if not ingredients:
+        if any((row.get(c) or "").strip() for c in DRUG_COLUMNS if c != "ingredient"):
+            raise SourceImportError("drug columns are filled but 'ingredient' is empty")
+        return None
+    n = len(ingredients)
+    values: dict[str, list[str]] = {}
+    for column in DRUG_COMPONENT_COLUMNS[1:]:
+        parts = _split(row.get(column))
+        if len(parts) == 1 and n > 1:
+            parts = parts * n  # one unit (or value) for every ingredient
+        if parts and len(parts) != n:
+            raise SourceImportError(f"{column}: {len(parts)} values for {n} ingredients")
+        values[column] = parts or [""] * n
+    components = []
+    for i, ingredient in enumerate(ingredients):
+        component: dict = {"ingredient": ingredient}
+        for column in DRUG_COMPONENT_COLUMNS[1:]:
+            raw = values[column][i]
+            component[column] = _number(raw, column) if column.endswith("_value") else (raw or None)
+        components.append(component)
+    try:
+        structure = DrugStructure(
+            components=components,
+            dose_form=(row.get("dose_form") or "").strip() or None,
+            brand_name=(row.get("brand_name") or "").strip() or None,
+        )
+    except ValidationError as exc:
+        raise SourceImportError(f"invalid drug structure: {exc.errors()[0]['msg']}") from exc
+    return structure.model_dump(exclude_none=True)
 
 
 def read_header(path: str) -> list[str]:
@@ -76,14 +144,16 @@ def import_source_csv(
                 source_value TEXT NOT NULL,
                 source_concept_name TEXT NOT NULL,
                 freq INTEGER NOT NULL,
-                concept_ids INTEGER[]
+                concept_ids INTEGER[],
+                drug_structure JSONB
             ) ON COMMIT DROP
             """
         )
         with (
             open(path, encoding="utf-8-sig", newline="") as fh,
             cur.copy(
-                "COPY source_stage (row_no, source_value, source_concept_name, freq, concept_ids) FROM STDIN"
+                "COPY source_stage (row_no, source_value, source_concept_name, freq, concept_ids, "
+                "drug_structure) FROM STDIN"
             ) as copy,
         ):
             reader = csv.DictReader(fh)
@@ -95,6 +165,10 @@ def import_source_csv(
                     continue
                 if not name:
                     raise SourceImportError(f"Row {i + 1}: source_concept_name is empty")
+                try:
+                    structure = parse_drug_structure(row)
+                except SourceImportError as exc:
+                    raise SourceImportError(f"Row {i + 1}: {exc}") from exc
                 copy.write_row(
                     (
                         i,
@@ -102,6 +176,7 @@ def import_source_csv(
                         name,
                         _parse_freq(row.get("freq")),
                         _parse_concept_ids(row.get("concept_id")),
+                        Jsonb(structure) if structure else None,
                     )
                 )
                 if progress and i % BATCH == 0:
@@ -118,8 +193,10 @@ def import_source_csv(
         )
         cur.execute(
             """
-            INSERT INTO source_concepts (source_id, source_value, source_concept_name, source_vocabulary_id, freq)
-            SELECT source_id, source_value, source_concept_name, %s, freq FROM source_stage ORDER BY row_no
+            INSERT INTO source_concepts
+                (source_id, source_value, source_concept_name, source_vocabulary_id, freq, drug_structure)
+            SELECT source_id, source_value, source_concept_name, %s, freq, drug_structure
+            FROM source_stage ORDER BY row_no
             """,
             (vocabulary_id,),
         )
@@ -152,9 +229,12 @@ def import_source_csv(
             """
         )
         premapped = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM source_stage WHERE drug_structure IS NOT NULL")
+        structured = cur.fetchone()[0]
 
     return {
         "inserted": inserted,
+        "with_drug_structure": structured,
         "premapped_sources": premapped,
         "premapped_links": links,
         "invalid_concept_ids": invalid[:1000],

@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep
@@ -56,6 +58,36 @@ def reset_config(_: AdminUser, session: SessionDep):
     return _out(settings_store.reset_config(session))
 
 
+# Gateway models that are not chat models (as in the Streamlit app, which kept only gpt*)
+_NOT_CHAT = re.compile(
+    r"(whisper|tts|dall-e|image|audio|realtime|transcribe|moderation|search|babbage|davinci"
+    r"|computer-use|codex|embed|rerank|ft:|-instruct"
+    r"|-\d{4}-\d{2}-\d{2}$|-\d{4}$)",  # dated snapshots: the undated alias is listed too
+    re.IGNORECASE,
+)
+
+
+# Embedding models whose names do not contain "embed"
+_EMBEDDING = re.compile(r"(embed|^voyage/|/voyage-|bge-|e5-|nomic|minilm)", re.IGNORECASE)
+
+
+def classify_gateway_models(
+    gateway: list[str], llm: list[str], embedding: dict[str, int | None]
+) -> tuple[list[str], dict[str, int | None]]:
+    """Merge gateway models into the configured options: configured ones first, the rest sorted."""
+    extra_llm: list[str] = []
+    for model in gateway:
+        if "*" in model:
+            continue  # wildcard routes are not concrete models
+        if "rerank" in model.lower():
+            continue
+        if _EMBEDDING.search(model):
+            embedding.setdefault(model, None)
+        elif not _NOT_CHAT.search(model) and model not in llm:
+            extra_llm.append(model)
+    return llm + sorted(set(extra_llm)), embedding
+
+
 @cached("models", ttl=3600)
 def _model_options() -> dict:
     settings = get_settings()
@@ -63,16 +95,9 @@ def _model_options() -> dict:
     llm = list(settings.llm_model_option_list)
     embedding = dict(settings.embedding_model_option_map)
     if gateway:
-        for model in gateway:
-            if model == "*" or "*" in model:
-                continue  # wildcard routes are not concrete models
-            if "embed" in model.lower():
-                embedding.setdefault(model, None)
-            elif model not in llm:
-                llm.append(model)
-    for current in (settings.llm_chat_model,):
-        if current not in llm:
-            llm.insert(0, current)
+        llm, embedding = classify_gateway_models(gateway, llm, embedding)
+    if settings.llm_chat_model not in llm:
+        llm.insert(0, settings.llm_chat_model)
     embedding.setdefault(settings.llm_embedding_model, None)
     return {
         "llm_models": llm,

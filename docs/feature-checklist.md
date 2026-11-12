@@ -41,7 +41,7 @@ Verified on 2026-10-07 against the full `docker compose up` stack (PostgreSQL 18
 | F28 | Wait for DB, migrate schema, log stats on start | `python -m app.cli init` (Alembic, stamp-on-existing) | container logs; upgrade test |
 | F29 | Default configuration | env defaults + overrides (`app_config`) | test_config.py |
 | F30 | Structured logging | JSON logs (`LOG_FORMAT`) | container logs |
-| F31 | Collection naming from model + dims | `collection_name()` (and the Qdrant migration target) | test_effective_config_defaults_to_env |
+| F31 | Collection naming from model + dims | `collection_name()` | test_effective_config_defaults_to_env |
 
 ## Approved additions
 
@@ -52,7 +52,6 @@ Verified on 2026-10-07 against the full `docker compose up` stack (PostgreSQL 18
 | I3 | Per-concept AI suggest with trace | test_ai_suggest_single_concept, e2e, UI |
 | I4 | Concurrent, cancellable auto-mapping | test_cooperative_cancel |
 | — | Auth with user/admin roles | test_auth.py (role checks on every admin endpoint) |
-| — | PostgreSQL 15 → 18 upgrade | `scripts/upgrade-postgres.sh` on a simulated PG15 Streamlit database: row counts matched, baseline stamped, 0002/0003 applied |
 | — | Extensible workflows + custom step example | test_builder.py, test_custom_step.py |
 
 ## Bugs from the inventory (§1.5)
@@ -74,5 +73,27 @@ Verified on 2026-10-07 against the full `docker compose up` stack (PostgreSQL 18
 ## Not verified here
 
 - **Real provider calls:** OpenAI, Anthropic and others were not called, because no API key was available. Provider wiring is LiteLLM's standard passthrough, and Instructor (tool calling) and the embeddings call path were exercised over HTTP against the fake gateway.
-- **Qdrant → pgvector migration task:** no Qdrant data existed on this machine. The task reuses the same bulk-load, prune and index code that the embedding task exercises.
 - **Full-size OMOP vocabulary import and DiskANN build times:** not measured; only the fixture vocabulary was used.
+
+## Review follow-up (2026-11-12)
+
+Changes after the code review. Backend: `pytest` 100 passed (`docker compose -f docker-compose.dev.yaml exec backend pytest`).
+
+| Area | Change | Verified by |
+|---|---|---|
+| Parity | Reranker temperature defaults to 0 again (`LLM_TEMPERATURE`; LiteLLM drops it for reasoning models) | test_accepts_confident_match_with_atc7_filter |
+| Parity | ATC7 fallback (search without the ATC7 filter) is off by default, as in the Streamlit app | test_no_atc7_fallback_by_default, test_atc7_fallback_can_be_enabled |
+| Parity | Model list: LiteLLM provider wildcards (`openai/*`, `anthropic/*`) make `/v1/models` list concrete models; non-chat models and dated snapshots are filtered | test_gateway_models_are_classified; LiteLLM v1.104 lists 241 `openai/*` models with dummy keys |
+| Parity | Domain filtering checks the live `domain_id`; a vocabulary import also prunes and relabels every embedding collection | test_search_filters, test_vocabulary_reimport_swaps_tables_and_keeps_indexes |
+| Prompts | Rewritten: one output schema (no conflicting text), candidates with class/domain/vocabulary, explicit 1–10 confidence scale, non-conflicting drug rules, one-sentence rationale stored with suggestions | workflow tests |
+| Removed | Qdrant migration task/endpoint/UI and `qdrant-client`; PG15 upgrade path | — |
+| Tasks | Locks expire 60 s after a worker dies (heartbeat thread); orphan detection by heartbeat (safe with several workers); launches serialised per group (advisory lock); broker failure → FAILURE + 503 | test_lock_conflict, test_task_lock_released_and_heartbeat_cleared, test_broker_failure_marks_task_failed |
+| Tasks | Partial failures end as FAILURE with their result (vocabulary import with a failed table; auto-map where every concept errored) | test_vocabulary_import_with_a_failing_table_fails |
+| Tasks | Typed results per task kind, published in OpenAPI and validated when read | all task tests (strict in test mode) |
+| Embeddings | Cancel/error still rebuilds the DiskANN index; per-batch staging table (no stale vector size); `DISKANN_MAINTENANCE_WORK_MEM`; retries only on transient errors; status cached 30 s | test_cancelled_embedding_still_builds_the_index, test_bulk_upsert_handles_different_vector_sizes_on_one_connection, test_embedder_retries_only_transient_errors |
+| LLM | One async client per event loop, closed at the end of each auto-map task | test_async_client_is_per_event_loop; two consecutive auto-map runs in the live dev worker |
+| Import | Vocabulary import no longer locks readers: concept upsert keeps its indexes and writes only changed rows; relationship/ancestor tables are built as shadow tables and swapped in | test_vocabulary_reimport_swaps_tables_and_keeps_indexes, test_reimport_upserts_concepts |
+| Mapping | Auto-map (commit mode) never overwrites a mapping made meanwhile; suggestions are not queued for mapped concepts; `GET …/mapped` paginated with search; CSV streamed; uploads stop at 500 MB while streaming | test_source_import_and_mapping_flow |
+| Auth | Lockout per username across IPs; uvicorn trusts `X-Forwarded-For` only from `FORWARDED_ALLOW_IPS`; sessions revoked on password/role/status change (`token_version`, migration 0004); constant-time unknown-user path; prod refuses default DB/LiteLLM secrets and short JWT secrets; secure cookie by default in prod | test_auth.py |
+| Schema | Alembic autogenerate disabled (SQL migrations are the schema); model columns checked against the migrated DB | test_schema.py |
+

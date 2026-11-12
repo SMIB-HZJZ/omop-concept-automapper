@@ -19,6 +19,7 @@ from app.models.vocabulary import (
     ConceptAncestor,
     ConceptAtc7,
     ConceptRelationship,
+    DrugStrength,
     VocabularyImport,
 )
 
@@ -31,6 +32,7 @@ __all__ = [
     "ConceptAtc7",
     "ConceptRelationship",
     "DomainLabel",
+    "DrugStrength",
     "EmbeddingCollection",
     "MappingSuggestion",
     "SourceConcept",

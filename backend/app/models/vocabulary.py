@@ -67,3 +67,22 @@ class VocabularyImport(SQLModel, table=True):
     status: str = "completed"
     error_message: str | None = None
     task_id: str | None = None
+
+
+class DrugStrength(SQLModel, table=True):
+    """OMOP drug_strength (no primary key in the CDM; the model needs one for the ORM)."""
+
+    __tablename__ = "drug_strength"
+
+    drug_concept_id: int = Field(primary_key=True)
+    ingredient_concept_id: int = Field(primary_key=True)
+    amount_value: float | None = None
+    amount_unit_concept_id: int | None = None
+    numerator_value: float | None = None
+    numerator_unit_concept_id: int | None = None
+    denominator_value: float | None = None
+    denominator_unit_concept_id: int | None = None
+    box_size: int | None = None
+    valid_start_date: date
+    valid_end_date: date
+    invalid_reason: str | None = None

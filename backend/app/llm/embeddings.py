@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import numpy as np
 import openai
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import get_settings
 from app.core.redis import get_redis_bytes
@@ -17,6 +17,20 @@ logger = logging.getLogger(__name__)
 
 class GatewayUnavailable(RuntimeError):
     pass
+
+
+class EmptyEmbeddingResponse(RuntimeError):
+    pass
+
+
+# Worth retrying: network trouble, timeouts, rate limits, 5xx, and the provider returning nothing.
+# A 400/401/404 (bad model name, wrong key, too-long input) fails the same way every time.
+RETRYABLE_ERRORS = (
+    openai.APIConnectionError,  # includes APITimeoutError
+    openai.RateLimitError,
+    openai.InternalServerError,
+    EmptyEmbeddingResponse,
+)
 
 
 def _unreachable(exc: Exception) -> GatewayUnavailable:
@@ -34,6 +48,7 @@ class Embedder:
         self._retry = retry(
             stop=stop_after_attempt(retries),
             wait=wait_exponential(multiplier=2, min=2, max=30),
+            retry=retry_if_exception_type(RETRYABLE_ERRORS),
             reraise=True,
         )
 
@@ -48,7 +63,7 @@ class Embedder:
         def call():
             response = get_sync_client().embeddings.create(**self._params(texts))
             if not response.data:
-                raise RuntimeError("The embedding provider returned no vectors")
+                raise EmptyEmbeddingResponse("The embedding provider returned no vectors")
             return [d.embedding for d in sorted(response.data, key=lambda d: d.index)]
 
         try:
@@ -61,7 +76,7 @@ class Embedder:
         async def call():
             response = await get_async_client().embeddings.create(**self._params(texts))
             if not response.data:
-                raise RuntimeError("The embedding provider returned no vectors")
+                raise EmptyEmbeddingResponse("The embedding provider returned no vectors")
             return [d.embedding for d in sorted(response.data, key=lambda d: d.index)]
 
         try:
@@ -80,7 +95,7 @@ class Embedder:
             if hit:
                 return np.frombuffer(hit, dtype=np.float32).tolist()
         except Exception:
-            hit = None
+            logger.debug("Query embedding cache read failed", exc_info=True)
         vector = self.embed([text])[0]
         self._store(key, vector)
         return vector
@@ -92,7 +107,7 @@ class Embedder:
             if hit:
                 return np.frombuffer(hit, dtype=np.float32).tolist()
         except Exception:
-            pass
+            logger.debug("Query embedding cache read failed", exc_info=True)
         vector = (await self.aembed([text]))[0]
         self._store(key, vector)
         return vector

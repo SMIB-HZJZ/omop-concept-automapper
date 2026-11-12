@@ -9,7 +9,8 @@ Enable it without touching the core code:
     WORKFLOW_PLUGINS=examples.workflow_plugins.translate_query.nodes
     WORKFLOW_DEFINITIONS_DIR=/app/examples/workflow_plugins/translate_query
 
-and pick the ``automap_translated`` pipeline (or set AUTOMAP_PIPELINE=automap_translated).
+and pick the ``example_translated`` pipeline. The core has a built-in ``translate`` step and
+``automap_translated`` pipeline; this module only demonstrates the plugin mechanism.
 """
 
 from pydantic import BaseModel, ConfigDict, Field

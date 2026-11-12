@@ -4,11 +4,14 @@ from pathlib import Path
 
 from sqlmodel import Session
 
+from app.core.cache import cached
 from app.core.config import get_settings
 from app.core.db import get_engine
+from app.llm.drug_parser import DrugParser
 from app.llm.embeddings import Embedder
-from app.llm.structured import Reranker
+from app.llm.structured import Reranker, Translator
 from app.services import concepts as concept_service
+from app.services import drug_matching
 from app.services.settings_store import EffectiveConfig
 from app.vector.store import PgVectorStore, SearchFilters
 from app.workflows.builder import get_pipeline, load_definitions
@@ -42,12 +45,49 @@ def _get_ancestors(concept_id: int, levels: int) -> list[dict]:
         return concept_service.get_ancestors(session, concept_id, levels)
 
 
+def _match_drug(structure):
+    with Session(get_engine()) as session:
+        return drug_matching.match_structure(session, structure)
+
+
+@cached("vocab")
+def _drug_vocabulary_info(session: Session) -> dict:
+    return {
+        "dose_forms": drug_matching.dose_form_names(session),
+        "has_drug_strength": drug_matching.has_drug_strength(session),
+    }
+
+
+def _drug_parser(llm_model: str) -> DrugParser | None:
+    """None when drug_strength is not loaded (the drug step then falls back right away)."""
+    with Session(get_engine()) as session:
+        info = _drug_vocabulary_info(session)
+    if not info["has_drug_strength"]:
+        return None
+    return DrugParser(llm_model, info["dose_forms"])
+
+
+def default_pipeline(drug_specific: bool) -> str:
+    """AUTOMAP_DRUG_PIPELINE for drug vocabularies once drug_strength is loaded, else AUTOMAP_PIPELINE."""
+    settings = get_settings()
+    if drug_specific:
+        with Session(get_engine()) as session:
+            if _drug_vocabulary_info(session)["has_drug_strength"]:
+                return settings.automap_drug_pipeline
+    return settings.automap_pipeline
+
+
 def build_context(cfg: EffectiveConfig) -> NodeContext:
+    drug_parser = _drug_parser(cfg.llm_model)
     return NodeContext(
         searcher=SessionSearcher(
             cfg.collection_name, Embedder(cfg.embedding_model, cfg.embedding_dims)
         ),
         reranker=Reranker(cfg.llm_model),
+        translator=Translator(cfg.llm_model),
+        drug_parser=drug_parser,
+        # Both need drug_strength; without it the drug step falls back immediately
+        drug_matcher=_match_drug if drug_parser is not None else None,
         get_concepts=_get_concepts,
         get_ancestors=_get_ancestors,
         settings=get_settings(),
@@ -66,6 +106,7 @@ def initial_state(
     threshold: int,
     atc7_codes: list[str] | None = None,
     vocabulary_id: str | None = None,
+    drug_structure: dict | None = None,
 ) -> AutomapState:
     return AutomapState(
         source_id=source_id,
@@ -81,6 +122,10 @@ def initial_state(
         selected=None,
         confidence=None,
         rationale=None,
+        translated_query=None,
+        drug_structure=drug_structure,
+        structured_candidates=[],
+        notes=[],
         outcome="pending",
         trace=[],
         meta={},
@@ -88,9 +133,15 @@ def initial_state(
 
 
 async def run_pipeline(
-    state: AutomapState, ctx: NodeContext, pipeline: str | None = None
+    state: AutomapState,
+    ctx: NodeContext,
+    pipeline: str | None = None,
+    *,
+    compiled: tuple | None = None,
 ) -> AutomapState:
-    graph, definition = get_pipeline(pipeline)
+    """Run one concept through a pipeline. Pass ``compiled`` (from ``get_pipeline``) when running
+    many concepts, so the definitions are not re-read for each one."""
+    graph, definition = compiled or get_pipeline(pipeline)
     result = await graph.ainvoke(state, context=ctx)
     result.setdefault("meta", {})
     result["meta"] = {**result["meta"], "pipeline": definition.name}

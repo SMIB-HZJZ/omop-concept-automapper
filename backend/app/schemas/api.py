@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.services.atc7 import is_valid_atc7
+from app.workflows.state import DEFAULT_CONFIDENCE_THRESHOLD
 
 Role = Literal["user", "admin"]
 
@@ -33,8 +34,8 @@ class UserOut(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(min_length=1, max_length=150)
+    password: str = Field(min_length=1, max_length=256)
 
 
 class LoginResponse(BaseModel):
@@ -202,6 +203,14 @@ class MappedRow(BaseModel):
     mapped_at: datetime | None = None
 
 
+class MappedPage(BaseModel):
+    items: list[MappedRow]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+
+
 class DomainCount(BaseModel):
     domain_id: str
     count: int
@@ -330,12 +339,6 @@ class EmbedRequest(BaseModel):
     batch_size: int = Field(default=1000, ge=10, le=2000)
 
 
-class QdrantMigrationRequest(BaseModel):
-    qdrant_url: str = "http://qdrant:6333"
-    collection: str = "omop_vocab"
-    batch_size: int = Field(default=1000, ge=50, le=5000)
-
-
 # --------------------------------------------------------------------------- tasks
 
 
@@ -405,7 +408,7 @@ class SuggestionDecision(BaseModel):
 
 class AutomapRequest(BaseModel):
     domains: list[str] = Field(min_length=1)
-    threshold: int = Field(default=8, ge=1, le=10)
+    threshold: int = Field(default=DEFAULT_CONFIDENCE_THRESHOLD, ge=1, le=10)
     drug_specific: bool = False
     mode: Literal["review", "commit"] = "review"
     pipeline: str | None = None
@@ -417,7 +420,7 @@ class SuggestRequest(BaseModel):
     domains: list[str] = []
     drug_specific: bool | None = None
     atc7_codes: list[str] | None = None
-    threshold: int = Field(default=8, ge=1, le=10)
+    threshold: int = Field(default=DEFAULT_CONFIDENCE_THRESHOLD, ge=1, le=10)
     pipeline: str | None = None
 
 

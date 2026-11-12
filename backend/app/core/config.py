@@ -3,11 +3,21 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, computed_field, model_validator
+from pydantic import Field, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Values shipped in .env.example. The app refuses to start in production with these.
-INSECURE_PLACEHOLDERS = {"", "change-me", "changeme", "admin", "password", "secret"}
+# Values shipped in .env.example or used as defaults. The app refuses to start in production with these.
+INSECURE_PLACEHOLDERS = {
+    "",
+    "change-me",
+    "changeme",
+    "admin",
+    "password",
+    "secret",
+    "postgres",
+    "sk-litellm-change-me",
+}
+MIN_JWT_SECRET_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -36,16 +46,24 @@ class Settings(BaseSettings):
     # --- LLM gateway (LiteLLM proxy, OpenAI-compatible) ---
     llm_gateway_url: str = "http://litellm:4000"
     litellm_master_key: str = "sk-litellm-change-me"
-    llm_chat_model: str = "openai/gpt-5-mini"
-    llm_embedding_model: str = "openai/text-embedding-3-large"
-    embedding_dims: int | None = 1024
+    # Defaults chosen for mapping accuracy at mid-tier prices and European-language coverage
+    # (see README, "Providers and default models"): Claude Sonnet 5.5 reranks/translates,
+    # Gemini Embedding 2 retrieves.
+    llm_chat_model: str = "anthropic/claude-sonnet-5-5"
+    llm_embedding_model: str = "gemini/gemini-embedding-2"
+    embedding_dims: int | None = 1536
     # Comma-separated model names offered in the Settings page (in addition to what the gateway lists)
-    llm_model_options: str = "openai/gpt-5-mini,openai/gpt-5,openai/gpt-4.1,openai/gpt-4o"
+    llm_model_options: str = (
+        "anthropic/claude-sonnet-5-5,openai/gpt-6.1-terra,gemini/gemini-3.8-flash,"
+        "mistral/mistral-large-latest,anthropic/claude-haiku-5-5,openai/gpt-6-luna,"
+        "ollama/mistral-small"
+    )
     # Comma-separated "model:max_dims" pairs
     embedding_model_options: str = (
-        "openai/text-embedding-3-large:3072,openai/text-embedding-3-small:1536"
+        "gemini/gemini-embedding-2:3072,voyage/voyage-4-large:2048,cohere/embed-v5.0-pro:1536,"
+        "openai/text-embedding-3-large:3072,mistral/mistral-embed:1024,ollama/bge-m3:1024"
     )
-    llm_temperature: float | None = None
+    llm_temperature: float | None = 0.0
     llm_max_retries: int = 2
     # Instructor mode for structured output: tools (most portable via LiteLLM), json, json_schema, md_json
     instructor_mode: str = "tools"
@@ -55,6 +73,8 @@ class Settings(BaseSettings):
 
     # --- Workflows / auto-mapping ---
     automap_pipeline: str = "automap"
+    # Used instead of AUTOMAP_PIPELINE for drug vocabularies when no pipeline is chosen
+    automap_drug_pipeline: str = "automap_drug"
     automap_concurrency: int = 4
     workflow_plugins: str = ""
     workflow_definitions_dir: str = ""
@@ -63,6 +83,8 @@ class Settings(BaseSettings):
     diskann_query_rescore: int = 100
     diskann_query_search_list_size: int = 200
     diskann_rebuild_threshold: int = 10_000
+    # maintenance_work_mem for DiskANN index builds (more = faster builds of large collections)
+    diskann_maintenance_work_mem: str = Field(default="1GB", pattern=r"^\d+\s*(kB|MB|GB|TB)?$")
 
     # --- Files ---
     vocabulary_dir: str = "/data/vocabulary"
@@ -72,10 +94,12 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me"
     jwt_expire_minutes: int = 720
     cookie_name: str = "omop_session"
-    cookie_secure: bool = False
+    # Secure (HTTPS-only) session cookie. Unset: on in prod, off in dev/test (http://localhost)
+    cookie_secure: bool | None = None
     admin_username: str = "admin"
     admin_password: str = "change-me"
     login_max_failures: int = 5
+    login_max_failures_per_user: int = 20
     login_lockout_seconds: int = 900
 
     @computed_field  # type: ignore[prop-decorator]
@@ -87,6 +111,10 @@ class Settings(BaseSettings):
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @property
+    def secure_cookies(self) -> bool:
+        return self.cookie_secure if self.cookie_secure is not None else self.app_env == "prod"
 
     @property
     def broker_url(self) -> str:
@@ -122,6 +150,18 @@ class Settings(BaseSettings):
     def workflow_plugin_list(self) -> list[str]:
         return [p.strip() for p in self.workflow_plugins.split(",") if p.strip()]
 
+    def _db_password(self) -> str:
+        if self.database_url_override:
+            from sqlalchemy.engine import make_url
+
+            return make_url(self.database_url_override).password or ""
+        return self.postgres_password
+
+    @field_validator("llm_temperature", mode="before")
+    @classmethod
+    def _empty_temperature(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
     @model_validator(mode="after")
     def _check_secrets(self) -> "Settings":
         if self.app_env == "prod":
@@ -130,12 +170,16 @@ class Settings(BaseSettings):
                 for name, value in (
                     ("JWT_SECRET", self.jwt_secret),
                     ("ADMIN_PASSWORD", self.admin_password),
+                    ("POSTGRES_PASSWORD", self._db_password()),
+                    ("LITELLM_MASTER_KEY", self.litellm_master_key),
                 )
                 if value.strip().lower() in INSECURE_PLACEHOLDERS
             ]
+            if len(self.jwt_secret.strip()) < MIN_JWT_SECRET_LENGTH and "JWT_SECRET" not in weak:
+                weak.append(f"JWT_SECRET (shorter than {MIN_JWT_SECRET_LENGTH} characters)")
             if weak:
                 raise ValueError(
-                    f"Refusing to start with placeholder secrets: {', '.join(weak)}. "
+                    f"Refusing to start with placeholder or weak secrets: {', '.join(weak)}. "
                     "Set them in .env (or APP_ENV=dev for local development)."
                 )
         return self

@@ -7,6 +7,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app import __version__
 from app.api.routes import (
     auth,
     concepts,
@@ -37,11 +38,33 @@ async def lifespan(_: FastAPI):
     yield
 
 
+def _publish_task_result_schemas(app: FastAPI) -> None:
+    """Add the task result models to the OpenAPI components so the frontend gets their types."""
+    from fastapi.openapi.utils import get_openapi
+    from pydantic.json_schema import models_json_schema
+
+    from app.schemas.task_results import TASK_RESULT_MODELS
+
+    def openapi() -> dict:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+        _, defs = models_json_schema(
+            [(m, "serialization") for m in TASK_RESULT_MODELS.values()],
+            ref_template="#/components/schemas/{model}",
+        )
+        schema.setdefault("components", {}).setdefault("schemas", {}).update(defs["$defs"])
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = openapi  # type: ignore[method-assign]
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="OMOP Concept Automapper API",
-        version="2.0.0",
+        version=__version__,
         lifespan=lifespan,
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
@@ -78,6 +101,7 @@ def create_app() -> FastAPI:
     ):
         api.include_router(module.router)
     app.include_router(api)
+    _publish_task_result_schemas(app)
     return app
 
 

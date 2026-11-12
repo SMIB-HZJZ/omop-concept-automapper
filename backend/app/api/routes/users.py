@@ -31,12 +31,18 @@ def update_user(user_id: int, body: UserUpdate, admin: AdminUser, session: Sessi
     demoting = (body.role == "user" or body.is_active is False) and user.role == "admin"
     if demoting and user_service.count_admins(session) <= 1:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot remove the last active admin")
-    if body.role is not None:
+    changed = False
+    if body.role is not None and body.role != user.role:
         user.role = body.role
-    if body.is_active is not None:
+        changed = True
+    if body.is_active is not None and body.is_active != user.is_active:
         user.is_active = body.is_active
+        changed = True
     if body.password:
         user.hashed_password = hash_password(body.password)
+        changed = True
+    if changed:
+        user_service.revoke_sessions(user)  # existing sessions must pick up the change now
     session.add(user)
     session.commit()
     session.refresh(user)

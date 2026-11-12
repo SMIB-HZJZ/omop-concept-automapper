@@ -12,14 +12,16 @@ from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.core.db import session_scope
+from app.llm.gateway import aclose_async_client
 from app.services import mapping
 from app.services.settings_store import get_effective_config
 from app.worker.base import TrackedTask
 from app.worker.celery_app import celery_app
-from app.worker.progress import ProgressReporter, TaskCancelled
+from app.worker.progress import ProgressReporter, TaskCancelled, TaskFailed
 from app.workflows.builder import get_pipeline
 from app.workflows.context import NodeContext
-from app.workflows.service import build_context, initial_state, run_pipeline
+from app.workflows.service import build_context, default_pipeline, initial_state, run_pipeline
+from app.workflows.state import DEFAULT_CONFIDENCE_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +42,7 @@ def persist_outcome(
     method = state.get("method") or "auto_standard"
     with session_scope() as session:
         if mode == "commit":
-            mapping.map_concepts(
+            written = mapping.map_concepts(
                 session,
                 state["source_id"],
                 [selected["concept_id"]],
@@ -52,14 +54,17 @@ def persist_outcome(
                 task_id=task_id,
                 rationale=state.get("rationale"),
                 commit=False,
+                only_if_unmapped=True,
             )
-            return "mapped"
+            return "mapped" if written else "skipped"
+        # Not when the concept was mapped (e.g. by hand) while this run was going
         inserted = session.execute(
             text(
                 """
                 INSERT INTO mapping_suggestion
                     (source_id, concept_id, confidence, method, pipeline, target_domains, rationale, task_id)
-                VALUES (:s, :c, :conf, :method, :pipeline, :domains, :rationale, :task)
+                SELECT :s, :c, :conf, :method, :pipeline, :domains, :rationale, :task
+                WHERE NOT EXISTS (SELECT 1 FROM source_standard_map WHERE source_id = :s)
                 ON CONFLICT (source_id) WHERE status = 'pending' DO NOTHING
                 """
             ),
@@ -77,6 +82,12 @@ def persist_outcome(
         return "queued" if inserted else "skipped"
 
 
+def _report(progress: ProgressReporter, current: int, message: str) -> bool:
+    """Write (throttled) progress and return whether the user asked to cancel."""
+    progress.update(current=current, message=message)
+    return progress.is_cancelled()
+
+
 async def automap_concepts(
     concepts: list[dict],
     ctx: NodeContext,
@@ -90,7 +101,9 @@ async def automap_concepts(
     task_id: str | None,
     user_id: int | None,
     concurrency: int,
+    compiled: tuple | None = None,
 ) -> dict:
+    compiled = compiled or get_pipeline(pipeline)
     counts = {"processed": 0, "mapped": 0, "queued": 0, "skipped": 0, "errors": 0}
     outcomes: dict[str, int] = {}
     semaphore = asyncio.Semaphore(max(1, concurrency))
@@ -110,9 +123,10 @@ async def automap_concepts(
                         domains=domains,
                         drug_specific=drug_specific,
                         threshold=threshold,
+                        drug_structure=concept.get("drug_structure"),
                     ),
                     ctx,
-                    pipeline,
+                    compiled=compiled,
                 )
                 outcomes[state.get("outcome", "unknown")] = (
                     outcomes.get(state.get("outcome", "unknown"), 0) + 1
@@ -135,15 +149,13 @@ async def automap_concepts(
             finally:
                 counts["processed"] += 1
                 if progress:
-                    progress.update(
-                        current=counts["processed"],
-                        message=(
-                            f"{counts['processed']:,}/{total:,} processed · "
-                            f"{counts['mapped'] + counts['queued']:,} "
-                            f"{'mapped' if mode == 'commit' else 'queued for review'}"
-                        ),
+                    message = (
+                        f"{counts['processed']:,}/{total:,} processed · "
+                        f"{counts['mapped'] + counts['queued']:,} "
+                        f"{'mapped' if mode == 'commit' else 'queued for review'}"
                     )
-                    if progress.is_cancelled():
+                    # DB and Redis I/O: keep it off the event loop
+                    if await asyncio.to_thread(_report, progress, counts["processed"], message):
                         cancelled.set()
 
     await asyncio.gather(*(handle(c) for c in concepts))
@@ -155,20 +167,18 @@ def run_automap(
     self,
     vocabulary_id: int,
     domains: list[str],
-    threshold: int = 8,
+    threshold: int = DEFAULT_CONFIDENCE_THRESHOLD,
     drug_specific: bool = False,
     mode: str = "review",
     pipeline: str | None = None,
     limit: int | None = None,
     user_id: int | None = None,
 ) -> dict:
-    pipeline = pipeline or get_settings().automap_pipeline
-    get_pipeline(pipeline)  # fail fast on an unknown or invalid pipeline
+    pipeline = pipeline or default_pipeline(drug_specific)
+    compiled = get_pipeline(pipeline)  # resolved once; also fails fast on an invalid pipeline
     with session_scope() as session:
         cfg = get_effective_config(session)
-        concepts = mapping.get_unmapped_concepts_for_automap(session, vocabulary_id)
-    if limit:
-        concepts = concepts[:limit]
+        concepts = mapping.get_unmapped_concepts_for_automap(session, vocabulary_id, limit)
     self.progress.phase(
         f"Auto-mapping {len(concepts):,} concepts with '{pipeline}'", total=len(concepts)
     )
@@ -181,21 +191,26 @@ def run_automap(
             "queued": 0,
         }
 
-    result = asyncio.run(
-        automap_concepts(
-            concepts,
-            build_context(cfg),
-            domains=domains,
-            threshold=threshold,
-            drug_specific=drug_specific,
-            mode=mode,
-            pipeline=pipeline,
-            progress=self.progress,
-            task_id=self.request.id,
-            user_id=user_id,
-            concurrency=get_settings().automap_concurrency,
-        )
-    )
+    async def run() -> dict:
+        try:
+            return await automap_concepts(
+                concepts,
+                build_context(cfg),
+                domains=domains,
+                threshold=threshold,
+                drug_specific=drug_specific,
+                mode=mode,
+                pipeline=pipeline,
+                progress=self.progress,
+                task_id=self.request.id,
+                user_id=user_id,
+                concurrency=get_settings().automap_concurrency,
+                compiled=compiled,
+            )
+        finally:
+            await aclose_async_client()
+
+    result = asyncio.run(run())
     mapping.invalidate_vocabulary(vocabulary_id)
     summary = {
         "vocabulary_id": vocabulary_id,
@@ -212,5 +227,11 @@ def run_automap(
         done = result["mapped"] + result["queued"]
         raise TaskCancelled(
             f"Cancelled after {result['processed']:,} of {len(concepts):,} concepts ({done:,} saved)"
+        )
+    if result["processed"] and result["errors"] == result["processed"]:
+        # Typically the LLM gateway or provider is down or misconfigured
+        raise TaskFailed(
+            f"All {result['errors']:,} concepts failed; check the LLM gateway and model settings",
+            summary,
         )
     return summary

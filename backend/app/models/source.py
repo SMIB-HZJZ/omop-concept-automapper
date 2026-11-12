@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import Column, DateTime, Numeric, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
 
 
@@ -28,6 +28,8 @@ class SourceConcept(SQLModel, table=True):
     source_concept_name: str
     source_vocabulary_id: int = Field(foreign_key="source_vocabulary.id", index=True)
     freq: int | None = 1
+    # Drugs: ingredients/strengths/dose form from the CSV (see app.llm.schemas.DrugStructure)
+    drug_structure: dict | None = Field(default=None, sa_column=Column(JSONB))
 
 
 class SourceStandardMap(SQLModel, table=True):

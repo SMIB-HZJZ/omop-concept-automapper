@@ -1,8 +1,10 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import CurrentUser, SessionDep
 from app.api.routes._tasks import start_task
-from app.core.config import get_settings
+from app.core.db import session_scope
 from app.models import SourceVocabulary
 from app.schemas.api import (
     AutomapRequest,
@@ -17,11 +19,11 @@ from app.schemas.api import (
 )
 from app.services import mapping, suggestions
 from app.services.atc7 import is_valid_atc7
-from app.services.settings_store import get_effective_config
+from app.services.settings_store import EffectiveConfig, get_effective_config
 from app.vector.store import CollectionMissing
 from app.worker.tasks.automap import run_automap
 from app.workflows.builder import PipelineError, get_pipeline
-from app.workflows.service import build_context, initial_state, run_pipeline
+from app.workflows.service import build_context, default_pipeline, initial_state, run_pipeline
 
 router = APIRouter(tags=["mapping"])
 
@@ -66,20 +68,24 @@ def automap(vocabulary_id: int, body: AutomapRequest, user: CurrentUser, session
     except PipelineError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     params = {"vocabulary_id": vocabulary_id, **body.model_dump()}
-    params["pipeline"] = body.pipeline or get_settings().automap_pipeline
+    params["pipeline"] = body.pipeline or default_pipeline(body.drug_specific)
     return start_task(session, "automap.run", run_automap, params, user)
 
 
+def _load_for_suggest(source_id: int) -> tuple[dict | None, EffectiveConfig]:
+    with session_scope() as session:
+        return mapping.get_source_concept(session, source_id), get_effective_config(session)
+
+
 @router.post("/source-concepts/{source_id}/suggest", response_model=SuggestResponse)
-async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser, session: SessionDep):
-    source = mapping.get_source_concept(session, source_id)
-    if source is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Source concept {source_id} not found")
+async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser):
     atc7 = [c.strip().upper() for c in (body.atc7_codes or []) if c.strip()]
     if any(not is_valid_atc7(c) for c in atc7):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid ATC7 code")
-    cfg = get_effective_config(session)
-    session.close()  # nothing else needs this session while the (slow) pipeline runs
+    # Blocking DB work runs in a thread; the event loop only awaits the (slow) LLM pipeline
+    source, cfg = await asyncio.to_thread(_load_for_suggest, source_id)
+    if source is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Source concept {source_id} not found")
     state = initial_state(
         source_id=source_id,
         source_value=source["source_value"],
@@ -89,12 +95,17 @@ async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser, session:
         drug_specific=source["is_drug"] if body.drug_specific is None else body.drug_specific,
         threshold=body.threshold,
         atc7_codes=atc7 or None,
+        drug_structure=source.get("drug_structure"),
     )
     if body.query:
         # An edited search name is both the search query and the term the LLM judges
         state["source_name"] = body.query
     try:
-        result = await run_pipeline(state, build_context(cfg), body.pipeline)
+        pipeline = body.pipeline or await asyncio.to_thread(
+            default_pipeline, bool(state["drug_specific"])
+        )
+        compiled = await asyncio.to_thread(get_pipeline, pipeline)
+        result = await run_pipeline(state, build_context(cfg), compiled=compiled)
     except PipelineError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except CollectionMissing as exc:

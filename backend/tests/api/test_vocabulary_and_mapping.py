@@ -10,8 +10,13 @@ def test_vocabulary_status_lists_files(client, user_headers):
 def test_vocabulary_import_and_atc7(client, admin_headers, loaded_vocabulary):
     status = client.get("/api/vocabulary/status", headers=admin_headers).json()
     counts = {t["table_name"]: t["row_count"] for t in status["tables"]}
-    assert counts == {"concept": 25, "concept_relationship": 4, "concept_ancestor": 12}
-    assert all(t["last_import"] for t in status["tables"])
+    assert counts == {
+        "concept": 25,
+        "concept_relationship": 4,
+        "concept_ancestor": 12,
+        "drug_strength": 0,  # optional file, absent in the fixtures
+    }
+    assert all(t["last_import"] for t in status["tables"] if t["table_name"] != "drug_strength")
 
     tasks = client.get(
         "/api/tasks", params={"kind": "vocabulary.import"}, headers=admin_headers
@@ -101,7 +106,18 @@ def test_source_import_and_mapping_flow(client, user_headers, admin_headers, loa
     resp = client.post(
         "/api/mappings", json={"source_id": source_id, "concept_ids": [1]}, headers=user_headers
     )
-    mapped = client.get("/api/source-vocabularies/3/mapped", headers=user_headers).json()
+    page = client.get("/api/source-vocabularies/3/mapped", headers=user_headers).json()
+    assert page["total"] == len(page["items"]) and page["pages"] == 1
+    mapped = page["items"]
+    filtered = client.get(
+        "/api/source-vocabularies/3/mapped", params={"q": "paracetamol"}, headers=user_headers
+    ).json()
+    assert filtered["total"] >= 1
+    assert all(
+        "paracetamol" in r["source_concept_name"].lower()
+        or "paracetamol" in r["concept_name"].lower()
+        for r in filtered["items"]
+    )
     assert sorted(r["concept_id"] for r in mapped if r["source_id"] == source_id) == [1]
     assert next(r for r in mapped if r["source_id"] == source_id)["mapped_by"] == "mapper"
 

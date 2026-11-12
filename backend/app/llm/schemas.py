@@ -10,14 +10,20 @@ class RerankerResponse(BaseModel):
     against the list length passed in the validation context; Instructor re-asks on errors.
     """
 
+    # Rationale comes first so models that do not reason internally think before they choose
+    rationale: str | None = Field(
+        default=None,
+        max_length=500,
+        description="One short sentence: the attribute(s) that decided the choice",
+    )
     most_similar_item_id: int | None = Field(
-        description="Index of the most similar item from the candidate list, or null if nothing matches"
+        description="Id of the best-matching candidate from the list, or null if none fits"
     )
     confidence_score: int | None = Field(
         default=None,
         ge=1,
         le=10,
-        description="Confidence in the match from 1 to 10, or null if no match",
+        description="Confidence in the match on the 1-10 scale, or null if nothing was selected",
     )
 
     @field_validator("most_similar_item_id")
@@ -45,3 +51,51 @@ class MappingDecision(BaseModel):
     )
     confidence: int | None = Field(default=None, ge=1, le=10)
     rationale: str = Field(description="One sentence explaining the decision")
+
+
+class TranslationResponse(BaseModel):
+    """A source term rendered in English OMOP wording."""
+
+    english: str = Field(min_length=1, max_length=500, description="The term in English")
+    language: str | None = Field(
+        default=None, max_length=8, description="ISO 639-1 code of the input language"
+    )
+
+
+class DrugComponent(BaseModel):
+    """One active ingredient with its strength, in the shape of OMOP ``drug_strength``.
+
+    Use ``amount_*`` for solid forms (500 mg per tablet) and ``numerator_*``/``denominator_*``
+    for concentrations (100 mg per 5 mL, 1 %)."""
+
+    ingredient: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Active ingredient as its English INN (e.g. paracetamol -> acetaminophen)",
+    )
+    amount_value: float | None = Field(default=None, gt=0)
+    amount_unit: str | None = Field(default=None, max_length=20)
+    numerator_value: float | None = Field(default=None, gt=0)
+    numerator_unit: str | None = Field(default=None, max_length=20)
+    denominator_value: float | None = Field(default=None, gt=0)
+    denominator_unit: str | None = Field(default=None, max_length=20)
+
+    @property
+    def has_strength(self) -> bool:
+        return self.amount_value is not None or self.numerator_value is not None
+
+
+class DrugStructure(BaseModel):
+    """A drug product broken into ingredients, strengths and dose form."""
+
+    components: list[DrugComponent] = Field(default_factory=list, max_length=20)
+    dose_form: str | None = Field(
+        default=None, max_length=100, description="RxNorm dose form name, e.g. 'Oral Tablet'"
+    )
+    brand_name: str | None = Field(default=None, max_length=100)
+
+
+class ParsedDrug(DrugStructure):
+    """LLM output: the structure, or ``is_drug=false`` for terms that are not a drug product."""
+
+    is_drug: bool = Field(description="False if the term is not a medicinal product")

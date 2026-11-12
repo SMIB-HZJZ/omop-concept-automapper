@@ -12,6 +12,8 @@ VOCABULARY_FILES = {
     "concept": "CONCEPT.csv",
     "concept_relationship": "CONCEPT_RELATIONSHIP.csv",
     "concept_ancestor": "CONCEPT_ANCESTOR.csv",
+    # Optional: enables deterministic drug mapping (strength and dose form matching)
+    "drug_strength": "DRUG_STRENGTH.csv",
 }
 
 

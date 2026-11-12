@@ -1,0 +1,30 @@
+# Drugs: deterministic matching first, the similarity pipeline only as a fallback.
+# 1. extract_atc7  ATC7 code from the source value (used by the fallback search)
+# 2. match_drug    structure from the source CSV columns, or parsed from the name by the LLM, then
+#                  matched on drug_strength (ingredients, strengths, dose form). A unique match is
+#                  accepted with confidence 10; ties go to the reranker as the first candidates.
+# 3. fallback      translate → retrieve → LLM rerank (with the parsed structure as context) → gate
+name: automap_drug
+description: drugs - structured drug_strength match (ingredients, strength, dose form), else translated similarity search + LLM rerank
+entry: extract_atc7
+nodes:
+  extract_atc7:
+    uses: extract_atc7
+  match_drug:
+    uses: match_drug
+    routes: { matched: gate, fallback: translate }
+  translate:
+    uses: translate
+  retrieve:
+    uses: retrieve
+    params: { k_default: 15, k_drug: 30 }
+  rerank:
+    uses: llm_rerank
+  gate:
+    uses: confidence_gate
+    routes: { accept: END, reject: END }
+edges:
+  - [extract_atc7, match_drug]
+  - [translate, retrieve]
+  - [retrieve, rerank]
+  - [rerank, gate]

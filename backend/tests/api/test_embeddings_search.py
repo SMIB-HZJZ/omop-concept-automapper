@@ -101,7 +101,14 @@ def test_clear_embeddings_in_other_collection(client, admin_headers, embedded):
         assert task["result"]["embedded"] == 5
         status = client.get("/api/embeddings/status", headers=admin_headers).json()
         assert status["collection"] == "test_embedder_32" and status["embedded"] == 5
-        assert client.delete("/api/embeddings", headers=admin_headers).status_code == 200
+        wrong = client.delete("/api/embeddings", params={"confirm": "nope"}, headers=admin_headers)
+        assert wrong.status_code == 400
+        assert (
+            client.delete(
+                "/api/embeddings", params={"confirm": "test_embedder_32"}, headers=admin_headers
+            ).status_code
+            == 200
+        )
         assert client.get("/api/embeddings/status", headers=admin_headers).json()["exists"] is False
     finally:
         client.post("/api/config/reset", headers=admin_headers)
