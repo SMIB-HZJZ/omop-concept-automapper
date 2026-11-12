@@ -125,3 +125,14 @@ await step("logout", async () => {
 });
 await browser.close();
 console.log(JSON.stringify(report, null, 2));
+
+// Fail the run (and CI) on any failed step, uncaught page error, console error or 5xx response
+const failed = report.steps.filter((s) => s.startsWith("FAIL"));
+const problems = failed.length + report.pageErrors.length + report.consoleErrors.length + report.badResponses.length;
+if (problems > 0) {
+  console.error(
+    `Smoke test failed: ${failed.length} step(s), ${report.pageErrors.length} page error(s), ` +
+      `${report.consoleErrors.length} console error(s), ${report.badResponses.length} 5xx response(s)`,
+  );
+  process.exit(1);
+}

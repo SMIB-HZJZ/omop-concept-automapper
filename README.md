@@ -23,10 +23,10 @@ browser ──► frontend (nginx, React SPA) ──/api──► backend (FastA
 |---|---|
 | `frontend` | React + TypeScript (Vite), Tailwind + shadcn/ui, TanStack Query. Served by nginx on port **8501**, which also proxies `/api` to the backend. |
 | `backend` | FastAPI: REST API, authentication, Alembic migrations on start-up. |
-| `worker` | Celery: vocabulary import, ATC7 processing, CSV import, embedding, metadata sync, Qdrant migration, auto-mapping. |
+| `worker` | Celery: vocabulary import, ATC7 processing, CSV import, embedding, metadata sync, auto-mapping. |
 | `postgres-db` | `timescale/timescaledb-ha:pg18` (PostgreSQL 18 with pgvector 0.8 and pgvectorscale 0.9). Holds the OMOP vocabulary, mappings and vectors (StreamingDiskANN index). |
 | `redis` | Celery broker and result backend, cache for read endpoints and query embeddings, task locks and cancel flags. |
-| `litellm` | OpenAI-compatible proxy in front of every LLM provider. It is the only service that holds provider API keys. |
+| `litellm` | OpenAI-compatible proxy in front of every LLM provider. It is the only service that receives provider API keys (from `.env.litellm`). |
 
 Code layout:
 
@@ -35,7 +35,6 @@ backend/     FastAPI app (app/), Alembic migrations, Celery tasks, LLM layer, wo
 frontend/    React app; src/api/schema.d.ts is generated from frontend/openapi.json
 examples/    workflow plugin example (custom "translate_query" step)
 litellm/     LiteLLM proxy configuration
-scripts/     upgrade-postgres.sh (PostgreSQL 15 -> 18 data upgrade)
 vocabulary/  put the OMOP vocabulary files here
 ```
 
@@ -44,16 +43,28 @@ vocabulary/  put the OMOP vocabulary files here
 Requirements: Docker with Compose v2, the OMOP vocabulary files from [Athena](https://athena.ohdsi.org/), and an API key for an LLM provider.
 
 ```bash
-cp .env.example .env
-# Edit .env and set at least:
-#   POSTGRES_PASSWORD, JWT_SECRET (openssl rand -hex 32), ADMIN_PASSWORD,
-#   LITELLM_MASTER_KEY, and your provider key (e.g. OPENAI_API_KEY)
+cp .env.example .env                  # app settings: read by backend and worker
+cp .env.litellm.example .env.litellm  # provider API keys: read only by the LiteLLM proxy
+# In .env set at least (with APP_ENV=prod the app refuses to start on placeholders):
+#   POSTGRES_PASSWORD, JWT_SECRET (>= 32 chars: openssl rand -hex 32), ADMIN_PASSWORD, LITELLM_MASTER_KEY
+# In .env.litellm set ANTHROPIC_API_KEY and GEMINI_API_KEY (the default models),
+# or pick other providers: see "Providers and default models"
 docker compose up -d --build
 ```
 
-Open <http://localhost:8501> and sign in as `ADMIN_USERNAME` / `ADMIN_PASSWORD`. That admin is created on the first start.
+Then put the UI behind HTTPS (see [Production deployment](#production-deployment)), open it and sign in as `ADMIN_USERNAME` / `ADMIN_PASSWORD`. That admin is created on the first start.
 
-> **Upgrading from the Streamlit version?** Follow the steps in [Upgrading an existing installation](#upgrading-an-existing-installation) first. It moves your existing database to PostgreSQL 18.
+For a quick local look over plain `http://localhost:8501`, set `COOKIE_SECURE=false` in `.env` (in production the session cookie is HTTPS-only, so login would not stick over HTTP).
+
+This version starts from an empty database: import the vocabulary and embed concepts as described below. It does not migrate data from the Streamlit version.
+
+## Production deployment
+
+- **TLS.** The stack serves plain HTTP on `FRONTEND_PORT` (8501). Terminate TLS in front of it (the institute's reverse proxy, Caddy, Traefik or an nginx with a certificate) and keep `COOKIE_SECURE` unset or `true`. Bind the UI to localhost (`FRONTEND_BIND=127.0.0.1`) when the proxy runs on the same host, so the HTTP port is not reachable from the network.
+- **Client addresses.** nginx passes the address it sees as `X-Forwarded-For`, and the backend trusts that header only from the compose network (`APP_SUBNET`, default `172.29.250.0/24`, passed as `FORWARDED_ALLOW_IPS`). The login lockout counts failures per username and address and per username. Behind another reverse proxy, every request comes from the proxy's address, so the per-user limit (`LOGIN_MAX_FAILURES_PER_USER`) is the one that applies unless you configure nginx's `real_ip` module for your proxy.
+- **Secrets.** `.env` is read by the backend and worker only, `.env.litellm` by the LiteLLM proxy only, and PostgreSQL receives just its `POSTGRES_*` values. Keep both files out of version control (they are in `.gitignore`).
+- **Headers.** nginx sends a Content-Security-Policy, `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy`, and hides its version. Add `Strict-Transport-Security` on the TLS proxy.
+- **Health.** Every service has a healthcheck (the worker answers a Celery ping); `docker compose ps` shows their state.
 
 ## Using the app
 
@@ -87,38 +98,85 @@ Open <http://localhost:8501> and sign in as `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
 |---|---|---|
 | Search, map, unmap, auto-map, AI suggest, review, export, upload source CSVs | ✓ | ✓ |
 | See and cancel own tasks | ✓ | ✓ (all tasks) |
-| Vocabulary import, ATC7, embeddings (embed, sync, clear, Qdrant migration) | | ✓ |
+| Vocabulary import, ATC7, embeddings (embed, sync, clear) | | ✓ |
 | Change configuration, delete source vocabularies, manage users | | ✓ |
 
-Authentication uses username and password. The JWT travels in an httpOnly `SameSite=Lax` cookie (or an `Authorization: Bearer` header for scripts).
+Authentication uses username and password. The JWT travels in an httpOnly `SameSite=Lax` cookie (or an `Authorization: Bearer` header for scripts). Changing a password ends the user's other sessions; an expired session sends the user back to the login page, and then to the page they were on.
 
 ## Configuration
 
 Every setting is an environment variable, and all of them are documented in [`.env.example`](.env.example). The most important groups:
 
-- **Database:** `POSTGRES_*`, plus server tuning via `PG_*` (for example `PG_MAINTENANCE_WORK_MEM` for DiskANN index builds).
-- **Auth:** `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `COOKIE_SECURE`.
-  - With `APP_ENV=prod` (the default), the app refuses to start while these still hold placeholder values.
-- **LLM:** `LLM_CHAT_MODEL`, `LLM_EMBEDDING_MODEL`, `EMBEDDING_DIMS`, the provider keys, and `LITELLM_MASTER_KEY`.
+- **Database:** `POSTGRES_*`, plus server tuning via `PG_*`, and `DISKANN_MAINTENANCE_WORK_MEM` for DiskANN index builds.
+- **Auth:** `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `COOKIE_SECURE`, `LOGIN_MAX_FAILURES`, `LOGIN_MAX_FAILURES_PER_USER`.
+  - With `APP_ENV=prod` (the default), the app refuses to start while `JWT_SECRET` (or one shorter than 32 characters), `ADMIN_PASSWORD`, `POSTGRES_PASSWORD` or `LITELLM_MASTER_KEY` still hold placeholder values.
+  - `COOKIE_SECURE` defaults to `true` in prod and `false` otherwise.
+- **LLM:** `LLM_CHAT_MODEL`, `LLM_EMBEDDING_MODEL`, `EMBEDDING_DIMS`, `LITELLM_MASTER_KEY` (in `.env`) and the provider keys (in `.env.litellm`).
+  - `LLM_TEMPERATURE` defaults to `0`, so reranking is repeatable. Models that reject a temperature (e.g. reasoning models) are fine: the proxy drops unsupported parameters. Leave it empty to send no temperature.
 - **Auto-mapping:** `AUTOMAP_PIPELINE`, `AUTOMAP_CONCURRENCY`, `WORKFLOW_PLUGINS`, `WORKFLOW_DEFINITIONS_DIR`.
 
-### Switching the LLM provider
+### Providers and default models
 
-All LLM traffic goes through the LiteLLM proxy, and models use LiteLLM names (`<provider>/<model>`). To switch provider, edit `.env` and restart:
+All LLM traffic goes through the LiteLLM proxy, and models use LiteLLM names (`<provider>/<model>`). [`litellm/config.yaml`](litellm/config.yaml) has a wildcard route for Anthropic, OpenAI, Gemini, Mistral, Voyage, Cohere and Ollama, plus a catch-all `*`. Each route also makes the proxy list that provider's models, which the Configuration page offers. A provider works once its key is in `.env.litellm`.
+
+**Defaults** (chosen November 2026 for mapping accuracy at mid-tier prices and coverage of European languages; the cheapest and the most expensive tiers were left out on purpose):
+
+| Role | Default | Price per 1M tokens | Why |
+|---|---|---|---|
+| Reranker, translation, agent | `anthropic/claude-sonnet-5-5` | $2 in / $10 out | Mid-tier model of a current family (Opus 5.5 at $4/$20 is the expensive tier); strong multilingual reading and reliable structured output |
+| Embeddings | `gemini/gemini-embedding-2`, `EMBEDDING_DIMS=1536` | $0.20 | Highest MTEB Multilingual score of the hosted APIs checked (69.9, Google's figure); Matryoshka dims 128–3072 (3072 also works with DiskANN, at twice the storage) |
+
+Prices are from LiteLLM's model registry (v1.104) and the providers' pricing pages; check them before budgeting. Rough cost, assuming ~1,150 input and ~80 output tokens per reranked concept: about $31 per 10,000 source concepts with Sonnet 5.5 (translation adds ~20%, and is cached per term). Embedding the standard vocabulary is a one-off of roughly 12 tokens per concept name (e.g. ~36M tokens, about $7, for 3 million concepts).
+
+**Alternatives** (reranker / embeddings, prices per 1M tokens):
+
+| Setup | `LLM_CHAT_MODEL` | `LLM_EMBEDDING_MODEL` | Notes |
+|---|---|---|---|
+| Only OpenAI | `openai/gpt-6.1-terra` ($1/$5) | `openai/text-embedding-3-large` ($0.13) | One key |
+| Only Google | `gemini/gemini-3.8-flash` ($0.75/$3.75 introductory, $1.50/$7.50 from 2027) | `gemini/gemini-embedding-2` | One key |
+| EU provider | `mistral/mistral-large-latest` ($0.50/$1.50) | `mistral/mistral-embed` ($0.10, 1024 dims) | Mistral is EU-based; its embedder is weaker on retrieval than the default |
+| Other embedders | — | `voyage/voyage-4-large`, `cohere/embed-v5.0-pro` ($0.12) | Multilingual retrieval models; no independent multilingual scores found |
+| Budget | `anthropic/claude-haiku-5-5` or `openai/gpt-6-luna` ($0.10/$0.50) | — | ~20× cheaper; measure the accuracy loss with `evaluate` |
+| Local (Ollama) | `ollama/mistral-small` | `ollama/bge-m3` (1024 dims) | No data leaves your network. Needs a GPU for usable speed. For local models set `INSTRUCTOR_MODE=json` if tool calling fails |
+| Azure / Vertex / Bedrock | deployment names | deployment names | For EU data residency; add a deployment entry to `litellm/config.yaml` |
+
+Example: everything local with Ollama.
 
 ```bash
-# Anthropic for reranking/agents, OpenAI for embeddings
-LLM_CHAT_MODEL=anthropic/claude-sonnet-5
-ANTHROPIC_API_KEY=sk-ant-...
-LLM_EMBEDDING_MODEL=openai/text-embedding-3-large
-OPENAI_API_KEY=sk-...
-
-# or everything local with Ollama
-LLM_CHAT_MODEL=ollama/llama3.1
-LLM_EMBEDDING_MODEL=ollama/nomic-embed-text
-EMBEDDING_DIMS=            # native size
+# .env
+LLM_CHAT_MODEL=ollama/mistral-small
+LLM_EMBEDDING_MODEL=ollama/bge-m3
+EMBEDDING_DIMS=1024
+# .env.litellm
 OLLAMA_API_BASE=http://host.docker.internal:11434
 ```
+
+**Languages and translation.** The default `automap` pipeline embeds the source term as is and relies on the multilingual embedding model; the reranker sees the original term next to the English OMOP candidates. The `automap_translated` pipeline adds a `translate` step: the term is rendered in English OMOP wording (cached per term and model), retrieval searches both the original and the English term, and the reranker sees both. `automap_refine` lets an agent reformulate and translate when the first pass is not confident.
+
+There is no published OMOP-specific benchmark for these models. Measure on your own data instead (next section).
+
+### Measuring mapping accuracy
+
+`evaluate` grades pipelines and models against the existing mappings of a source vocabulary. Nothing is written to the database. Mappings from unreviewed auto-map runs are not used as the answer key (add `--include-unreviewed-auto` to change that).
+
+```bash
+# Does translation help? Same 300 concepts, both pipelines, configured model
+docker compose exec worker python -m app.cli evaluate 3 --sample 300 \
+    --pipelines automap,automap_translated
+# Compare reranker models as well (every pipeline x every model)
+docker compose exec worker python -m app.cli evaluate 3 --sample 300 \
+    --pipelines automap,automap_translated \
+    --llm-models anthropic/claude-sonnet-5-5,openai/gpt-6.1-terra,anthropic/claude-haiku-5-5
+```
+
+The easiest answer key is a source CSV whose `concept_id` column holds the known mappings: import it as a new vocabulary and evaluate it. The command prints a table and writes `summary.json` and `items.csv` (per concept, including source terms) to `/data/uploads/evaluation-<time>`:
+
+- **retrieval recall:** a correct concept is among the candidates (what translation and the embedding model can improve);
+- **top-1 accuracy:** the pick is correct;
+- **accepted / precision of accepted:** how many picks pass the confidence threshold, and how many of those are right (what auto-mapping in commit mode would get right);
+- **comparison:** for each variant against the first one, on how many concepts it is better or worse, with an exact paired sign test (p < 0.05: unlikely to be chance).
+
+The embedding model is the configured one; to compare embedders, embed each one and run `evaluate` after switching the configuration.
 
 ```bash
 docker compose up -d   # recreates the containers with the new environment
@@ -144,23 +202,23 @@ Steps are registered with `@node(...)`/`@router(...)` in a registry, and pipelin
 
 #### Example: adding a custom step
 
-[`examples/workflow_plugins/translate_query`](examples/workflow_plugins/translate_query) adds a `translate_query` step: a Pydantic AI agent that rewrites a (for example Croatian) term in English OMOP wording before retrieval. It also adds the `automap_translated` pipeline, which uses that step:
+[`examples/workflow_plugins/translate_query`](examples/workflow_plugins/translate_query) adds a `translate_query` step: a Pydantic AI agent that rewrites a (for example Croatian) term in English OMOP wording before retrieval. It also adds the `example_translated` pipeline, which uses that step. (Translation itself is built in: the core `translate` step and `automap_translated` pipeline. The example only shows how a plugin adds a step.)
 
 ```yaml
-# examples/workflow_plugins/translate_query/automap_translated.yaml
+# examples/workflow_plugins/translate_query/example_translated.yaml
 edges:
   - [extract_atc7, translate]
   - [translate, retrieve]
   ...
 ```
 
-To enable it, set the following in `.env`:
+To enable the example, set the following in `.env`:
 
 ```bash
 WORKFLOW_PLUGINS=examples.workflow_plugins.translate_query.nodes
 WORKFLOW_DEFINITIONS_DIR=/app/examples/workflow_plugins/translate_query
 # optional: make it the default
-AUTOMAP_PIPELINE=automap_translated
+AUTOMAP_PIPELINE=example_translated
 ```
 
 Then restart the backend and worker. The pipeline appears in the pipeline pickers (Map → Auto map, AI suggest), and on the Configuration page together with the plugin step.
@@ -177,30 +235,6 @@ async def my_step(state, ctx, params) -> dict:
 
 Installed packages can also register steps through the `omop_mapper.workflow_nodes` entry-point group.
 
-## Upgrading an existing installation
-
-The Streamlit version ran PostgreSQL 15 (volume `pgdata`) and Qdrant. To upgrade:
-
-```bash
-git pull
-cp .env .env.backup && diff .env.example .env   # add the new variables (JWT_SECRET, ADMIN_PASSWORD, LITELLM_MASTER_KEY, LLM_* …)
-docker compose build
-scripts/upgrade-postgres.sh                      # dump PG15 -> restore into PG18, then verify row counts
-docker compose up -d
-```
-
-On start-up the backend recognises the restored Streamlit schema. It marks it as the migration baseline and applies the new migrations. These keep all source concepts and mappings, turn source vocabulary ids into named vocabularies, and remove duplicate mapping rows.
-
-Your existing Qdrant vectors can be copied instead of re-embedded:
-
-```bash
-docker compose --profile qdrant-migration up -d qdrant
-```
-
-Then use **Import → Embedding Management → Migrate from Qdrant**. The old default collection is `omop_vocab`, created with `text-embedding-3-large` at 1024 dimensions, so keep `LLM_EMBEDDING_MODEL=openai/text-embedding-3-large` and `EMBEDDING_DIMS=1024`.
-
-The old `pgdata` volume is never modified. Remove it manually once everything works.
-
 ## Development
 
 ```bash
@@ -216,6 +250,10 @@ The dev stack provides:
 | Worker | restarts on change |
 | pgAdmin | <http://localhost:5050> |
 | Postgres | `localhost:5455` |
+| Redis | `localhost:6390` |
+| LiteLLM | `localhost:4000` |
+
+All ports are bound to `127.0.0.1`, so the dev services (pgAdmin has no login) are not reachable from the network. The dev stack runs with `APP_ENV=dev` and `COOKIE_SECURE=false`; `.env.litellm` is optional there.
 
 **Without provider keys**, use the fake OpenAI-compatible gateway. It returns deterministic embeddings and reranks by word overlap:
 
@@ -239,6 +277,16 @@ They cover:
 - pipeline validation
 - the custom-step plugin
 
+**Frontend checks** (run in `frontend/`, or in a `node:22` container):
+
+```bash
+npm run lint          # ESLint (typescript-eslint, react-hooks incl. exhaustive-deps)
+npm run typecheck
+npm test              # Vitest unit tests for the pure helpers
+npm run format:check  # Prettier
+npm run build
+```
+
 **API types for the frontend.** After changing the API:
 
 ```bash
@@ -247,6 +295,10 @@ mv backend/openapi.json frontend/openapi.json
 cd frontend && npm run gen:api      # regenerates src/api/schema.d.ts
 npm run typecheck && npm run build
 ```
+
+**CI.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the backend tests (with Postgres + pgvectorscale and Redis services), Ruff, a check that `frontend/openapi.json` and `schema.d.ts` match the backend, and the frontend lint, typecheck, unit tests and build.
+
+**UI smoke test.** [`frontend/e2e`](frontend/e2e/README.md) has a Playwright walk-through of every page; it changes data, so run it against a test stack.
 
 Other backend commands, run with `python -m app.cli <command>`:
 

@@ -1,5 +1,10 @@
 name: omop-automapper
 
+# Secrets are split by who needs them:
+#   .env          app settings (DB, Redis, JWT, admin, LiteLLM master key, models): backend + worker
+#   .env.litellm  LLM provider API keys: litellm only
+# PostgreSQL only receives its POSTGRES_* variables (interpolated from .env below).
+
 x-backend-env: &backend-env
   POSTGRES_HOST: postgres-db
   POSTGRES_PORT: "5432"
@@ -7,17 +12,18 @@ x-backend-env: &backend-env
   LLM_GATEWAY_URL: ${LLM_GATEWAY_URL:-http://litellm:4000}
   VOCABULARY_DIR: /data/vocabulary
   UPLOAD_DIR: /data/uploads
+  # Only the compose network (i.e. the nginx frontend) may set X-Forwarded-For
+  FORWARDED_ALLOW_IPS: ${APP_SUBNET:-172.29.250.0/24}
 
 services:
   # PostgreSQL 18 with pgvector + pgvectorscale (StreamingDiskANN) preinstalled
   postgres-db:
     image: timescale/timescaledb-ha:pg18.6-ts2.30.2
-    restart: always
-    env_file: .env
+    restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-auto_mapper}
     command:
       - postgres
       - -c
@@ -36,14 +42,14 @@ services:
     volumes:
       - pgdata18:/home/postgres/pgdata
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
 
   redis:
-    image: redis:7-alpine
-    restart: always
+    image: redis:7.4.9-alpine
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
@@ -56,8 +62,12 @@ services:
   # LiteLLM proxy: the only service holding LLM provider keys
   litellm:
     image: ghcr.io/berriai/litellm:v1.104.0
-    restart: always
-    env_file: .env
+    restart: unless-stopped
+    env_file:
+      - path: .env.litellm
+        required: true
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?Set LITELLM_MASTER_KEY in .env}
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
@@ -73,7 +83,7 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     image: omop-automapper-backend
-    restart: always
+    restart: unless-stopped
     env_file: .env
     environment: *backend-env
     depends_on:
@@ -93,7 +103,7 @@ services:
 
   worker:
     image: omop-automapper-backend
-    restart: always
+    restart: unless-stopped
     env_file: .env
     environment:
       <<: *backend-env
@@ -105,47 +115,33 @@ services:
     volumes:
       - ./vocabulary:/data/vocabulary:ro
       - uploads:/data/uploads
+    # Same image as the API: replace its HTTP healthcheck with a Celery ping
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 | grep -q pong"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
 
   frontend:
     build:
       context: ./frontend
-    restart: always
+    restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-8501}:80"
+      - "${FRONTEND_BIND:-0.0.0.0}:${FRONTEND_PORT:-8501}:80"
     depends_on:
       backend:
         condition: service_healthy
 
-  # --- One-off helpers (not started by `docker compose up`) ---
-
-  # Old Streamlit-era vector store, used only by the Qdrant -> pgvector migration task:
-  #   docker compose --profile qdrant-migration up -d qdrant
-  qdrant:
-    image: qdrant/qdrant:latest
-    profiles: ["qdrant-migration"]
-    volumes:
-      - qdrant_data:/qdrant/storage
-
-  # The previous PostgreSQL 15 data volume, used only by scripts/upgrade-postgres.sh
-  postgres-15-old:
-    image: postgres:15
-    profiles: ["pg-upgrade"]
-    env_file: .env
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+networks:
+  default:
+    ipam:
+      config:
+        # Fixed so the backend can trust X-Forwarded-For from this network only (FORWARDED_ALLOW_IPS).
+        # Change APP_SUBNET if it collides with another network on the host.
+        - subnet: ${APP_SUBNET:-172.29.250.0/24}
 
 volumes:
   pgdata18:
-  pgdata: # PostgreSQL 15 data from the Streamlit version (kept for the upgrade/rollback)
   redis_data:
   uploads:
-  qdrant_data:

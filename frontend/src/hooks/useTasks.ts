@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 
 import { api, unwrap } from "@/api/client";
 import { invalidateVocabulary, keys } from "@/api/queries";
+import { taskVocabularyId } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 
 export const TASK_LABELS: Record<string, string> = {
@@ -11,7 +12,6 @@ export const TASK_LABELS: Record<string, string> = {
   "embeddings.embed": "Embedding",
   "embeddings.sync_metadata": "Metadata sync",
   "embeddings.sync_atc7": "ATC7 sync",
-  "embeddings.migrate_qdrant": "Qdrant migration",
   "automap.run": "Auto-mapping",
 };
 
@@ -74,8 +74,7 @@ export function invalidateForTask(qc: QueryClient, task: Task) {
       break;
     case "source.import":
     case "automap.run": {
-      const id = (task.params as { vocabulary_id?: number } | null)?.vocabulary_id;
-      invalidateVocabulary(qc, id);
+      invalidateVocabulary(qc, taskVocabularyId(task));
       break;
     }
     default:

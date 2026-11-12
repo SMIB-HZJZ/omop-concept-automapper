@@ -4,7 +4,36 @@
 #   openai/text-embedding-3-large, cohere/embed-multilingual-v3.0, ollama/nomic-embed-text
 # The wildcard route passes any such name straight to the provider, so switching provider is
 # only a matter of changing LLM_CHAT_MODEL / LLM_EMBEDDING_MODEL and the provider key in .env.
+# Provider wildcards ("openai/*") forward any model of that provider and also make
+# GET /v1/models list its concrete models, which the Configuration page offers.
+# A provider only works once its key is set in .env.litellm; unused routes are harmless.
 model_list:
+  # --- Cloud ---
+  - model_name: "anthropic/*"          # ANTHROPIC_API_KEY
+    litellm_params:
+      model: "anthropic/*"
+  - model_name: "openai/*"             # OPENAI_API_KEY
+    litellm_params:
+      model: "openai/*"
+  - model_name: "gemini/*"             # GEMINI_API_KEY (Google AI Studio)
+    litellm_params:
+      model: "gemini/*"
+  - model_name: "mistral/*"            # MISTRAL_API_KEY (EU-based provider)
+    litellm_params:
+      model: "mistral/*"
+  - model_name: "voyage/*"             # VOYAGE_API_KEY (embeddings only)
+    litellm_params:
+      model: "voyage/*"
+  - model_name: "cohere/*"             # COHERE_API_KEY (embeddings)
+    litellm_params:
+      model: "cohere/*"
+  # --- Local / self-hosted (no data leaves your network) ---
+  - model_name: "ollama/*"             # OLLAMA_API_BASE, e.g. http://host.docker.internal:11434
+    litellm_params:
+      model: "ollama/*"
+      api_base: os.environ/OLLAMA_API_BASE
+  # Azure OpenAI, Vertex AI and Bedrock (EU regions) need per-deployment entries; see README.
+  # Catch-all for any other provider/model name LiteLLM understands
   - model_name: "*"
     litellm_params:
       model: "*"

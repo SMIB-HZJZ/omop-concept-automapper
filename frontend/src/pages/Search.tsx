@@ -14,8 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useDebounce } from "@/hooks/useDebounce";
-
-const ATC7_RE = /^[A-Z]\d{2}[A-Z]{2}\d{2}$/;
+import { isValidAtc7, normalizeAtc7 } from "@/lib/atc7";
 
 function ResultItem({ result }: { result: SearchResult }) {
   const atc7 = result.atc7_codes ?? [];
@@ -86,20 +85,24 @@ export function SearchPage() {
   const [vocabulary, setVocabulary] = useState("");
   const [atc7, setAtc7] = useState("");
 
-  const atc7Code = atc7.trim().toUpperCase();
-  const atc7Invalid = atc7Code.length > 0 && !ATC7_RE.test(atc7Code);
+  const atc7Code = normalizeAtc7(atc7);
+  const atc7Invalid = atc7Code.length > 0 && !isValidAtc7(atc7Code);
+  // Every typed field is debounced, so typing does not send a request per keystroke
   const debouncedQuery = useDebounce(query.trim(), 400);
+  const debouncedK = useDebounce(k, 400);
+  const debouncedVocabulary = useDebounce(vocabulary.trim(), 400);
+  const debouncedAtc7 = useDebounce(atc7Code && !atc7Invalid ? atc7Code : "", 400);
 
   const request = useMemo<SearchRequest | null>(() => {
     if (!debouncedQuery) return null;
     return {
       query: debouncedQuery,
-      k: Math.min(100, Math.max(1, k || 50)),
+      k: Math.min(100, Math.max(1, debouncedK || 50)),
       domains,
-      vocabulary_id: vocabulary.trim() || null,
-      atc7_codes: atc7Code && !atc7Invalid ? [atc7Code] : [],
+      vocabulary_id: debouncedVocabulary || null,
+      atc7_codes: debouncedAtc7 ? [debouncedAtc7] : [],
     };
-  }, [debouncedQuery, k, domains, vocabulary, atc7Code, atc7Invalid]);
+  }, [debouncedQuery, debouncedK, domains, debouncedVocabulary, debouncedAtc7]);
 
   const search = useSearch(request);
   const results = search.data?.results ?? [];
@@ -122,7 +125,13 @@ export function SearchPage() {
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="search-domains">Domains</Label>
-          <MultiSelect id="search-domains" options={meta.data?.domains ?? []} value={domains} onChange={setDomains} placeholder="All domains" />
+          <MultiSelect
+            id="search-domains"
+            options={meta.data?.domains ?? []}
+            value={domains}
+            onChange={setDomains}
+            placeholder="All domains"
+          />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="search-k">Number of results</Label>
@@ -194,9 +203,7 @@ export function SearchPage() {
         <ErrorAlert
           error={search.error}
           title={
-            search.error instanceof ApiError && search.error.status === 409
-              ? "No embeddings yet"
-              : "Search failed"
+            search.error instanceof ApiError && search.error.status === 409 ? "No embeddings yet" : "Search failed"
           }
         />
       ) : search.isLoading ? (
@@ -210,7 +217,7 @@ export function SearchPage() {
         <div className="space-y-2">
           <div className="text-sm">
             <span className="text-success font-medium">
-              Found {results.length} similar concepts for '{request.query}'
+              Found {results.length} similar concepts for '{search.data?.request.query ?? request.query}'
             </span>
             <span className="text-muted-foreground"> · {search.data?.method}</span>
             {search.isFetching && <span className="text-muted-foreground"> · updating…</span>}

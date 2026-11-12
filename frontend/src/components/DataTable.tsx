@@ -27,6 +27,8 @@ type Props<T> = {
   maxHeight?: string;
   isLoading?: boolean;
   className?: string;
+  /** Click-to-sort headers. Turn off for server-paginated data: sorting one page would mislead. */
+  sortable?: boolean;
 };
 
 export function DataTable<T>({
@@ -41,6 +43,7 @@ export function DataTable<T>({
   maxHeight = "32rem",
   isLoading,
   className,
+  sortable = true,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const rowSelection = useMemo<RowSelectionState>(
@@ -75,12 +78,15 @@ export function DataTable<T>({
     ];
   }, [columns, selection]);
 
+  // TanStack Table returns non-memoizable functions; the React Compiler skips this component (expected)
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns: allColumns,
     getRowId,
     state: { sorting, rowSelection },
     onSortingChange: setSorting,
+    enableSorting: sortable,
     enableRowSelection: selection !== "none",
     enableMultiRowSelection: selection === "multi",
     onRowSelectionChange: (updater) => {
@@ -98,11 +104,11 @@ export function DataTable<T>({
           {table.getHeaderGroups().map((group) => (
             <TableRow key={group.id}>
               {group.headers.map((header) => {
-                const sortable = header.column.getCanSort() && header.column.id !== "__select";
+                const canSort = header.column.getCanSort() && header.column.id !== "__select";
                 const dir = header.column.getIsSorted();
                 return (
                   <TableHead key={header.id} style={{ width: header.column.columnDef.size }}>
-                    {header.isPlaceholder ? null : sortable ? (
+                    {header.isPlaceholder ? null : canSort ? (
                       <button
                         type="button"
                         className="hover:text-foreground inline-flex items-center gap-1"
@@ -138,11 +144,25 @@ export function DataTable<T>({
               <TableRow
                 key={row.id}
                 data-state={row.getIsSelected() ? "selected" : undefined}
+                aria-selected={selection === "none" ? undefined : row.getIsSelected()}
+                // Single-select rows are the only way to pick an item, so they must work from the keyboard
+                tabIndex={selection === "single" ? 0 : undefined}
                 className={cn(
                   selection !== "none" && "cursor-pointer",
+                  selection === "single" && "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
                   highlightId === row.id && "bg-primary/10 hover:bg-primary/15",
                 )}
                 onClick={selection === "none" ? undefined : () => row.toggleSelected(!row.getIsSelected())}
+                onKeyDown={
+                  selection === "single"
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          row.toggleSelected(!row.getIsSelected());
+                        }
+                      }
+                    : undefined
+                }
               >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id} className="whitespace-normal">

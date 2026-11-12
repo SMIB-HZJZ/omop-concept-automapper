@@ -2,7 +2,7 @@ import { Map as MapIcon } from "lucide-react";
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 
-import { useAuth } from "@/auth/AuthProvider";
+import { useAuth } from "@/auth/useAuth";
 import { ErrorAlert } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,11 +47,25 @@ export function LoginPage() {
           <form onSubmit={submit} className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />
+              <Input
+                id="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoFocus
+                required
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
             </div>
             <ErrorAlert error={error} title="Sign-in failed" />
             <Button type="submit" className="w-full" disabled={busy}>

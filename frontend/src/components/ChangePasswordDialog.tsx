@@ -43,15 +43,37 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
           </DialogHeader>
           <div className="grid gap-2">
             <Label htmlFor="current-password">Current password</Label>
-            <Input id="current-password" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoComplete="current-password" />
+            <Input
+              id="current-password"
+              type="password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="new-password">New password (min. 8 characters)</Label>
-            <Input id="new-password" type="password" minLength={8} value={next} onChange={(e) => setNext(e.target.value)} required autoComplete="new-password" />
+            <Input
+              id="new-password"
+              type="password"
+              minLength={8}
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="confirm-password">Repeat new password</Label>
-            <Input id="confirm-password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
+            <Input
+              id="confirm-password"
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
           </div>
           <ErrorAlert error={error} title="Could not change the password" />
           <DialogFooter>

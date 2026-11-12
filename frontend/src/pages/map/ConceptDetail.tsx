@@ -1,40 +1,31 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChevronDown, Filter, Search as SearchIcon, Sparkles, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Filter, Search as SearchIcon, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError, errorMessage } from "@/api/client";
-import { useConceptLookup, useMapConcepts, useMeta, useSearch, useSuggest } from "@/api/queries";
+import { useMapConcepts, useMeta, useSearch, useSuggest } from "@/api/queries";
 import type { SearchRequest, SuggestResponse, UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { ErrorAlert } from "@/components/common";
 import { MultiSelect } from "@/components/MultiSelect";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
+import { useAutomapThreshold } from "@/hooks/useAutomapThreshold";
 import { useDebounce } from "@/hooks/useDebounce";
 import { usePersistentState } from "@/hooks/usePersistentState";
-import { DEFAULT_PIPELINE, PipelineSelect } from "./AutomapSettings";
-
-const ATC7_RE = /^[A-Z]\d{2}[A-Z]{2}\d{2}$/;
-
-export type ConceptLike = {
-  concept_id: number;
-  concept_name: string;
-  domain_id: string;
-  vocabulary_id: string;
-  concept_class_id?: string;
-  concept_code?: string;
-  atc7_codes?: string[] | null;
-  score?: number;
-};
+import { isValidAtc7 } from "@/lib/atc7";
+import { ManualConceptIds } from "./ManualConceptIds";
+import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
+import { SelectedConcepts } from "./SelectedConcepts";
+import { SuggestionAlert } from "./SuggestionAlert";
+import type { ConceptLike } from "./types";
 
 const RESULT_COLUMNS: ColumnDef<ConceptLike, unknown>[] = [
   {
@@ -64,14 +55,6 @@ const RESULT_COLUMNS: ColumnDef<ConceptLike, unknown>[] = [
   },
 ];
 
-const OUTCOME_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  accepted: "default",
-  rejected: "secondary",
-  no_match: "outline",
-  no_candidates: "outline",
-  error: "destructive",
-};
-
 type Props = {
   concept: UnmappedItem;
   vocabularyId: number;
@@ -90,37 +73,25 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
   const [limit, setLimit] = useState(100);
   const [pipeline, setPipeline] = useState(DEFAULT_PIPELINE);
   const [selected, setSelected] = useState<Map<number, ConceptLike>>(new Map());
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualIds, setManualIds] = useState("");
   const [suggestion, setSuggestion] = useState<SuggestResponse | null>(null);
+  const [threshold] = useAutomapThreshold();
+  // No reset effect: the parent keys this component by source_id, so state starts fresh per concept
 
-  // Reset per source concept
-  useEffect(() => {
-    setName(concept.source_concept_name);
-    setUseAtc7(isDrug && !!concept.atc7_codes?.[0]);
-    setManualAtc7("");
-    setSelected(new Map());
-    setManualIds("");
-    setSuggestion(null);
-  }, [concept.source_id, concept.source_concept_name, concept.atc7_codes, isDrug]);
-
-  const manualValid = manualAtc7 === "" || ATC7_RE.test(manualAtc7);
+  const manualValid = manualAtc7 === "" || isValidAtc7(manualAtc7);
   const atc7Codes = useMemo(() => {
     if (!isDrug || !useAtc7) return [];
     if (detected) return [detected];
-    return manualAtc7 && ATC7_RE.test(manualAtc7) ? [manualAtc7] : [];
+    return manualAtc7 && isValidAtc7(manualAtc7) ? [manualAtc7] : [];
   }, [isDrug, useAtc7, detected, manualAtc7]);
 
   const debouncedName = useDebounce(name.trim(), 400);
   const debouncedVocab = useDebounce(vocabFilter.trim(), 400);
+  const debouncedLimit = useDebounce(limit, 400);
   const request: SearchRequest | null = debouncedName
-    ? { query: debouncedName, k: limit, domains, vocabulary_id: debouncedVocab || null, atc7_codes: atc7Codes }
+    ? { query: debouncedName, k: debouncedLimit, domains, vocabulary_id: debouncedVocab || null, atc7_codes: atc7Codes }
     : null;
   const search = useSearch(request);
   const results = (search.data?.results ?? []) as ConceptLike[];
-
-  const debouncedIds = useDebounce(manualOpen ? manualIds.trim() : "", 500);
-  const lookup = useConceptLookup(debouncedIds);
 
   const suggest = useSuggest();
   const mapConcepts = useMapConcepts(vocabularyId);
@@ -155,7 +126,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
         domains,
         drug_specific: isDrug,
         atc7_codes: atc7Codes.length ? atc7Codes : null,
-        threshold: 8,
+        threshold,
         pipeline: pipeline === DEFAULT_PIPELINE ? null : pipeline,
       },
       { onSuccess: setSuggestion, onError: (err) => toast.error(errorMessage(err)) },
@@ -199,25 +170,44 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
             <span className="text-muted-foreground">Frequency</span> <b>{concept.freq ?? "—"}</b>
           </div>
           <div className="text-sm">
-            <span className="text-muted-foreground">Source value</span> <b className="font-mono">{concept.source_value}</b>
+            <span className="text-muted-foreground">Source value</span>{" "}
+            <b className="font-mono">{concept.source_value}</b>
           </div>
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <Filter className="size-4" /> Search filters
                 {domains.length + (vocabFilter ? 1 : 0) + (atc7Codes.length ? 1 : 0) > 0 && (
-                  <Badge variant="secondary">{domains.length + (vocabFilter ? 1 : 0) + (atc7Codes.length ? 1 : 0)}</Badge>
+                  <Badge variant="secondary">
+                    {domains.length + (vocabFilter ? 1 : 0) + (atc7Codes.length ? 1 : 0)}
+                  </Badge>
                 )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" side="bottom" collisionPadding={12} className="max-h-(--radix-popover-content-available-height) w-96 space-y-4 overflow-y-auto">
+            <PopoverContent
+              align="end"
+              side="bottom"
+              collisionPadding={12}
+              className="max-h-(--radix-popover-content-available-height) w-96 space-y-4 overflow-y-auto"
+            >
               <div className="grid gap-1.5">
-                <Label>Target domains</Label>
-                <MultiSelect options={meta.data?.domains ?? []} value={domains} onChange={setDomains} placeholder="All domains" />
+                <Label htmlFor="map-domains">Target domains</Label>
+                <MultiSelect
+                  id="map-domains"
+                  options={meta.data?.domains ?? []}
+                  value={domains}
+                  onChange={setDomains}
+                  placeholder="All domains"
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="vocab-filter">Vocabulary ID</Label>
-                <Input id="vocab-filter" placeholder="e.g. SNOMED, RxNorm" value={vocabFilter} onChange={(e) => setVocabFilter(e.target.value)} />
+                <Input
+                  id="vocab-filter"
+                  placeholder="e.g. SNOMED, RxNorm"
+                  value={vocabFilter}
+                  onChange={(e) => setVocabFilter(e.target.value)}
+                />
               </div>
               {isDrug && (
                 <div className="space-y-2">
@@ -232,8 +222,11 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
                       </p>
                     ) : (
                       <div className="grid gap-1.5">
-                        <p className="text-muted-foreground text-xs">No ATC7 code detected at the beginning of the source value.</p>
+                        <p className="text-muted-foreground text-xs">
+                          No ATC7 code detected at the beginning of the source value.
+                        </p>
                         <Input
+                          aria-label="ATC7 code"
                           placeholder="A10BA02"
                           maxLength={7}
                           value={manualAtc7}
@@ -241,7 +234,8 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
                         />
                         {!manualValid && manualAtc7.length > 0 && (
                           <p className="text-destructive text-xs">
-                            Invalid ATC7 code format. Expected: Letter-Digit-Digit-Letter-Letter-Digit-Digit (e.g., A10BA02)
+                            Invalid ATC7 code format. Expected: Letter-Digit-Digit-Letter-Letter-Digit-Digit (e.g.,
+                            A10BA02)
                           </p>
                         )}
                       </div>
@@ -252,7 +246,17 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
                 <Label>
                   Max results: <span className="tabular-nums">{limit}</span>
                 </Label>
-                <Slider min={10} max={200} step={10} value={[limit]} onValueChange={(v) => setLimit(v[0])} />
+                <Slider
+                  thumbLabel="Max results"
+                  min={10}
+                  max={200}
+                  step={10}
+                  value={[limit]}
+                  onValueChange={(v) => setLimit(v[0] ?? 100)}
+                />
+              </div>
+              <div className="text-muted-foreground text-xs">
+                AI suggest uses the confidence threshold from Auto map settings ({threshold}).
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="suggest-pipeline">AI suggest pipeline</Label>
@@ -268,56 +272,17 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
           </Button>
         </div>
 
-        {suggestion && (
-          <Alert>
-            <Sparkles />
-            <AlertDescription>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={OUTCOME_VARIANT[suggestion.outcome] ?? "outline"}>{suggestion.outcome}</Badge>
-                {suggested ? (
-                  <span>
-                    <b>{suggested.concept_name}</b> (ID {suggested.concept_id}, {suggested.domain_id}) · confidence{" "}
-                    <b>{suggestion.confidence ?? "—"}</b>
-                  </span>
-                ) : (
-                  <span>No concept suggested</span>
-                )}
-                {suggested && (
-                  <Button size="sm" variant="outline" onClick={() => addConcept(suggested)}>
-                    Select suggestion
-                  </Button>
-                )}
-                <span className="text-muted-foreground text-xs">pipeline {suggestion.pipeline}</span>
-              </div>
-              {suggestion.rationale && <div className="mt-1 text-sm">{suggestion.rationale}</div>}
-              <Collapsible className="mt-1">
-                <CollapsibleTrigger className="text-muted-foreground flex items-center gap-1 text-xs hover:underline">
-                  <ChevronDown className="size-3" /> Trace ({suggestion.trace.length} steps)
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <ol className="mt-1 space-y-0.5 text-xs">
-                    {suggestion.trace.map((t, i) => (
-                      <li key={i}>
-                        <span className="font-mono">{t.node}</span>{" "}
-                        <span className="text-muted-foreground tabular-nums">{t.ms} ms</span> — {t.summary}
-                      </li>
-                    ))}
-                  </ol>
-                </CollapsibleContent>
-              </Collapsible>
-            </AlertDescription>
-          </Alert>
-        )}
+        {suggestion && <SuggestionAlert suggestion={suggestion} threshold={threshold} onSelect={addConcept} />}
 
         <ErrorAlert error={searchError} title="Search failed" />
 
         <div className="grid gap-4 xl:grid-cols-[3fr_1fr]">
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
-              <span>
-                {search.isFetching ? "Searching…" : `Found ${results.length} similar concepts`}
-              </span>
-              {search.data && <span className="text-muted-foreground text-xs">Search method: {search.data.method}</span>}
+              <span>{search.isFetching ? "Searching…" : `Found ${results.length} similar concepts`}</span>
+              {search.data && (
+                <span className="text-muted-foreground text-xs">Search method: {search.data.method}</span>
+              )}
             </div>
             <DataTable
               columns={RESULT_COLUMNS}
@@ -331,66 +296,15 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
               emptyText="No similar concepts found. Try adjusting your search term or filters."
               maxHeight="28rem"
             />
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Checkbox id="manual-ids" checked={manualOpen} onCheckedChange={(v) => setManualOpen(!!v)} />
-                <Label htmlFor="manual-ids">Enter concept IDs manually</Label>
-              </div>
-              {manualOpen && (
-                <div className="space-y-2">
-                  <Input placeholder="123456 or 123456;789012" value={manualIds} onChange={(e) => setManualIds(e.target.value)} />
-                  <ErrorAlert error={lookup.error} title="Invalid concept IDs" />
-                  {lookup.data?.missing.map((id) => (
-                    <p key={id} className="text-destructive text-sm">
-                      Concept ID {id} not found
-                    </p>
-                  ))}
-                  {lookup.data?.found.map((c) => (
-                    <div key={c.concept_id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
-                      <span>
-                        {c.concept_name} <span className="text-muted-foreground">({c.concept_id}, {c.domain_id})</span>
-                      </span>
-                      <Button size="sm" variant="outline" disabled={selected.has(c.concept_id)} onClick={() => addConcept(c)}>
-                        {selected.has(c.concept_id) ? "Added" : "Add"}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <ManualConceptIds isSelected={(id) => selected.has(id)} onAdd={addConcept} />
           </div>
 
-          <div className="space-y-3">
-            <div className="text-sm font-medium">Selected concepts for mapping</div>
-            {selected.size === 0 ? (
-              <p className="text-muted-foreground text-sm">Select concepts from the table to map them to this source concept.</p>
-            ) : (
-              <>
-                {[...selected.values()].map((c, i) => (
-                  <div key={c.concept_id} className="relative rounded-md border p-3 text-sm">
-                    <button
-                      type="button"
-                      aria-label="Remove"
-                      className="text-muted-foreground hover:text-foreground absolute top-2 right-2"
-                      onClick={() => removeConcept(c.concept_id)}
-                    >
-                      <X className="size-4" />
-                    </button>
-                    <div className="pr-5 font-medium">
-                      {i + 1}. {c.concept_name}
-                    </div>
-                    <div className="text-muted-foreground text-xs">
-                      ID: {c.concept_id} | Domain: {c.domain_id}
-                    </div>
-                    <div className="text-muted-foreground text-xs">Vocabulary: {c.vocabulary_id}</div>
-                  </div>
-                ))}
-                <Button className="w-full" onClick={confirm} disabled={mapConcepts.isPending}>
-                  Confirm mapping
-                </Button>
-              </>
-            )}
-          </div>
+          <SelectedConcepts
+            concepts={[...selected.values()]}
+            onRemove={removeConcept}
+            onConfirm={confirm}
+            confirming={mapConcepts.isPending}
+          />
         </div>
       </CardContent>
     </Card>

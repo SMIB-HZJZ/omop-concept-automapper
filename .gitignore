@@ -8,7 +8,11 @@ env/
 venv/
 .venv/
 ENV/
+# Secrets: .env (app) and .env.litellm (provider keys); the *.example templates are versioned
 .env
+.env.*
+!.env.example
+!.env.litellm.example
 pip-log.txt
 pip-delete-this-directory.txt
 .tox
@@ -47,8 +51,8 @@ Thumbs.db
 data/
 uploads/
 temp_*.csv
+# Data files (vocabularies, source concepts) are never committed
 *.csv
-!requirements.txt  # Allow requirements.txt specifically
 store/
 *backup/
 
@@ -74,3 +78,4 @@ docs/_build/
 .ruff_cache/
 node_modules/
 frontend/dist/
+frontend/coverage/

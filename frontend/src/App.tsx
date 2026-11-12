@@ -55,9 +55,7 @@ const router = createBrowserRouter([
       { path: "settings", element: page(<SettingsPage />) },
       {
         path: "users",
-        element: (
-          <RequireAdmin>{page(<UsersPage />)}</RequireAdmin>
-        ),
+        element: <RequireAdmin>{page(<UsersPage />)}</RequireAdmin>,
       },
       { path: "*", element: <EmptyState title="Page not found" /> },
     ],

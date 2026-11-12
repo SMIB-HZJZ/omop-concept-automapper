@@ -7,8 +7,9 @@ import { toast } from "sonner";
 import { api, errorMessage, unwrap } from "@/api/client";
 import { keys, useUsers } from "@/api/queries";
 import type { Role, User } from "@/api/types";
-import { useAuth } from "@/auth/AuthProvider";
-import { ErrorAlert, formatDate, PageHeader } from "@/components/common";
+import { useAuth } from "@/auth/useAuth";
+import { ErrorAlert, PageHeader } from "@/components/common";
+import { formatDate } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
 import { Button } from "@/components/ui/button";
@@ -86,7 +87,9 @@ function AddUserDialog({ create }: { create: ReturnType<typeof useUserMutations>
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Add user</DialogTitle>
-            <DialogDescription>Users map concepts; admins also import data, manage embeddings, settings and users.</DialogDescription>
+            <DialogDescription>
+              Users map concepts; admins also import data, manage embeddings, settings and users.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
             <Label htmlFor="new-username">Username</Label>
@@ -195,7 +198,16 @@ export function UsersPage() {
 
   const columns = useMemo<ColumnDef<User, unknown>[]>(
     () => [
-      { accessorKey: "username", header: "Username", cell: ({ row }) => <span className="font-medium">{row.original.username}{row.original.id === me?.id && <span className="text-muted-foreground font-normal"> (you)</span>}</span> },
+      {
+        accessorKey: "username",
+        header: "Username",
+        cell: ({ row }) => (
+          <span className="font-medium">
+            {row.original.username}
+            {row.original.id === me?.id && <span className="text-muted-foreground font-normal"> (you)</span>}
+          </span>
+        ),
+      },
       {
         accessorKey: "role",
         header: "Role",
@@ -228,7 +240,11 @@ export function UsersPage() {
         ),
       },
       { accessorKey: "created_at", header: "Created", cell: ({ getValue }) => formatDate(getValue() as string | null) },
-      { accessorKey: "last_login_at", header: "Last login", cell: ({ getValue }) => formatDate(getValue() as string | null) },
+      {
+        accessorKey: "last_login_at",
+        header: "Last login",
+        cell: ({ getValue }) => formatDate(getValue() as string | null),
+      },
       {
         id: "actions",
         header: "",
@@ -259,7 +275,11 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Users" description="Manage who can sign in and what they can do." actions={<AddUserDialog create={create} />} />
+      <PageHeader
+        title="Users"
+        description="Manage who can sign in and what they can do."
+        actions={<AddUserDialog create={create} />}
+      />
       <ErrorAlert error={users.error} title="Could not load users" />
       <DataTable
         columns={columns}

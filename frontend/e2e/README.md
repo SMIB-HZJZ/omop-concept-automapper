@@ -1,6 +1,6 @@
 # UI smoke test
 
-A Playwright walk-through of every page against a running stack: login, import tabs, search, map (select, AI suggest, auto-map settings, confirm), review, commit, settings, users, task tray, mobile layout and logout. It fails on page errors and records 5xx responses. Screenshots go to `./shots`.
+A Playwright walk-through of every page against a running stack: login, import tabs, search, map (select, AI suggest, auto-map settings, confirm), review, commit, settings, users, task tray, mobile layout and logout. It exits with status 1 when a step fails or when it records page errors, console errors or 5xx responses. Note that it changes data (it confirms a mapping), so run it against a test stack. Screenshots go to `./shots`.
 
 The stack needs data (vocabulary, embeddings, at least two unmapped source concepts), e.g. after running the steps in the README with the fake LLM gateway.
 

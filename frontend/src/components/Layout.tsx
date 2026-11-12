@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   CheckSquare,
   ClipboardCheck,
@@ -12,12 +12,15 @@ import {
   User as UserIcon,
   Users,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { toast } from "sonner";
 
 import { api, unwrap } from "@/api/client";
-import { useAuth } from "@/auth/AuthProvider";
+import { keys } from "@/api/queries";
+import { taskResult } from "@/api/taskResults";
+import type { Task } from "@/api/types";
+import { useAuth } from "@/auth/useAuth";
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
 import { TaskProgress } from "@/components/TaskProgress";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { untrackTask, useTrackedTaskIds } from "@/hooks/taskTracker";
 import { invalidateForTask, taskLabel, useActiveTasks } from "@/hooks/useTasks";
 import { cn } from "@/lib/utils";
 
@@ -44,12 +48,56 @@ const NAV = [
   { to: "/users", label: "Users", icon: Users, adminOnly: true },
 ];
 
-/** Watches running tasks; when one finishes, refreshes affected data and notifies. */
+function pollTask(id: string) {
+  return {
+    queryKey: keys.task(id),
+    queryFn: async () => unwrap(await api.GET("/api/tasks/{task_id}", { params: { path: { task_id: id } } })),
+    refetchInterval: (query: { state: { data?: Task } }) => (query.state.data?.is_terminal ? false : 1000),
+    retry: false,
+  };
+}
+
+/** Watches background tasks; when one finishes, refreshes the data it changed and notifies once.
+ *
+ * Two sources: tasks started from this tab (polled until they finish, so even a task that ends
+ * before the next refresh of the active list is noticed) and the shared active-task list (tasks
+ * started elsewhere, or before a reload), whose finished members are fetched once. */
 function useTaskWatcher() {
   const qc = useQueryClient();
   const active = useActiveTasks();
+  const tracked = useTrackedTaskIds();
+  const trackedTasks = useQueries({ queries: tracked.map(pollTask) });
+  const announced = useRef(new Set<string>());
   const previous = useRef<Set<string> | null>(null);
 
+  const finish = useCallback(
+    (task: Task) => {
+      untrackTask(task.id);
+      if (announced.current.has(task.id)) return;
+      announced.current.add(task.id);
+      qc.setQueryData(keys.task(task.id), task);
+      invalidateForTask(qc, task);
+      const label = taskLabel(task.kind);
+      const automap = taskResult(task, "automap.run");
+      if (task.status === "FAILURE") toast.error(`${label} failed`, { description: task.error ?? undefined });
+      else if (task.status === "CANCELLED") toast.message(`${label} cancelled`);
+      else if (automap && (automap.errors ?? 0) > 0)
+        toast.warning(`${label} finished with errors`, {
+          description: `${automap.errors} of ${automap.processed} concepts could not be processed (see the worker log).`,
+        });
+      else toast.success(`${label} finished`);
+    },
+    [qc],
+  );
+
+  // Tasks started from this tab
+  useEffect(() => {
+    for (const result of trackedTasks) {
+      if (result.data?.is_terminal) finish(result.data);
+    }
+  }, [trackedTasks, finish]);
+
+  // Tasks that left the active list since the last poll
   useEffect(() => {
     if (!active.data) return;
     const current = new Set(active.data.map((t) => t.id));
@@ -57,22 +105,15 @@ function useTaskWatcher() {
     previous.current = current;
     if (!before) return;
     for (const id of before) {
-      if (current.has(id)) continue;
-      void (async () => {
-        try {
-          const task = unwrap(await api.GET("/api/tasks/{task_id}", { params: { path: { task_id: id } } }));
-          invalidateForTask(qc, task);
-          qc.setQueryData(["task", id], task);
-          const label = taskLabel(task.kind);
-          if (task.status === "SUCCESS") toast.success(`${label} finished`);
-          else if (task.status === "FAILURE") toast.error(`${label} failed`, { description: task.error ?? undefined });
-          else if (task.status === "CANCELLED") toast.message(`${label} cancelled`);
-        } catch {
+      if (current.has(id) || announced.current.has(id)) continue;
+      void qc
+        .fetchQuery(pollTask(id))
+        .then((task) => task.is_terminal && finish(task))
+        .catch(() => {
           /* the task disappeared; nothing to refresh */
-        }
-      })();
+        });
     }
-  }, [active.data, qc]);
+  }, [active.data, qc, finish]);
 
   return active.data ?? [];
 }

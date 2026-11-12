@@ -1,11 +1,18 @@
 import { AlertTriangle, Info, RotateCcw, Save } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { errorMessage } from "@/api/client";
-import { useCollectionPreview, useConfig, useModelOptions, useResetConfig, useUpdateConfig, useWorkflows } from "@/api/queries";
+import {
+  useCollectionPreview,
+  useConfig,
+  useModelOptions,
+  useResetConfig,
+  useUpdateConfig,
+  useWorkflows,
+} from "@/api/queries";
 import type { Config, ConfigUpdate, WorkflowCatalog } from "@/api/types";
-import { useAuth } from "@/auth/AuthProvider";
+import { useAuth } from "@/auth/useAuth";
 import { ErrorAlert, PageHeader } from "@/components/common";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useDebounce } from "@/hooks/useDebounce";
 
 const CUSTOM = "__custom";
 const NATIVE = "native";
@@ -87,11 +95,9 @@ function ModelPicker({
   onChange: (value: string) => void;
   help: string;
 }) {
-  // Only decide on "custom" once the option list has loaded
-  const [custom, setCustom] = useState(options.length > 0 && !options.includes(value));
-  useEffect(() => {
-    if (options.length > 0 && !options.includes(value)) setCustom(true);
-  }, [options, value]);
+  // "Custom" when chosen explicitly, or when the current value is not one of the (loaded) options
+  const [customChosen, setCustom] = useState(false);
+  const custom = customChosen || (options.length > 0 && !options.includes(value));
   return (
     <div className="grid content-start gap-1.5">
       <Label htmlFor={id}>{label}</Label>
@@ -140,19 +146,14 @@ function UpdateForm({ config }: { config: Config }) {
   const [dims, setDims] = useState<number | null>(config.embedding_dims ?? null);
   const [confirmed, setConfirmed] = useState(false);
 
-  useEffect(() => {
-    setLlm(config.llm_model);
-    setEmbedding(config.embedding_model);
-    setDims(config.embedding_dims ?? null);
-    setConfirmed(false);
-  }, [config]);
-
   const embeddingOptions = options.data?.embedding_models ?? [];
   const maxDims = embeddingOptions.find((m) => m.name === embedding)?.max_dims ?? null;
   const dimensionOptions = options.data?.dimension_options ?? [512, 1024, 1536, 2048, 3072];
   const llmChanged = llm !== config.llm_model;
   const embeddingChanged = embedding !== config.embedding_model || dims !== (config.embedding_dims ?? null);
-  const preview = useCollectionPreview(embedding, dims, embeddingChanged && embedding.length > 0);
+  // Debounced: typing a custom model name would otherwise request a preview per keystroke
+  const previewModel = useDebounce(embedding, 400);
+  const preview = useCollectionPreview(previewModel, dims, embeddingChanged && previewModel.length > 0);
   const canSave = (llmChanged || embeddingChanged) && llm && embedding && (!embeddingChanged || confirmed);
 
   const save = () => {
@@ -165,8 +166,7 @@ function UpdateForm({ config }: { config: Config }) {
         toast.success("Configuration updated successfully");
         if (embeddingChanged) {
           toast.info("Next steps", {
-            description:
-              "Go to Import Data → Embedding Management and embed standard concepts (or migrate them from Qdrant) for the new collection.",
+            description: "Go to Import Data → Embedding Management and embed standard concepts for the new collection.",
             duration: 10_000,
           });
         }
@@ -207,7 +207,10 @@ function UpdateForm({ config }: { config: Config }) {
             />
             <div className="grid gap-1.5">
               <Label htmlFor="embedding-dims">Dimensions</Label>
-              <Select value={dims === null ? NATIVE : String(dims)} onValueChange={(v) => setDims(v === NATIVE ? null : Number(v))}>
+              <Select
+                value={dims === null ? NATIVE : String(dims)}
+                onValueChange={(v) => setDims(v === NATIVE ? null : Number(v))}
+              >
                 <SelectTrigger id="embedding-dims" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -377,7 +380,7 @@ export function SettingsPage() {
   const workflows = useWorkflows();
   const description = useMemo(
     () =>
-      "Configure the LLM and embedding models used by the Auto OMOP Mapper. Changing the embedding model or dimensions uses a new embedding collection, which must be embedded again (or migrated from Qdrant).",
+      "Configure the LLM and embedding models used by the Auto OMOP Mapper. Changing the embedding model or dimensions uses a new embedding collection, which must be embedded again.",
     [],
   );
 
@@ -386,7 +389,13 @@ export function SettingsPage() {
       <PageHeader title="Configuration" description={description} />
       <ErrorAlert error={config.error} title="Could not load the configuration" />
       {config.data && <CurrentConfig config={config.data} />}
-      {config.data && isAdmin && <UpdateForm config={config.data} />}
+      {config.data && isAdmin && (
+        // Remount (and so reset the form) whenever the saved configuration changes
+        <UpdateForm
+          key={`${config.data.llm_model}|${config.data.embedding_model}|${config.data.embedding_dims ?? ""}`}
+          config={config.data}
+        />
+      )}
       {!isAdmin && (
         <Alert>
           <Info />

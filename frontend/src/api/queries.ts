@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { api, unwrap } from "./client";
-import type { AutomapRequest, ConfigUpdate, SearchRequest, SuggestRequest } from "./types";
+import type { ConfigUpdate, SearchRequest, SuggestRequest } from "./types";
 
 /** Query keys. Everything about one source vocabulary lives under ["vocab", id]. */
 export const keys = {
@@ -15,7 +15,7 @@ export const keys = {
   sourceVocabularies: ["source-vocabularies"] as const,
   vocab: (id: number) => ["vocab", id] as const,
   unmapped: (id: number, page: number, perPage: number) => ["vocab", id, "unmapped", page, perPage] as const,
-  mapped: (id: number) => ["vocab", id, "mapped"] as const,
+  mapped: (id: number, page: number, perPage: number, q: string) => ["vocab", id, "mapped", page, perPage, q] as const,
   stats: (id: number) => ["vocab", id, "stats"] as const,
   auditStats: (id: number) => ["vocab", id, "audit-stats"] as const,
   auditRecent: (id: number) => ["vocab", id, "audit-recent"] as const,
@@ -122,16 +122,17 @@ export const useUnmapped = (id: number | null, page: number, perPage: number) =>
     placeholderData: keepPreviousData,
   });
 
-export const useMapped = (id: number | null) =>
+export const useMapped = (id: number | null, page: number, perPage: number, q: string) =>
   useQuery({
-    queryKey: keys.mapped(id ?? 0),
+    queryKey: keys.mapped(id ?? 0, page, perPage, q),
     queryFn: async () =>
       unwrap(
         await api.GET("/api/source-vocabularies/{vocabulary_id}/mapped", {
-          params: { path: { vocabulary_id: id! } },
+          params: { path: { vocabulary_id: id! }, query: { page, per_page: perPage, q: q || undefined } },
         }),
       ),
     enabled: id !== null,
+    placeholderData: keepPreviousData,
   });
 
 export const useMappingStats = (id: number | null) =>
@@ -210,7 +211,9 @@ export function useUpdateVocabulary() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...body }: { id: number; name?: string; description?: string; is_drug?: boolean }) =>
-      unwrap(await api.PATCH("/api/source-vocabularies/{vocabulary_id}", { params: { path: { vocabulary_id: id } }, body })),
+      unwrap(
+        await api.PATCH("/api/source-vocabularies/{vocabulary_id}", { params: { path: { vocabulary_id: id } }, body }),
+      ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.sourceVocabularies }),
   });
 }
@@ -240,18 +243,6 @@ export function useDecideSuggestions(vocabularyId: number | null, decision: "acc
   });
 }
 
-export function useStartAutomap(vocabularyId: number | null) {
-  return useMutation({
-    mutationFn: async (body: AutomapRequest) =>
-      unwrap(
-        await api.POST("/api/source-vocabularies/{vocabulary_id}/automap", {
-          params: { path: { vocabulary_id: vocabularyId! } },
-          body,
-        }),
-      ),
-  });
-}
-
 export function useSuggest() {
   return useMutation({
     mutationFn: async ({ sourceId, ...body }: SuggestRequest & { sourceId: number }) =>
@@ -266,7 +257,8 @@ export function useSuggest() {
 export const useSearch = (body: SearchRequest | null) =>
   useQuery({
     queryKey: keys.search(body ?? {}),
-    queryFn: async () => unwrap(await api.POST("/api/search", { body: body! })),
+    // Results carry their request: with keepPreviousData the shown results may belong to an older one
+    queryFn: async () => ({ ...unwrap(await api.POST("/api/search", { body: body! })), request: body! }),
     enabled: body !== null && body.query.trim().length > 0,
     placeholderData: keepPreviousData,
     staleTime: 60_000,

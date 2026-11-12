@@ -1,16 +1,18 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
 import { errorMessage } from "@/api/client";
 import { useDecideSuggestions, useSuggestions, type SuggestionFilters } from "@/api/queries";
 import type { Suggestion } from "@/api/types";
-import { EmptyState, ErrorAlert, formatDate, PageHeader } from "@/components/common";
+import { EmptyState, ErrorAlert, PageHeader } from "@/components/common";
+import { formatDate } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
-import { useSelectedVocabulary, VocabularySelector } from "@/components/VocabularySelector";
+import { VocabularySelector } from "@/components/VocabularySelector";
+import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -39,8 +41,16 @@ export function ReviewPage() {
   const [minConfidence, setMinConfidence] = useState<number | undefined>(undefined);
   const [sort, setSort] = useState("confidence_desc");
   const [perPage, setPerPage] = useState(50);
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<string[]>([]);
+  // Paging resets when the view changes, and the selection when the page changes: both are stored
+  // with the view they belong to instead of being reset by effects
+  const view = `${vocabularyId}|${status}|${minConfidence}|${sort}|${perPage}`;
+  const [paging, setPaging] = useState({ view, page: 1 });
+  const page = paging.view === view ? paging.page : 1;
+  const setPage = (next: number) => setPaging({ view, page: next });
+  const selectionKey = `${view}|${page}`;
+  const [selection_, setSelection] = useState<{ key: string; ids: string[] }>({ key: selectionKey, ids: [] });
+  const selected = selection_.key === selectionKey ? selection_.ids : [];
+  const setSelected = (ids: string[]) => setSelection({ key: selectionKey, ids });
   const [bulkLevel, setBulkLevel] = useState(8);
 
   const filters: SuggestionFilters = { status, min_confidence: minConfidence, page, per_page: perPage, sort };
@@ -49,18 +59,13 @@ export function ReviewPage() {
   const reject = useDecideSuggestions(vocabularyId, "reject");
   const busy = accept.isPending || reject.isPending;
 
-  // Reset paging/selection when the view changes
-  useEffect(() => {
-    setPage(1);
-  }, [vocabularyId, status, minConfidence, sort, perPage]);
-  useEffect(() => {
-    setSelected([]);
-  }, [vocabularyId, status, minConfidence, sort, perPage, page]);
-
   const data = suggestions.data;
   const pending = status === "pending";
 
-  const decide = (kind: "accept" | "reject", body: { ids?: number[]; vocabulary_id?: number; min_confidence?: number }) => {
+  const decide = (
+    kind: "accept" | "reject",
+    body: { ids?: number[]; vocabulary_id?: number; min_confidence?: number },
+  ) => {
     const mutation = kind === "accept" ? accept : reject;
     mutation.mutate(body, {
       onSuccess: (result) => {
@@ -73,9 +78,17 @@ export function ReviewPage() {
 
   const columns = useMemo<ColumnDef<Suggestion, unknown>[]>(() => {
     const cols: ColumnDef<Suggestion, unknown>[] = [
-      { accessorKey: "source_value", header: "Source code", cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span> },
+      {
+        accessorKey: "source_value",
+        header: "Source code",
+        cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span>,
+      },
       { accessorKey: "source_concept_name", header: "Source name" },
-      { accessorKey: "freq", header: "Freq", cell: ({ getValue }) => (getValue() as number | null)?.toLocaleString() ?? "—" },
+      {
+        accessorKey: "freq",
+        header: "Freq",
+        cell: ({ getValue }) => (getValue() as number | null)?.toLocaleString() ?? "—",
+      },
       {
         id: "concept",
         accessorKey: "concept_name",
@@ -90,9 +103,21 @@ export function ReviewPage() {
         ),
       },
       { accessorKey: "domain_id", header: "Domain" },
-      { accessorKey: "confidence", header: "Confidence", cell: ({ getValue }) => <ConfidenceBadge value={getValue() as number} /> },
-      { accessorKey: "method", header: "Method", cell: ({ getValue }) => <span className="text-xs">{String(getValue())}</span> },
-      { accessorKey: "pipeline", header: "Pipeline", cell: ({ getValue }) => <span className="text-xs">{(getValue() as string | null) ?? "—"}</span> },
+      {
+        accessorKey: "confidence",
+        header: "Confidence",
+        cell: ({ getValue }) => <ConfidenceBadge value={getValue() as number} />,
+      },
+      {
+        accessorKey: "method",
+        header: "Method",
+        cell: ({ getValue }) => <span className="text-xs">{String(getValue())}</span>,
+      },
+      {
+        accessorKey: "pipeline",
+        header: "Pipeline",
+        cell: ({ getValue }) => <span className="text-xs">{(getValue() as string | null) ?? "—"}</span>,
+      },
       {
         accessorKey: "rationale",
         header: "Rationale",
@@ -109,8 +134,16 @@ export function ReviewPage() {
     ];
     if (!pending) {
       cols.push(
-        { accessorKey: "decided_by", header: "Decided by", cell: ({ getValue }) => (getValue() as string | null) ?? "—" },
-        { accessorKey: "decided_at", header: "Decided at", cell: ({ getValue }) => formatDate(getValue() as string | null) },
+        {
+          accessorKey: "decided_by",
+          header: "Decided by",
+          cell: ({ getValue }) => (getValue() as string | null) ?? "—",
+        },
+        {
+          accessorKey: "decided_at",
+          header: "Decided at",
+          cell: ({ getValue }) => formatDate(getValue() as string | null),
+        },
       );
     }
     return cols;

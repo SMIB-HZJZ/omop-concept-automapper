@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router";
 
-import { useAuth } from "@/auth/AuthProvider";
+import { useAuth } from "@/auth/useAuth";
 import { EmptyState } from "@/components/common";
 
 export function RequireAuth({ children }: { children: ReactNode }) {

@@ -1,55 +1,68 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Download, Trash2, Unlink } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 
 import { errorMessage } from "@/api/client";
 import { useDeleteVocabulary, useMapped, useMappingStats, useUnmap } from "@/api/queries";
 import type { MappedRow } from "@/api/types";
-import { useAuth } from "@/auth/AuthProvider";
-import { ErrorAlert, formatNumber, PageHeader, StatCard } from "@/components/common";
+import { useAuth } from "@/auth/useAuth";
+import { ErrorAlert, PageHeader, StatCard } from "@/components/common";
+import { PageControls } from "@/components/Pagination";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
-import { useSelectedVocabulary, VocabularySelector } from "@/components/VocabularySelector";
+import { VocabularySelector } from "@/components/VocabularySelector";
+import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { useDebounce } from "@/hooks/useDebounce";
+import { formatNumber } from "@/lib/format";
 
 const chartConfig = { count: { label: "Mappings", color: "var(--chart-1)" } } satisfies ChartConfig;
 
 const rowId = (row: MappedRow) => `${row.source_id}:${row.concept_id}`;
 
 const columns: ColumnDef<MappedRow, unknown>[] = [
-  { accessorKey: "source_value", header: "Source code", cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span> },
+  {
+    accessorKey: "source_value",
+    header: "Source code",
+    cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span>,
+  },
   { accessorKey: "source_concept_name", header: "Source concept name" },
   { accessorKey: "concept_name", header: "OMOP concept name" },
   { accessorKey: "concept_id", header: "Concept ID" },
   { accessorKey: "domain_id", header: "Domain" },
-  { accessorKey: "freq", header: "Freq", cell: ({ getValue }) => (getValue() as number | null)?.toLocaleString() ?? "—" },
+  {
+    accessorKey: "freq",
+    header: "Freq",
+    cell: ({ getValue }) => (getValue() as number | null)?.toLocaleString() ?? "—",
+  },
   { accessorKey: "mapped_by", header: "Mapped by", cell: ({ getValue }) => (getValue() as string | null) ?? "—" },
 ];
 
-export function CommitPage() {
-  const { isAdmin } = useAuth();
-  const selection = useSelectedVocabulary();
-  const vocabularyId = selection.vocabularyId;
-  const vocabulary = selection.vocabulary;
-  const mapped = useMapped(vocabularyId);
-  const stats = useMappingStats(vocabularyId);
+function MappedTable({
+  vocabularyId,
+  actions,
+}: {
+  vocabularyId: number;
+  actions: (selection: ReactNode) => ReactNode;
+}) {
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(50);
+  const [query, setQuery] = useState("");
+  const q = useDebounce(query.trim(), 400);
+  const mapped = useMapped(vocabularyId, page, perPage, q);
   const unmap = useUnmap(vocabularyId);
-  const deleteVocabulary = useDeleteVocabulary();
   const [selected, setSelected] = useState<string[]>([]);
 
-  useEffect(() => setSelected([]), [vocabularyId]);
-
-  const rows = mapped.data ?? [];
-  const selectedSources = useMemo(
-    () => [...new Set(selected.map((id) => Number(id.split(":")[0])))],
-    [selected],
-  );
+  const selectedSources = useMemo(() => [...new Set(selected.map((id) => Number(id.split(":")[0])))], [selected]);
+  const data = mapped.data;
 
   const onUnmap = () =>
     unmap.mutate(selectedSources, {
@@ -59,6 +72,69 @@ export function CommitPage() {
       },
       onError: (e) => toast.error(errorMessage(e)),
     });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="grid min-w-64 flex-1 gap-1.5">
+          <Label htmlFor="mapped-search">Search mappings</Label>
+          <Input
+            id="mapped-search"
+            placeholder="Source code or name, OMOP concept name or ID"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <PageControls
+          idPrefix="mapped"
+          page={data?.page ?? page}
+          pages={data?.pages ?? 1}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+          itemLabel="Rows"
+        />
+      </div>
+      <ErrorAlert error={mapped.error} title="Could not load mappings" />
+      <div className="text-muted-foreground text-xs">
+        Showing {formatNumber(data?.items.length)} of {formatNumber(data?.total)} mappings{q ? ` matching "${q}"` : ""},
+        sorted by frequency
+        {selected.length > 0 && ` · ${selectedSources.length} source concept(s) selected (kept across pages)`}
+      </div>
+      <DataTable
+        columns={columns}
+        data={data?.items ?? []}
+        getRowId={rowId}
+        selection="multi"
+        selected={selected}
+        onSelectedChange={(ids) =>
+          // Keep selections made on other pages
+          setSelected((prev) => [...prev.filter((id) => !(data?.items ?? []).some((r) => rowId(r) === id)), ...ids])
+        }
+        sortable={false}
+        isLoading={mapped.isLoading}
+        emptyText={q ? "No mappings match your search." : "No mapped concepts found for this vocabulary."}
+        maxHeight="36rem"
+      />
+      {actions(
+        <Button variant="secondary" disabled={selected.length === 0 || unmap.isPending} onClick={onUnmap}>
+          <Unlink /> Unmap selected {selectedSources.length > 0 && `(${selectedSources.length})`}
+        </Button>,
+      )}
+    </div>
+  );
+}
+
+export function CommitPage() {
+  const { isAdmin } = useAuth();
+  const selection = useSelectedVocabulary();
+  const vocabularyId = selection.vocabularyId;
+  const vocabulary = selection.vocabulary;
+  const stats = useMappingStats(vocabularyId);
+  const deleteVocabulary = useDeleteVocabulary();
 
   const onDelete = () => {
     if (!vocabulary) return;
@@ -100,11 +176,14 @@ export function CommitPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Check & Commit Mappings" description="Review the final mappings, export them, or remove ones that are wrong." />
+      <PageHeader
+        title="Check & Commit Mappings"
+        description="Review the final mappings, export them, or remove ones that are wrong."
+      />
       <VocabularySelector selection={selection} showDrug={false} />
-      <ErrorAlert error={mapped.error ?? stats.error} title="Could not load mappings" />
+      <ErrorAlert error={stats.error} title="Could not load mapping statistics" />
 
-      {vocabularyId !== null && mapped.isSuccess && rows.length === 0 && (
+      {vocabularyId !== null && s && s.total_mappings === 0 && (
         <div className="space-y-4">
           <Alert>
             <AlertDescription>No mapped concepts found for this vocabulary.</AlertDescription>
@@ -113,33 +192,28 @@ export function CommitPage() {
         </div>
       )}
 
-      {vocabularyId !== null && rows.length > 0 && (
+      {vocabularyId !== null && s && s.total_mappings > 0 && (
         <>
           <h2 className="text-lg font-semibold">Mapped concepts for {vocabulary?.name}</h2>
-          <DataTable
-            columns={columns}
-            data={rows}
-            getRowId={rowId}
-            selection="multi"
-            selected={selected}
-            onSelectedChange={setSelected}
-            maxHeight="36rem"
+          <MappedTable
+            key={vocabularyId}
+            vocabularyId={vocabularyId}
+            actions={(unmapButton) => (
+              <div className="flex flex-wrap items-center gap-2">
+                {unmapButton}
+                <a
+                  href={`/api/source-vocabularies/${vocabularyId}/mapped.csv`}
+                  download={`vocabulary_${vocabularyId}_mappings.csv`}
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  <Download /> Download CSV
+                </a>
+                <div className="ml-auto">{deleteButton}</div>
+              </div>
+            )}
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" disabled={selected.length === 0 || unmap.isPending} onClick={onUnmap}>
-              <Unlink /> Unmap selected {selectedSources.length > 0 && `(${selectedSources.length})`}
-            </Button>
-            <a
-              href={`/api/source-vocabularies/${vocabularyId}/mapped.csv`}
-              download={`vocabulary_${vocabularyId}_mappings.csv`}
-              className={buttonVariants({ variant: "outline" })}
-            >
-              <Download /> Download CSV
-            </a>
-            <div className="ml-auto">{deleteButton}</div>
-          </div>
           <div className="grid gap-4 sm:grid-cols-3">
-            <StatCard label="Total mappings" value={formatNumber(s?.total_mappings ?? rows.length)} />
+            <StatCard label="Total mappings" value={formatNumber(s.total_mappings)} />
             <StatCard label="Unique OMOP concepts" value={formatNumber(s?.unique_concepts)} />
             <StatCard label="Total frequency coverage" value={formatNumber(s?.frequency_coverage)} />
           </div>
@@ -174,7 +248,8 @@ export function CommitPage() {
                   <div className="flex justify-between text-sm">
                     <span>Source frequency mapped</span>
                     <span className="tabular-nums">
-                      {formatNumber(s?.mapped_frequency)} / {formatNumber(s?.total_frequency)} ({coveragePct.toFixed(1)}%)
+                      {formatNumber(s?.mapped_frequency)} / {formatNumber(s?.total_frequency)} ({coveragePct.toFixed(1)}
+                      %)
                     </span>
                   </div>
                   <Progress value={coveragePct} />
