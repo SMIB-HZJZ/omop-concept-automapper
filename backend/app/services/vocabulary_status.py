@@ -14,6 +14,8 @@ VOCABULARY_FILES = {
     "concept_ancestor": "CONCEPT_ANCESTOR.csv",
     # Optional: enables deterministic drug mapping (strength and dose form matching)
     "drug_strength": "DRUG_STRENGTH.csv",
+    # Optional: synonyms for exact name matching, keyword search and embedding text
+    "concept_synonym": "CONCEPT_SYNONYM.csv",
 }
 
 
