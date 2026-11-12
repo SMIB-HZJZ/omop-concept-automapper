@@ -27,6 +27,8 @@ class AutomapState(TypedDict, total=False):
     # Decision
     candidates: list[dict]
     selected: dict | None
+    # Combined match: every concept to map together (selected is the first); empty otherwise
+    selected_concepts: list[dict]
     confidence: int | None
     rationale: str | None
     method: str

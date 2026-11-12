@@ -48,7 +48,13 @@ def list_suggestions(
                    ms.concept_id, c.concept_name, c.domain_id, c.vocabulary_id, c.concept_class_id,
                    c.concept_code, ms.confidence, ms.method, ms.pipeline, ms.rationale,
                    ms.target_domains, ms.status, ms.created_at, ms.decided_at,
-                   u.username AS decided_by
+                   u.username AS decided_by,
+                   COALESCE((
+                       SELECT json_agg(json_build_object(
+                           'concept_id', x.concept_id, 'concept_name', x.concept_name,
+                           'concept_class_id', x.concept_class_id) ORDER BY x.concept_id)
+                       FROM concept x WHERE x.concept_id = ANY(ms.extra_concept_ids)
+                   ), '[]') AS extra_concepts
             FROM mapping_suggestion ms
             JOIN source_concepts sc ON sc.source_id = ms.source_id
             JOIN concept c ON c.concept_id = ms.concept_id
@@ -100,7 +106,7 @@ def accept(
         mapping.map_concepts(
             session,
             row["source_id"],
-            [row["concept_id"]],
+            [row["concept_id"], *(row.get("extra_concept_ids") or [])],
             method=row["method"],
             user_id=user_id,
             confidence=row["confidence"],
@@ -115,10 +121,10 @@ def accept(
             text(
                 """
                 INSERT INTO mapping_suggestion
-                    (source_id, concept_id, confidence, method, pipeline, target_domains, rationale,
-                     task_id, status, decided_by, created_at, decided_at)
-                VALUES (:source_id, :concept_id, :confidence, :method, :pipeline, :target_domains,
-                        :rationale, :task_id, 'accepted', :u, :created_at, :now)
+                    (source_id, concept_id, extra_concept_ids, confidence, method, pipeline,
+                     target_domains, rationale, task_id, status, decided_by, created_at, decided_at)
+                VALUES (:source_id, :concept_id, :extra_concept_ids, :confidence, :method, :pipeline,
+                        :target_domains, :rationale, :task_id, 'accepted', :u, :created_at, :now)
                 """
             ),
             {**row, "u": user_id, "now": now},

@@ -11,6 +11,10 @@ from app.workflows.registry import router
 from app.workflows.state import AutomapState
 
 LEVEL_NAMES = {
+    "branded_drug": "Branded Drug",
+    "quant_branded_drug": "Quant Branded Drug",
+    "branded_drug_comp": "Branded Drug Comp",
+    "branded_drug_form": "Branded Drug Form",
     "clinical_drug": "Clinical Drug",
     "quant_clinical_drug": "Quant Clinical Drug",
     "clinical_drug_comp": "Clinical Drug Comp",
@@ -42,6 +46,8 @@ def describe(structure: DrugStructure) -> str:
         return ""
 
     parts = " + ".join(f"{c.ingredient}{strength(c)}" for c in structure.components)
+    if structure.brand_name:
+        parts = f"{parts} [{structure.brand_name}]" if parts else f"[{structure.brand_name}]"
     return parts + (f"; {structure.dose_form}" if structure.dose_form else "")
 
 
@@ -119,15 +125,23 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
     }
     if match.unique:
         found = await asyncio.to_thread(ctx.get_concepts, match.concept_ids)
-        if found:
+        order = {cid: i for i, cid in enumerate(match.concept_ids)}
+        found = sorted(found, key=lambda c: order.get(c["concept_id"], 0))
+        if found and (len(found) == 1 or match.combined):
             level = LEVEL_NAMES.get(match.level or "", match.level)
+            names = " + ".join(repr(c["concept_name"]) for c in found)
             update.update(
                 selected=found[0],
+                selected_concepts=found if match.combined else [],
                 confidence=params.confidence,
-                rationale=f"Deterministic {level} match on {described} ({origin} structure)",
+                rationale=(
+                    f"Deterministic {level} match on {described} ({origin} structure"
+                    + (f"; {match.reason}" if "clinical level" in match.reason else "")
+                    + ")"
+                ),
                 method="auto_drug_structured",
                 outcome="selected",
-                _summary=f"{level} {found[0]['concept_name']!r} for {described}",
+                _summary=f"{level} {names} for {described}",
             )
             return "matched", update
     if match.concept_ids:

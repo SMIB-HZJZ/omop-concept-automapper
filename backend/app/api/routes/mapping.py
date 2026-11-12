@@ -117,6 +117,9 @@ async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser):
         pipeline=result["meta"]["pipeline"],
         outcome=result.get("outcome", "no_match"),
         selected=({"rank": 0, "score": 0.0, **selected} if selected else None),
+        selected_concepts=[
+            {"rank": 0, "score": 0.0, **c} for c in result.get("selected_concepts") or []
+        ],
         confidence=result.get("confidence"),
         rationale=result.get("rationale"),
         candidates=result.get("candidates") or [],

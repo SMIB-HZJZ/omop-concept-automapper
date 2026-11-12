@@ -125,6 +125,7 @@ def initial_state(
         translated_query=None,
         drug_structure=drug_structure,
         structured_candidates=[],
+        selected_concepts=[],
         notes=[],
         outcome="pending",
         trace=[],

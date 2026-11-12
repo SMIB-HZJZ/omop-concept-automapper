@@ -2532,6 +2532,29 @@
         ],
         "title": "CollectionPreview"
       },
+      "ConceptBrief": {
+        "properties": {
+          "concept_id": {
+            "type": "integer",
+            "title": "Concept Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_class_id": {
+            "type": "string",
+            "title": "Concept Class Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "concept_name",
+          "concept_class_id"
+        ],
+        "title": "ConceptBrief"
+      },
       "ConceptLookup": {
         "properties": {
           "found": {
@@ -3698,6 +3721,14 @@
               }
             ]
           },
+          "selected_concepts": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "type": "array",
+            "title": "Selected Concepts",
+            "default": []
+          },
           "confidence": {
             "anyOf": [
               {
@@ -3928,6 +3959,14 @@
               }
             ],
             "title": "Decided By"
+          },
+          "extra_concepts": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptBrief"
+            },
+            "type": "array",
+            "title": "Extra Concepts",
+            "default": []
           }
         },
         "type": "object",

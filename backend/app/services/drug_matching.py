@@ -1,17 +1,23 @@
 """Deterministic drug matching on OMOP ``drug_strength`` (RxNorm and RxNorm Extension).
 
-The match follows the level of detail of the source, as the reranker rules do:
+The match follows the level of detail of the source, as the reranker rules do. With a brand name the
+branded level is tried first, then the clinical one:
 
-| source has                       | target class                               |
-|----------------------------------|--------------------------------------------|
-| ingredients + strengths + form   | Clinical Drug (else Quant Clinical Drug)    |
-| one ingredient + strength        | Clinical Drug Comp                          |
-| ingredients + form, no strengths | Clinical Drug Form                          |
-| one ingredient only              | Ingredient                                  |
+| source has                          | branded (brand given)  | clinical                                  |
+|-------------------------------------|------------------------|-------------------------------------------|
+| ingredients + strengths + form      | Branded Drug           | Clinical Drug, else Quant Clinical Drug   |
+| ingredient(s) + strengths, no form  | Branded Drug Comp      | Clinical Drug Comp (one per ingredient)   |
+| ingredients + form, no strengths    | Branded Drug Form      | Clinical Drug Form                        |
+| ingredients only                    | Branded Drug Form (*)  | Clinical Drug Form (*), else the Ingredients |
 
-The ingredient set must be identical (no extra or missing ingredients), strengths equal after unit
-conversion (1 % tolerance) and the dose form identical. Box and marketed products are never
-targets. Branded drugs are not matched yet (brand names are left to the fallback pipeline).
+(*) only when exactly one exists for that ingredient set (any dose form). "One per ingredient" and
+"the Ingredients" are combined matches: the source is mapped to all of them together.
+
+A brand without ingredients takes its ingredients from its branded products, when they all share
+one ingredient set. The ingredient set must be identical (no extra or missing ingredients),
+strengths equal after unit conversion (1 % tolerance) and the dose form identical. Box and marketed
+products are never targets. Relationship names follow the OMOP RxNorm conventions
+(``RxNorm has dose form``, ``RxNorm has ing``, ``Has brand name``).
 """
 
 import logging
@@ -34,10 +40,12 @@ class DrugMatch:
     concept_ids: list[int] = field(default_factory=list)
     reason: str = ""
     unresolved: list[str] = field(default_factory=list)  # names that matched no concept
+    # True: concept_ids belong together (one mapping per ingredient), not alternatives
+    combined: bool = False
 
     @property
     def unique(self) -> bool:
-        return len(self.concept_ids) == 1
+        return len(self.concept_ids) == 1 or (self.combined and bool(self.concept_ids))
 
 
 # --------------------------------------------------------------------------- resolution
@@ -141,8 +149,26 @@ def _strength_matches(component: DrugComponent, row: dict) -> bool:
     return target_c is not None and target_c[1:] == source_c[1:] and close(target_c[0], source_c[0])
 
 
+_BRAND_FILTER = """
+    AND (CAST(:brand AS integer) IS NULL OR EXISTS (
+        SELECT 1 FROM concept_relationship rb
+        WHERE rb.concept_id_1 = {drug} AND rb.relationship_id = 'Has brand name'
+          AND rb.concept_id_2 = :brand AND rb.invalid_reason IS NULL))
+"""
+_FORM_FILTER = """
+    AND (CAST(:form AS integer) IS NULL OR EXISTS (
+        SELECT 1 FROM concept_relationship rf
+        WHERE rf.concept_id_1 = {drug} AND rf.relationship_id = 'RxNorm has dose form'
+          AND rf.concept_id_2 = :form AND rf.invalid_reason IS NULL))
+"""
+
+
 def _strength_rows(
-    session: Session, ingredient_ids: list[int], classes: list[str], dose_form_id: int | None
+    session: Session,
+    ingredient_ids: list[int],
+    classes: list[str],
+    dose_form_id: int | None,
+    brand_id: int | None = None,
 ) -> dict[int, list[dict]]:
     """drug_strength rows of drugs with exactly these ingredients, by drug concept id."""
     rows = session.execute(
@@ -171,13 +197,9 @@ def _strength_rows(
             WHERE c.standard_concept = 'S' AND c.invalid_reason IS NULL
               AND c.vocabulary_id = ANY(:vocabs) AND c.concept_class_id = ANY(:classes)
               AND ds.invalid_reason IS NULL
-              AND (CAST(:form AS integer) IS NULL OR EXISTS (
-                  SELECT 1 FROM concept_relationship r
-                  WHERE r.concept_id_1 = ds.drug_concept_id
-                    AND r.relationship_id = 'RxNorm has dose form'
-                    AND r.concept_id_2 = :form AND r.invalid_reason IS NULL
-              ))
             """
+            + _FORM_FILTER.format(drug="ds.drug_concept_id")
+            + _BRAND_FILTER.format(drug="ds.drug_concept_id")
         ),
         {
             "first": ingredient_ids[0],
@@ -186,6 +208,7 @@ def _strength_rows(
             "vocabs": list(DRUG_VOCABULARIES),
             "classes": classes,
             "form": dose_form_id,
+            "brand": brand_id,
         },
     ).mappings()
     by_drug: dict[int, list[dict]] = {}
@@ -194,51 +217,185 @@ def _strength_rows(
     return by_drug
 
 
-def _prefer_rxnorm(by_drug: dict[int, list[dict]], matches: list[int]) -> list[int]:
+def _prefer_rxnorm(vocabulary_of: dict[int, str], matches: list[int]) -> list[int]:
     """RxNorm Extension only fills gaps in RxNorm; when both match, keep RxNorm."""
-    rxnorm = [d for d in matches if by_drug[d][0]["vocabulary_id"] == "RxNorm"]
-    return rxnorm if rxnorm else matches
+    rxnorm = [d for d in matches if vocabulary_of[d] == "RxNorm"]
+    return sorted(rxnorm if rxnorm else matches)
 
 
-def _clinical_drug_forms(
-    session: Session, ingredient_ids: list[int], dose_form_id: int
+def _drug_forms(
+    session: Session,
+    concept_class: str,
+    ingredient_ids: list[int],
+    dose_form_id: int | None,
+    brand_id: int | None = None,
 ) -> list[int]:
-    return list(
-        session.execute(
-            text(
-                """
-                SELECT c.concept_id
-                FROM concept c
-                WHERE c.concept_class_id = 'Clinical Drug Form' AND c.standard_concept = 'S'
-                  AND c.vocabulary_id = ANY(:vocabs)
-                  AND EXISTS (
-                      SELECT 1 FROM concept_relationship r
-                      WHERE r.concept_id_1 = c.concept_id AND r.relationship_id = 'RxNorm has dose form'
-                        AND r.concept_id_2 = :form AND r.invalid_reason IS NULL)
-                  AND (
-                      SELECT array_agg(DISTINCT r.concept_id_2 ORDER BY r.concept_id_2)
-                      FROM concept_relationship r
-                      WHERE r.concept_id_1 = c.concept_id AND r.relationship_id = 'RxNorm has ing'
-                        AND r.invalid_reason IS NULL
-                  ) = CAST(:ingredients AS integer[])
-                ORDER BY c.vocabulary_id = 'RxNorm' DESC, c.concept_id
-                """
-            ),
-            {
-                "vocabs": list(DRUG_VOCABULARIES),
-                "form": dose_form_id,
-                "ingredients": sorted(set(ingredient_ids)),
-            },
-        ).scalars()
-    )
+    """Clinical/Branded Drug Forms with exactly these ingredients (and form/brand if given)."""
+    rows = session.execute(
+        text(
+            """
+            SELECT c.concept_id, c.vocabulary_id
+            FROM concept c
+            WHERE c.concept_class_id = :cls AND c.standard_concept = 'S'
+              AND c.invalid_reason IS NULL AND c.vocabulary_id = ANY(:vocabs)
+              AND (
+                  SELECT array_agg(DISTINCT r.concept_id_2 ORDER BY r.concept_id_2)
+                  FROM concept_relationship r
+                  WHERE r.concept_id_1 = c.concept_id AND r.relationship_id = 'RxNorm has ing'
+                    AND r.invalid_reason IS NULL
+              ) = CAST(:ingredients AS integer[])
+            """
+            + _FORM_FILTER.format(drug="c.concept_id")
+            + _BRAND_FILTER.format(drug="c.concept_id")
+        ),
+        {
+            "cls": concept_class,
+            "vocabs": list(DRUG_VOCABULARIES),
+            "form": dose_form_id,
+            "brand": brand_id,
+            "ingredients": sorted(set(ingredient_ids)),
+        },
+    ).all()
+    return _prefer_rxnorm({cid: voc for cid, voc in rows}, [cid for cid, _ in rows])
+
+
+def resolve_brand(session: Session, name: str | None) -> int | None:
+    if not name or not name.strip():
+        return None
+    return session.execute(
+        text(
+            """
+            SELECT concept_id FROM concept
+            WHERE concept_class_id = 'Brand Name' AND vocabulary_id = ANY(:vocabs)
+              AND invalid_reason IS NULL AND lower(concept_name) = lower(:name)
+            ORDER BY vocabulary_id = 'RxNorm' DESC, concept_id
+            LIMIT 1
+            """
+        ),
+        {"name": name.strip(), "vocabs": list(DRUG_VOCABULARIES)},
+    ).scalar()
+
+
+def brand_ingredient_sets(session: Session, brand_id: int) -> list[list[int]]:
+    """Distinct ingredient sets of the brand's products (one set = the brand is unambiguous)."""
+    rows = session.execute(
+        text(
+            """
+            SELECT DISTINCT ingredients FROM (
+                SELECT array_agg(DISTINCT ds.ingredient_concept_id ORDER BY ds.ingredient_concept_id)
+                       AS ingredients
+                FROM concept_relationship r
+                JOIN drug_strength ds ON ds.drug_concept_id = r.concept_id_1
+                WHERE r.concept_id_2 = :brand AND r.relationship_id = 'Has brand name'
+                  AND r.invalid_reason IS NULL AND ds.invalid_reason IS NULL
+                GROUP BY r.concept_id_1
+            ) per_product
+            """
+        ),
+        {"brand": brand_id},
+    ).scalars()
+    return [list(r) for r in rows]
 
 
 # --------------------------------------------------------------------------- matching
 
 
+def _match_strengths(
+    session: Session,
+    structure: DrugStructure,
+    ingredient_ids: list[int],
+    levels: list[tuple[str, list[str]]],
+    form_id: int | None,
+    brand_id: int | None,
+) -> DrugMatch | None:
+    component_of = dict(zip(ingredient_ids, structure.components, strict=True))
+    for level, class_ids in levels:
+        by_drug = _strength_rows(session, ingredient_ids, class_ids, form_id, brand_id)
+        matches = [
+            drug
+            for drug, rows in by_drug.items()
+            if all(_strength_matches(component_of[r["ingredient_concept_id"]], r) for r in rows)
+        ]
+        if matches:
+            vocabulary_of = {d: rows[0]["vocabulary_id"] for d, rows in by_drug.items()}
+            matches = _prefer_rxnorm(vocabulary_of, matches)
+            return DrugMatch(level, matches, f"{len(matches)} {class_ids[0]} match(es)")
+    return None
+
+
+def _match_comps(
+    session: Session,
+    structure: DrugStructure,
+    ingredient_ids: list[int],
+    concept_class: str,
+    level: str,
+    brand_id: int | None,
+) -> DrugMatch | None:
+    """Strength without dose form: one Drug Comp per ingredient, combined."""
+    picked = []
+    for ingredient_id, component in zip(ingredient_ids, structure.components, strict=True):
+        single = DrugStructure(components=[component])
+        found = _match_strengths(
+            session, single, [ingredient_id], [(level, [concept_class])], None, brand_id
+        )
+        if found is None or len(found.concept_ids) != 1:
+            return None
+        picked.append(found.concept_ids[0])
+    return DrugMatch(
+        level,
+        picked,
+        f"{concept_class} per ingredient",
+        combined=len(picked) > 1,
+    )
+
+
+def _match_level(
+    session: Session,
+    structure: DrugStructure,
+    ingredient_ids: list[int],
+    form_id: int | None,
+    brand_id: int | None,
+) -> DrugMatch | None:
+    """One pass at the branded (brand_id set) or clinical level."""
+    branded = brand_id is not None
+    prefix = "branded" if branded else "clinical"
+    kind = "Branded" if branded else "Clinical"
+    with_strength = all(c.has_strength for c in structure.components)
+    if with_strength and form_id:
+        levels = [
+            (f"{prefix}_drug", [f"{kind} Drug"]),
+            (f"quant_{prefix}_drug", [f"Quant {kind} Drug"]),
+        ]
+        return _match_strengths(session, structure, ingredient_ids, levels, form_id, brand_id)
+    if with_strength:
+        return _match_comps(
+            session, structure, ingredient_ids, f"{kind} Drug Comp", f"{prefix}_drug_comp", brand_id
+        )
+    forms = _drug_forms(session, f"{kind} Drug Form", ingredient_ids, form_id, brand_id)
+    if form_id and forms:
+        return DrugMatch(f"{prefix}_drug_form", forms, f"{len(forms)} {kind} Drug Form match(es)")
+    if not form_id and len(forms) == 1:
+        # No form in the source, but only one form exists for these ingredients
+        return DrugMatch(f"{prefix}_drug_form", forms, f"the only {kind} Drug Form")
+    return None
+
+
 def match_structure(session: Session, structure: DrugStructure) -> DrugMatch:
+    brand_id = resolve_brand(session, structure.brand_name)
+    notes = []
+    if structure.brand_name and brand_id is None:
+        notes.append(f"unknown brand {structure.brand_name!r}")
     if not structure.components:
-        return DrugMatch(reason="no ingredients")
+        if brand_id is None:
+            return DrugMatch(reason="no ingredients" + (f"; {notes[0]}" if notes else ""))
+        sets = brand_ingredient_sets(session, brand_id)
+        if len(sets) != 1:
+            return DrugMatch(reason=f"brand has {len(sets)} different ingredient sets")
+        ids = sets[0]
+        structure = structure.model_copy(
+            update={"components": [DrugComponent(ingredient=str(i)) for i in ids]}
+        )
+
     names = [c.ingredient for c in structure.components]
     resolved = resolve_ingredients(session, names)
     unresolved = [n for n in names if n.strip().lower() not in resolved]
@@ -253,36 +410,27 @@ def match_structure(session: Session, structure: DrugStructure) -> DrugMatch:
         return DrugMatch(reason="duplicate ingredient")
     with_strength = all(c.has_strength for c in structure.components)
 
-    if with_strength:
-        classes: list[tuple[str, list[str]]] = (
-            [("clinical_drug", ["Clinical Drug"]), ("quant_clinical_drug", ["Quant Clinical Drug"])]
-            if form_id
-            else (
-                [("clinical_drug_comp", ["Clinical Drug Comp"])] if len(ingredient_ids) == 1 else []
-            )
-        )
-        for level, class_ids in classes:
-            by_drug = _strength_rows(session, ingredient_ids, class_ids, form_id)
-            component_of = dict(zip(ingredient_ids, structure.components, strict=True))
-            matches = [
-                drug
-                for drug, rows in by_drug.items()
-                if all(_strength_matches(component_of[r["ingredient_concept_id"]], r) for r in rows)
-            ]
-            if matches:
-                matches = sorted(_prefer_rxnorm(by_drug, matches))
-                return DrugMatch(level, matches, f"{len(matches)} {class_ids[0]} match(es)")
-        return DrugMatch(reason="no drug with these ingredients, strengths and form")
+    # Branded first (when the brand is known), then clinical
+    for level_brand in ([brand_id] if brand_id else []) + [None]:
+        found = _match_level(session, structure, ingredient_ids, form_id, level_brand)
+        if found is not None:
+            if level_brand is None and brand_id is not None:
+                found.reason += "; no branded match, used the clinical level"
+            return found
 
-    if form_id:
-        forms = _clinical_drug_forms(session, ingredient_ids, form_id)
-        if forms:
-            return DrugMatch(
-                "clinical_drug_form", forms, f"{len(forms)} Clinical Drug Form match(es)"
-            )
-        return DrugMatch(reason="no Clinical Drug Form with these ingredients and form")
-    if len(ingredient_ids) == 1:
+    if not with_strength and not form_id:
+        # Ingredients only: map to every ingredient together
         return DrugMatch(
-            "ingredient", ingredient_ids, "ingredient only (no strength or form given)"
+            "ingredient",
+            ingredient_ids,
+            "ingredient(s) only",
+            combined=len(ingredient_ids) > 1,
         )
-    return DrugMatch(reason="several ingredients without strength or form")
+    what = (
+        "strengths and form"
+        if with_strength and form_id
+        else ("strengths" if with_strength else "form")
+    )
+    return DrugMatch(
+        reason=f"no drug with these ingredients and {what}" + (f"; {notes[0]}" if notes else "")
+    )

@@ -99,6 +99,14 @@ export function ReviewPage() {
             <div className="text-muted-foreground text-xs">
               {row.original.concept_id} · {row.original.vocabulary_id} · {row.original.concept_class_id}
             </div>
+            {(row.original.extra_concepts ?? []).map((c) => (
+              <div key={c.concept_id}>
+                <div className="font-medium">+ {c.concept_name}</div>
+                <div className="text-muted-foreground text-xs">
+                  {c.concept_id} · {c.concept_class_id} (mapped together)
+                </div>
+              </div>
+            ))}
           </div>
         ),
       },

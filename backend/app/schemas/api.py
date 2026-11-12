@@ -308,6 +308,12 @@ class SearchRequest(BaseModel):
         return cleaned
 
 
+class ConceptBrief(BaseModel):
+    concept_id: int
+    concept_name: str
+    concept_class_id: str
+
+
 class SearchResult(ConceptOut):
     rank: int
     score: float
@@ -390,6 +396,8 @@ class SuggestionOut(BaseModel):
     created_at: datetime | None
     decided_at: datetime | None
     decided_by: str | None
+    # Combined match: further concepts accepted together with concept_id
+    extra_concepts: list[ConceptBrief] = []
 
 
 class SuggestionPage(BaseModel):
@@ -436,6 +444,8 @@ class SuggestResponse(BaseModel):
     pipeline: str
     outcome: str
     selected: SearchResult | None
+    # Combined match: every concept to map together (selected is the first); empty otherwise
+    selected_concepts: list[SearchResult] = []
     confidence: int | None
     rationale: str | None
     candidates: list[SearchResult]

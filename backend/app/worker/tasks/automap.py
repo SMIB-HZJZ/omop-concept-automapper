@@ -39,13 +39,16 @@ def persist_outcome(
     if state.get("outcome") != "accepted" or not state.get("selected"):
         return "skipped"
     selected = state["selected"]
+    concept_ids = [c["concept_id"] for c in state.get("selected_concepts") or []] or [
+        selected["concept_id"]
+    ]
     method = state.get("method") or "auto_standard"
     with session_scope() as session:
         if mode == "commit":
             written = mapping.map_concepts(
                 session,
                 state["source_id"],
-                [selected["concept_id"]],
+                concept_ids,
                 method=method,
                 user_id=user_id,
                 confidence=state.get("confidence"),
@@ -62,15 +65,18 @@ def persist_outcome(
             text(
                 """
                 INSERT INTO mapping_suggestion
-                    (source_id, concept_id, confidence, method, pipeline, target_domains, rationale, task_id)
-                SELECT :s, :c, :conf, :method, :pipeline, :domains, :rationale, :task
+                    (source_id, concept_id, extra_concept_ids, confidence, method, pipeline,
+                     target_domains, rationale, task_id)
+                SELECT :s, :c, CAST(:extra AS integer[]), :conf, :method, :pipeline, :domains,
+                       :rationale, :task
                 WHERE NOT EXISTS (SELECT 1 FROM source_standard_map WHERE source_id = :s)
                 ON CONFLICT (source_id) WHERE status = 'pending' DO NOTHING
                 """
             ),
             {
                 "s": state["source_id"],
-                "c": selected["concept_id"],
+                "c": concept_ids[0],
+                "extra": concept_ids[1:],
                 "conf": int(state.get("confidence") or 0),
                 "method": method,
                 "pipeline": pipeline,

@@ -50,9 +50,49 @@ CONCEPTS = [
         "S",
         "OMOP9035",
     ),
+    (9040, "Augmentin", "Drug", "RxNorm", "Brand Name", None, "151392"),
+    (
+        9041,
+        "amoxicillin 875 MG / clavulanate 125 MG Oral Tablet [Augmentin]",
+        "Drug",
+        "RxNorm",
+        "Branded Drug",
+        "S",
+        "9041",
+    ),
+    (9042, "Lekadol", "Drug", "RxNorm Extension", "Brand Name", None, "OMOP9042"),
+    (
+        9043,
+        "acetaminophen 500 MG Oral Tablet [Lekadol]",
+        "Drug",
+        "RxNorm Extension",
+        "Branded Drug",
+        "S",
+        "OMOP9043",
+    ),
+    (
+        9044,
+        "amoxicillin / clavulanate Oral Tablet",
+        "Drug",
+        "RxNorm",
+        "Clinical Drug Form",
+        "S",
+        "9044",
+    ),
 ]
-HAS_FORM = [(3, 9010), (9030, 9011), (9031, 9010), (9032, 9010), (9033, 9010), (9035, 9010)]
-HAS_ING = [(9033, 9001)]
+HAS_FORM = [
+    (3, 9010),
+    (9030, 9011),
+    (9031, 9010),
+    (9032, 9010),
+    (9033, 9010),
+    (9035, 9010),
+    (9041, 9010),
+    (9043, 9010),
+    (9044, 9010),
+]
+HAS_ING = [(9033, 9001), (9044, 9002), (9044, 9003)]
+HAS_BRAND = [(9041, 9040), (9043, 9042)]
 STRENGTHS = [
     # drug, ingredient, amount, amount unit, numerator, numerator unit, denominator unit
     (3, 9001, 500, 9020, None, None, None),
@@ -62,6 +102,9 @@ STRENGTHS = [
     (9032, 9001, 500, 9020, None, None, None),
     (9034, 9001, 500, 9020, None, None, None),
     (9035, 9002, 500, 9020, None, None, None),
+    (9041, 9002, 875, 9020, None, None, None),
+    (9041, 9003, 125, 9020, None, None, None),
+    (9043, 9001, 500, 9020, None, None, None),
 ]
 IDS = [c[0] for c in CONCEPTS]
 
@@ -77,7 +120,11 @@ def drug_vocabulary(loaded_vocabulary):
                 ),
                 dict(zip(["id", "name", "domain", "vocab", "cls", "std", "code"], c, strict=True)),
             )
-        for rel, pairs in (("RxNorm has dose form", HAS_FORM), ("RxNorm has ing", HAS_ING)):
+        for rel, pairs in (
+            ("RxNorm has dose form", HAS_FORM),
+            ("RxNorm has ing", HAS_ING),
+            ("Has brand name", HAS_BRAND),
+        ):
             for a, b in pairs:
                 conn.execute(
                     text(
@@ -222,7 +269,9 @@ def test_less_detail_maps_to_less_specific_levels(drug_vocabulary):
         _structure({"ingredient": "acetaminophen", "amount_value": 500, "amount_unit": "mg"})
     )
     assert (comp.level, comp.concept_ids) == ("clinical_drug_comp", [9034])
-    assert _match(_structure({"ingredient": "acetaminophen"})).concept_ids == [9001]
+    # Ingredient only: the one Clinical Drug Form that exists, as requested
+    only = _match(_structure({"ingredient": "acetaminophen"}))
+    assert (only.level, only.concept_ids) == ("clinical_drug_form", [9033])
 
 
 def test_wrong_strength_or_unknown_names_do_not_match(drug_vocabulary):
@@ -385,3 +434,77 @@ def test_csv_structure_drives_automap(
     suggestions = client.get("/api/source-vocabularies/50/suggestions", headers=user_headers).json()
     item = suggestions["items"][0]
     assert item["concept_id"] == 9031 and item["confidence"] == 10
+
+
+# --------------------------------------------------------------------------- brands
+
+
+def _branded(brand, *components, form=None):
+    return DrugStructure(
+        components=[DrugComponent(**c) for c in components], dose_form=form, brand_name=brand
+    )
+
+
+PARACETAMOL_500 = {"ingredient": "acetaminophen", "amount_value": 500, "amount_unit": "mg"}
+
+
+def test_brand_with_full_structure_maps_to_branded_drug(drug_vocabulary):
+    match = _match(
+        _branded(
+            "augmentin",
+            {"ingredient": "amoxicillin", "amount_value": 875, "amount_unit": "mg"},
+            {"ingredient": "clavulanate", "amount_value": 125, "amount_unit": "mg"},
+            form="Oral Tablet",
+        )
+    )
+    assert (match.level, match.concept_ids) == ("branded_drug", [9041])
+
+
+def test_brand_alone_takes_ingredients_from_its_products(drug_vocabulary):
+    # Brand + form, no ingredients or strength: no Branded Drug Form exists -> Clinical Drug Form
+    form_only = _match(_branded("Lekadol", form="Oral Tablet"))
+    assert (form_only.level, form_only.concept_ids) == ("clinical_drug_form", [9033])
+    full = _match(_branded("Lekadol", PARACETAMOL_500, form="Oral Tablet"))
+    assert (full.level, full.concept_ids) == ("branded_drug", [9043])  # RxNorm Extension brand
+
+
+def test_brand_without_branded_product_falls_to_clinical(drug_vocabulary):
+    match = _match(_branded("Augmentin", PARACETAMOL_500, form="Oral Tablet"))
+    assert (match.level, match.concept_ids) == ("clinical_drug", [3])
+    assert "clinical level" in match.reason
+    assert _match(_branded("Nonexistent", PARACETAMOL_500, form="Oral Tablet")).concept_ids == [3]
+
+
+def test_ingredients_only_without_a_form_map_to_every_ingredient(drug_vocabulary):
+    # amoxicillin + clavulanate has exactly one Clinical Drug Form
+    pair = _structure({"ingredient": "amoxicillin"}, {"ingredient": "clavulanate"})
+    assert _match(pair).concept_ids == [9044]
+    # no Clinical Drug Form for this pair: one mapping per ingredient
+    match = _match(_structure({"ingredient": "acetaminophen"}, {"ingredient": "amoxicillin"}))
+    assert (match.level, match.concept_ids, match.combined) == ("ingredient", [9001, 9002], True)
+
+
+def test_combined_match_goes_through_review(
+    client, user_headers, embedded, fake_reranker, drug_vocabulary
+):
+    from tests.conftest import import_source_csv
+
+    csv = (
+        b"source_value,source_concept_name,ingredient\n"
+        b"X-COMBI,Paracetamol + amoksicilin,acetaminophen;amoxicillin\n"
+    )
+    import_source_csv(client, user_headers, 51, csv, is_drug="true")
+    resp = client.post(
+        "/api/source-vocabularies/51/automap",
+        json={"domains": ["Drug"], "drug_specific": True},
+        headers=user_headers,
+    )
+    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=user_headers).json()
+    assert task["result"]["queued"] == 1
+    items = client.get("/api/source-vocabularies/51/suggestions", headers=user_headers).json()
+    item = items["items"][0]
+    assert item["concept_id"] == 9001
+    assert [c["concept_id"] for c in item["extra_concepts"]] == [9002]
+    client.post("/api/suggestions/accept", json={"ids": [item["id"]]}, headers=user_headers)
+    mapped = client.get("/api/source-vocabularies/51/mapped", headers=user_headers).json()
+    assert sorted(r["concept_id"] for r in mapped["items"]) == [9001, 9002]

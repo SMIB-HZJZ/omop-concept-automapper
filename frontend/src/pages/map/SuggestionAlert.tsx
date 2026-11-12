@@ -26,6 +26,12 @@ export function SuggestionAlert({
   onSelect: (concept: ConceptLike) => void;
 }) {
   const suggested = suggestion.selected ?? null;
+  // A combined match (e.g. one concept per ingredient) is selected as a whole
+  const all: ConceptLike[] = suggestion.selected_concepts?.length
+    ? suggestion.selected_concepts
+    : suggested
+      ? [suggested]
+      : [];
   return (
     <Alert>
       <Sparkles />
@@ -34,15 +40,20 @@ export function SuggestionAlert({
           <Badge variant={OUTCOME_VARIANT[suggestion.outcome] ?? "outline"}>{suggestion.outcome}</Badge>
           {suggested ? (
             <span>
-              <b>{suggested.concept_name}</b> (ID {suggested.concept_id}, {suggested.domain_id}) · confidence{" "}
-              <b>{suggestion.confidence ?? "—"}</b>
+              {all.map((c, i) => (
+                <span key={c.concept_id}>
+                  {i > 0 && " + "}
+                  <b>{c.concept_name}</b> (ID {c.concept_id})
+                </span>
+              ))}{" "}
+              · {suggested.domain_id} · confidence <b>{suggestion.confidence ?? "—"}</b>
             </span>
           ) : (
             <span>No concept suggested</span>
           )}
           {suggested && (
-            <Button size="sm" variant="outline" onClick={() => onSelect(suggested)}>
-              Select suggestion
+            <Button size="sm" variant="outline" onClick={() => all.forEach(onSelect)}>
+              {all.length > 1 ? `Select all ${all.length}` : "Select suggestion"}
             </Button>
           )}
           <span className="text-muted-foreground text-xs">

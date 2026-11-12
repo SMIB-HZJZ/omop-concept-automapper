@@ -858,6 +858,15 @@ export interface components {
             /** Embedded Count */
             embedded_count?: number | null;
         };
+        /** ConceptBrief */
+        ConceptBrief: {
+            /** Concept Id */
+            concept_id: number;
+            /** Concept Name */
+            concept_name: string;
+            /** Concept Class Id */
+            concept_class_id: string;
+        };
         /** ConceptLookup */
         ConceptLookup: {
             /** Found */
@@ -1245,6 +1254,11 @@ export interface components {
             /** Outcome */
             outcome: string;
             selected: components["schemas"]["SearchResult"] | null;
+            /**
+             * Selected Concepts
+             * @default []
+             */
+            selected_concepts: components["schemas"]["SearchResult"][];
             /** Confidence */
             confidence: number | null;
             /** Rationale */
@@ -1305,6 +1319,11 @@ export interface components {
             decided_at: string | null;
             /** Decided By */
             decided_by: string | null;
+            /**
+             * Extra Concepts
+             * @default []
+             */
+            extra_concepts: components["schemas"]["ConceptBrief"][];
         };
         /** SuggestionPage */
         SuggestionPage: {

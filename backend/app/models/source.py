@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Column, DateTime, Numeric, Text, func
+from sqlalchemy import Column, DateTime, Integer, Numeric, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
 
@@ -72,6 +72,10 @@ class MappingSuggestion(SQLModel, table=True):
     method: str
     pipeline: str | None = None
     target_domains: list[str] | None = Field(default=None, sa_column=Column(ARRAY(Text)))
+    # Further concepts mapped together with concept_id (combined match)
+    extra_concept_ids: list[int] = Field(
+        default_factory=list, sa_column=Column(ARRAY(Integer), server_default="{}", nullable=False)
+    )
     rationale: str | None = None
     task_id: str | None = None
     status: str = "pending"  # pending | accepted | rejected

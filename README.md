@@ -161,19 +161,20 @@ There is no published OMOP-specific benchmark for these models. Before relying o
 For drug vocabularies (the vocabulary's drug flag) the default pipeline is `automap_drug` once `DRUG_STRENGTH.csv` is imported (`AUTOMAP_DRUG_PIPELINE`):
 
 1. **Structure.** Taken from the optional CSV columns when present, otherwise extracted from the name by the LLM (ingredients as English INN, strengths, RxNorm dose form). Local names in the columns (`paracetamol`, `tableta`) are translated when they do not match.
-2. **Deterministic match** on `drug_strength` in RxNorm and RxNorm Extension, at the level of detail the source has:
+2. **Deterministic match** on `drug_strength` in RxNorm and RxNorm Extension, at the level of detail the source has. With a brand name the branded level is tried first, then the clinical one:
 
-   | Source has | Target |
-   |---|---|
-   | ingredients + strengths + dose form | Clinical Drug (else Quant Clinical Drug) |
-   | one ingredient + strength | Clinical Drug Comp |
-   | ingredients + dose form | Clinical Drug Form |
-   | one ingredient | Ingredient |
+   | Source has | Branded (brand given) | Clinical |
+   |---|---|---|
+   | ingredients + strengths + dose form | Branded Drug | Clinical Drug (else Quant Clinical Drug) |
+   | ingredient(s) + strengths | Branded Drug Comp | Clinical Drug Comp, one per ingredient |
+   | ingredients + dose form | Branded Drug Form | Clinical Drug Form |
+   | ingredients only | Branded Drug Form, if only one exists | Clinical Drug Form, if only one exists; else every Ingredient |
 
-   The ingredient set must be identical, strengths equal after unit conversion (0.5 g = 500 mg; 500 mcg/5 mL = 0.1 mg/mL; 1 % = 10 mg/g or mL; 1 % tolerance) and the dose form identical. RxNorm wins over an RxNorm Extension duplicate. A unique match is accepted with confidence 10 (`auto_drug_structured`).
+   - A brand without ingredients takes its ingredients from its branded products, when they all have the same ingredient set.
+   - "One per ingredient" and "every Ingredient" are combined matches: the source concept is mapped to all of them together, also through the review queue.
+   - The ingredient set must be identical, strengths equal after unit conversion (0.5 g = 500 mg; 500 mcg/5 mL = 0.1 mg/mL; 1 % = 10 mg/g or mL; 1 % tolerance) and the dose form identical. RxNorm wins over an RxNorm Extension duplicate.
+   - A deterministic match is accepted with confidence 10 (`auto_drug_structured`); the rationale names the level and whether the brand was used.
 3. **Fallback.** No match, or several equally good ones: translation, similarity search (tied matches first) and the LLM reranker, which also sees the parsed structure.
-
-Branded drugs (brand names) are not matched deterministically yet; they go through the fallback.
 
 CSV example:
 
