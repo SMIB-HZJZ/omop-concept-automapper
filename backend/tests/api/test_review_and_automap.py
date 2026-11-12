@@ -34,7 +34,9 @@ def test_automap_validation(client, user_headers, embedded):
     )
 
 
-def test_automap_review_mode_then_accept_and_reject(client, user_headers, embedded, fake_reranker):
+def test_automap_review_mode_then_accept_and_reject(
+    client, user_headers, embedded, fake_reranker, no_name_match
+):
     import_source_csv(client, user_headers, 21)
     fake_reranker.overrides = {"headache": 5, "essential hypertension": None}
     task = _run(client, user_headers, 21, drug_specific=True)
@@ -86,7 +88,7 @@ def test_automap_review_mode_then_accept_and_reject(client, user_headers, embedd
     assert history["items"][0]["decided_by"] == "mapper"
 
 
-def test_automap_commit_mode(client, user_headers, embedded, fake_reranker):
+def test_automap_commit_mode(client, user_headers, embedded, fake_reranker, no_name_match):
     import_source_csv(client, user_headers, 22)
     task = _run(client, user_headers, 22, mode="commit", threshold=8)
     assert task["result"]["mapped"] == 4
@@ -97,7 +99,7 @@ def test_automap_commit_mode(client, user_headers, embedded, fake_reranker):
     assert all(r["pipeline"] == "automap" for r in recent)
 
 
-def test_ai_suggest_single_concept(client, user_headers, embedded, fake_reranker):
+def test_ai_suggest_single_concept(client, user_headers, embedded, fake_reranker, no_name_match):
     import_source_csv(client, user_headers, 23)
     item = client.get("/api/source-vocabularies/23/unmapped", headers=user_headers).json()["items"][
         0
@@ -111,7 +113,15 @@ def test_ai_suggest_single_concept(client, user_headers, embedded, fake_reranker
     body = resp.json()
     assert body["outcome"] == "accepted"
     assert body["selected"]["concept_id"] == 1 and body["confidence"] == 9
-    assert [t["node"] for t in body["trace"]] == ["extract_atc7", "retrieve", "rerank", "gate"]
+    assert [t["node"] for t in body["trace"]] == [
+        "extract_atc7",
+        "match_previous",
+        "match_code",
+        "match_name",
+        "retrieve",
+        "rerank",
+        "gate",
+    ]
     assert "A10BA02" in body["trace"][0]["summary"]
     # Nothing is persisted
     assert (

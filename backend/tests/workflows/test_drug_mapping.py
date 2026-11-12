@@ -359,7 +359,13 @@ async def test_parsed_name_is_matched_deterministically(drug_vocabulary):
     result = await run_pipeline(_state("Paracetamol 500 mg tbl"), _ctx(parser), "automap_drug")
     assert result["outcome"] == "accepted" and result["selected"]["concept_id"] == 3
     assert result["confidence"] == 10 and result["method"] == "auto_drug_structured"
-    assert [t["node"] for t in result["trace"]] == ["extract_atc7", "match_drug", "gate"]
+    assert [t["node"] for t in result["trace"]] == [
+        "extract_atc7",
+        "match_previous",
+        "match_code",
+        "match_drug",
+        "gate",
+    ]
 
 
 async def test_provided_structure_skips_the_parser_and_translates_local_names(drug_vocabulary):
@@ -404,10 +410,13 @@ async def test_no_deterministic_match_falls_back_with_context(drug_vocabulary):
     result = await run_pipeline(
         _state("Paracetamol 650 mg tbl"), _ctx(parser, Recording()), "automap_drug"
     )
-    assert [t["node"] for t in result["trace"]][:4] == [
+    assert [t["node"] for t in result["trace"]][:7] == [
         "extract_atc7",
+        "match_previous",
+        "match_code",
         "match_drug",
         "translate",
+        "match_name",
         "retrieve",
     ]
     assert Recording.notes == ["Parsed drug structure (parsed): acetaminophen 650 mg; Oral Tablet"]

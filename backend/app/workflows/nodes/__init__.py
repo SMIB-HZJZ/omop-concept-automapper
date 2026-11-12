@@ -7,5 +7,6 @@ from app.workflows.nodes import (  # noqa: F401
     gates,
     rerank,
     retrieve,
+    text_match,
     translate,
 )

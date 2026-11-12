@@ -152,6 +152,7 @@ class SourceVocabularyOut(BaseModel):
     name: str
     description: str | None = None
     is_drug: bool
+    code_vocabularies: list[str] = []
     created_at: datetime | None = None
     concept_count: int = 0
     mapped_count: int = 0
@@ -162,12 +163,15 @@ class SourceVocabularyCreate(BaseModel):
     name: str | None = None
     description: str | None = None
     is_drug: bool = False
+    code_vocabularies: list[str] = []
 
 
 class SourceVocabularyUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     is_drug: bool | None = None
+    # OMOP vocabulary_ids of the codes in source_value, e.g. ["ICD10"] for MKB-10 codes
+    code_vocabularies: list[str] | None = None
 
 
 class UnmappedItem(BaseModel):
@@ -414,6 +418,11 @@ class SuggestionDecision(BaseModel):
     min_confidence: int | None = Field(default=None, ge=1, le=10)
 
 
+# restrict: only the chosen domains; prefer: chosen domains first, a few others allowed;
+# all: search every domain and let the reranker decide
+DomainMode = Literal["restrict", "prefer", "all"]
+
+
 class AutomapRequest(BaseModel):
     domains: list[str] = Field(min_length=1)
     threshold: int = Field(default=DEFAULT_CONFIDENCE_THRESHOLD, ge=1, le=10)
@@ -421,6 +430,7 @@ class AutomapRequest(BaseModel):
     mode: Literal["review", "commit"] = "review"
     pipeline: str | None = None
     limit: int | None = Field(default=None, ge=1)
+    domain_mode: DomainMode = "restrict"
 
 
 class SuggestRequest(BaseModel):
@@ -430,6 +440,7 @@ class SuggestRequest(BaseModel):
     atc7_codes: list[str] | None = None
     threshold: int = Field(default=DEFAULT_CONFIDENCE_THRESHOLD, ge=1, le=10)
     pipeline: str | None = None
+    domain_mode: DomainMode = "restrict"
 
 
 class TraceStep(BaseModel):

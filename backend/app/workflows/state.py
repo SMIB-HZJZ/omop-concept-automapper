@@ -20,6 +20,10 @@ class AutomapState(TypedDict, total=False):
     # Extra context lines for the reranker (e.g. the parsed drug structure)
     notes: list[str]
     domains: list[str]
+    # restrict: only these domains; prefer: these first, others allowed; all: ignore domains
+    domain_mode: str
+    # Code systems of the source codes (e.g. ICD10), for the match_code step
+    code_vocabularies: list[str]
     drug_specific: bool
     atc7_codes: list[str] | None
     vocabulary_id: str | None
@@ -31,6 +35,8 @@ class AutomapState(TypedDict, total=False):
     selected_concepts: list[dict]
     confidence: int | None
     rationale: str | None
+    # exact | broader | narrower | related (how the pick relates to the source term)
+    match_type: str | None
     method: str
     outcome: str  # accepted | rejected | no_candidates | no_match | error
     route: str

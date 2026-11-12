@@ -207,3 +207,13 @@ def import_source_csv(
     )
     assert resp.status_code == 202, resp.text
     return client.get(f"/api/tasks/{resp.json()['task_id']}", headers=headers).json()
+
+
+@pytest.fixture
+def no_name_match(monkeypatch):
+    """Turn off exact name/synonym matching and reuse of earlier mappings, for tests about the
+    search + LLM path."""
+    from app.services import lexical
+
+    monkeypatch.setattr(lexical, "match_name", lambda names, vocabularies=None: lexical.TextMatch())
+    monkeypatch.setattr(lexical, "match_previous", lambda name, exclude: lexical.TextMatch())

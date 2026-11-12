@@ -2439,6 +2439,16 @@
               }
             ],
             "title": "Limit"
+          },
+          "domain_mode": {
+            "type": "string",
+            "enum": [
+              "restrict",
+              "prefer",
+              "all"
+            ],
+            "title": "Domain Mode",
+            "default": "restrict"
           }
         },
         "type": "object",
@@ -3522,6 +3532,14 @@
             "type": "boolean",
             "title": "Is Drug",
             "default": false
+          },
+          "code_vocabularies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Code Vocabularies",
+            "default": []
           }
         },
         "type": "object",
@@ -3554,6 +3572,14 @@
           "is_drug": {
             "type": "boolean",
             "title": "Is Drug"
+          },
+          "code_vocabularies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Code Vocabularies",
+            "default": []
           },
           "created_at": {
             "anyOf": [
@@ -3620,6 +3646,20 @@
               }
             ],
             "title": "Is Drug"
+          },
+          "code_vocabularies": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Vocabularies"
           }
         },
         "type": "object",
@@ -3688,6 +3728,16 @@
               }
             ],
             "title": "Pipeline"
+          },
+          "domain_mode": {
+            "type": "string",
+            "enum": [
+              "restrict",
+              "prefer",
+              "all"
+            ],
+            "title": "Domain Mode",
+            "default": "restrict"
           }
         },
         "type": "object",
@@ -4799,6 +4849,11 @@
           "errors": {
             "default": 0,
             "title": "Errors",
+            "type": "integer"
+          },
+          "reused": {
+            "default": 0,
+            "title": "Reused",
             "type": "integer"
           },
           "outcomes": {

@@ -832,6 +832,12 @@ export interface components {
             pipeline?: string | null;
             /** Limit */
             limit?: number | null;
+            /**
+             * Domain Mode
+             * @default restrict
+             * @enum {string}
+             */
+            domain_mode: "restrict" | "prefer" | "all";
         };
         /** Body_import_concepts_api_source_vocabularies__vocabulary_id__concepts_import_post */
         Body_import_concepts_api_source_vocabularies__vocabulary_id__concepts_import_post: {
@@ -1189,6 +1195,11 @@ export interface components {
              * @default false
              */
             is_drug: boolean;
+            /**
+             * Code Vocabularies
+             * @default []
+             */
+            code_vocabularies: string[];
         };
         /** SourceVocabularyOut */
         SourceVocabularyOut: {
@@ -1200,6 +1211,11 @@ export interface components {
             description?: string | null;
             /** Is Drug */
             is_drug: boolean;
+            /**
+             * Code Vocabularies
+             * @default []
+             */
+            code_vocabularies: string[];
             /** Created At */
             created_at?: string | null;
             /**
@@ -1221,6 +1237,8 @@ export interface components {
             description?: string | null;
             /** Is Drug */
             is_drug?: boolean | null;
+            /** Code Vocabularies */
+            code_vocabularies?: string[] | null;
         };
         /** SuggestRequest */
         SuggestRequest: {
@@ -1242,6 +1260,12 @@ export interface components {
             threshold: number;
             /** Pipeline */
             pipeline?: string | null;
+            /**
+             * Domain Mode
+             * @default restrict
+             * @enum {string}
+             */
+            domain_mode: "restrict" | "prefer" | "all";
         };
         /** SuggestResponse */
         SuggestResponse: {
@@ -1582,6 +1606,11 @@ export interface components {
              * @default 0
              */
             errors: number;
+            /**
+             * Reused
+             * @default 0
+             */
+            reused: number;
             /**
              * Outcomes
              * @default {}

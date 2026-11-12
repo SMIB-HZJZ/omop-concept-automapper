@@ -95,7 +95,15 @@ async def test_accepts_confident_match_with_atc7_filter():
     assert messages[1]["content"].startswith("Source term: metformin 500 mg tableta")
     # Deterministic by default
     assert provider.requests[0].get("temperature") == 0
-    assert [t["node"] for t in result["trace"]] == ["extract_atc7", "retrieve", "rerank", "gate"]
+    assert [t["node"] for t in result["trace"]] == [
+        "extract_atc7",
+        "match_previous",
+        "match_code",
+        "match_name",
+        "retrieve",
+        "rerank",
+        "gate",
+    ]
 
 
 async def test_rejects_below_threshold():

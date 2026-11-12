@@ -74,6 +74,7 @@ class AutomapResult(_Result):
     queued: int
     skipped: int = 0
     errors: int = 0
+    reused: int = 0
     outcomes: dict[str, int] = {}
     mode: str | None = None
     pipeline: str | None = None

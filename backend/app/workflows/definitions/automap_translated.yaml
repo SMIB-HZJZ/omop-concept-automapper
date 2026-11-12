@@ -1,13 +1,22 @@
-# `automap` with a translation step: the source term is rendered in English OMOP wording, retrieval
-# searches both the original and the English term, and the reranker sees both.
+# `automap` with a translation step: the source term is rendered in English OMOP wording; the
+# exact name match, the searches and the reranker use both the original and the English term.
 name: automap_translated
-description: translate to English → ATC7 extraction → retrieval (original + English) → LLM rerank → confidence gate
+description: earlier mappings → source code → translate → exact name/synonym → vector+keyword search (original + English) → LLM rerank → gate
 entry: extract_atc7
 nodes:
   extract_atc7:
     uses: extract_atc7
+  match_previous:
+    uses: match_previous
+    routes: { matched: gate, next: match_code }
+  match_code:
+    uses: match_code
+    routes: { matched: gate, next: translate }
   translate:
     uses: translate
+  match_name:
+    uses: match_name
+    routes: { matched: gate, next: retrieve }
   retrieve:
     uses: retrieve
     params: { k_default: 15, k_drug: 30 }
@@ -17,7 +26,7 @@ nodes:
     uses: confidence_gate
     routes: { accept: END, reject: END }
 edges:
-  - [extract_atc7, translate]
-  - [translate, retrieve]
+  - [extract_atc7, match_previous]
+  - [translate, match_name]
   - [retrieve, rerank]
   - [rerank, gate]

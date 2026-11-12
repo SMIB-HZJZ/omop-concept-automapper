@@ -51,7 +51,14 @@ async def test_translation_searches_both_terms_and_informs_the_reranker():
     assert result["selected"]["concept_id"] == 201
     assert result["translated_query"] == "type 2 diabetes mellitus"
     assert reranker.kwargs == [{"translation": "type 2 diabetes mellitus"}]
-    assert [t["node"] for t in result["trace"]][:3] == ["extract_atc7", "translate", "retrieve"]
+    assert [t["node"] for t in result["trace"]][:6] == [
+        "extract_atc7",
+        "match_previous",
+        "match_code",
+        "translate",
+        "match_name",
+        "retrieve",
+    ]
 
 
 async def test_english_term_is_not_searched_twice():

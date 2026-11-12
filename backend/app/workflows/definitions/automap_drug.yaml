@@ -1,20 +1,30 @@
-# Drugs: deterministic matching first, the similarity pipeline only as a fallback.
-# 1. extract_atc7  ATC7 code from the source value (used by the fallback search)
-# 2. match_drug    structure from the source CSV columns, or parsed from the name by the LLM, then
-#                  matched on drug_strength (ingredients, strengths, dose form). A unique match is
-#                  accepted with confidence 10; ties go to the reranker as the first candidates.
-# 3. fallback      translate → retrieve → LLM rerank (with the parsed structure as context) → gate
+# Drugs: deterministic steps first, the similarity pipeline only as a fallback.
+# 1. extract_atc7    ATC7 code from the source value (used by the fallback search)
+# 2. match_previous  reviewed mapping of the same name; match_code: source code -> Maps to
+# 3. match_drug      structure from the CSV columns, or parsed from the name by the LLM, matched on
+#                    drug_strength (brand, ingredients, strengths, dose form). A unique match is
+#                    accepted with confidence 10; ties go to the reranker as the first candidates.
+# 4. fallback        translate → exact name/synonym → vector+keyword search → LLM rerank → gate
 name: automap_drug
-description: drugs - structured drug_strength match (ingredients, strength, dose form), else translated similarity search + LLM rerank
+description: drugs - earlier mappings → source code → structured drug_strength match (brand, ingredients, strength, form), else translated search + LLM rerank
 entry: extract_atc7
 nodes:
   extract_atc7:
     uses: extract_atc7
+  match_previous:
+    uses: match_previous
+    routes: { matched: gate, next: match_code }
+  match_code:
+    uses: match_code
+    routes: { matched: gate, next: match_drug }
   match_drug:
     uses: match_drug
     routes: { matched: gate, fallback: translate }
   translate:
     uses: translate
+  match_name:
+    uses: match_name
+    routes: { matched: gate, next: retrieve }
   retrieve:
     uses: retrieve
     params: { k_default: 15, k_drug: 30 }
@@ -24,7 +34,7 @@ nodes:
     uses: confidence_gate
     routes: { accept: END, reject: END }
 edges:
-  - [extract_atc7, match_drug]
-  - [translate, retrieve]
+  - [extract_atc7, match_previous]
+  - [translate, match_name]
   - [retrieve, rerank]
   - [rerank, gate]

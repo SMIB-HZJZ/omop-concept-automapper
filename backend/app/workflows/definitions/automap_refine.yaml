@@ -5,6 +5,15 @@ entry: extract_atc7
 nodes:
   extract_atc7:
     uses: extract_atc7
+  match_previous:
+    uses: match_previous
+    routes: { matched: final_gate, next: match_code }
+  match_code:
+    uses: match_code
+    routes: { matched: final_gate, next: match_name }
+  match_name:
+    uses: match_name
+    routes: { matched: final_gate, next: retrieve }
   retrieve:
     uses: retrieve
     params: { k_default: 15, k_drug: 30 }
@@ -19,7 +28,7 @@ nodes:
     uses: confidence_gate
     routes: { accept: END, reject: END }
 edges:
-  - [extract_atc7, retrieve]
+  - [extract_atc7, match_previous]
   - [retrieve, rerank]
   - [rerank, gate]
   - [refine, final_gate]

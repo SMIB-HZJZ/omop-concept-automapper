@@ -96,6 +96,8 @@ async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser):
         threshold=body.threshold,
         atc7_codes=atc7 or None,
         drug_structure=source.get("drug_structure"),
+        domain_mode=body.domain_mode,
+        code_vocabularies=source.get("code_vocabularies") or [],
     )
     if body.query:
         # An edited search name is both the search query and the term the LLM judges

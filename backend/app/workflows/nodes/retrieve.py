@@ -17,6 +17,12 @@ class RetrieveParams(BaseModel):
     # When the ATC7-filtered search finds nothing, search again without the ATC7 filter.
     # Off by default (as in the Streamlit app): a drug outside its ATC7 class is a wrong match.
     atc7_fallback: bool = False
+    # Keyword (trigram) search on names and synonyms next to the vector search, fused by rank
+    keyword: bool = True
+    # Reciprocal rank fusion constant (larger = flatter weighting of ranks)
+    rrf_k: int = Field(default=60, ge=1)
+    # domain_mode "prefer": how many candidates from other domains are added
+    other_domains: int = Field(default=5, ge=0, le=50)
 
 
 def _merge(result_lists: list[list[dict]], k: int) -> list[dict]:
@@ -31,15 +37,34 @@ def _merge(result_lists: list[list[dict]], k: int) -> list[dict]:
     return [{**r, "rank": i + 1} for i, r in enumerate(merged)]
 
 
+def _fuse(result_lists: list[list[dict]], k: int, rrf_k: int) -> list[dict]:
+    """Reciprocal rank fusion: concepts ranked high by several searches come first."""
+    fused: dict[int, float] = {}
+    first: dict[int, dict] = {}
+    for results in result_lists:
+        for rank, r in enumerate(results, 1):
+            cid = r["concept_id"]
+            fused[cid] = fused.get(cid, 0.0) + 1.0 / (rrf_k + rank)
+            # keep the vector score when there is one (keyword scores are on another scale)
+            if cid not in first or r.get("source") == "vector":
+                first[cid] = r
+    order = sorted(fused, key=lambda cid: fused[cid], reverse=True)[:k]
+    return [{**first[cid], "rank": i + 1} for i, cid in enumerate(order)]
+
+
 @node(
-    "retrieve", params=RetrieveParams, description="Vector search for candidate standard concepts"
+    "retrieve",
+    params=RetrieveParams,
+    description="Vector + keyword search for candidate standard concepts (rank fusion)",
 )
 async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams) -> dict:
     drug = bool(state.get("drug_specific"))
     k = params.k_drug if drug else params.k_default
     atc7 = (state.get("atc7_codes") or []) if (drug and params.use_atc7) else []
+    domains = state.get("domains") or []
+    mode = state.get("domain_mode") or "restrict"
     filters = SearchFilters(
-        domains=state.get("domains") or [],
+        domains=domains if mode != "all" else [],
         vocabulary_id=state.get("vocabulary_id"),
         atc7_codes=atc7,
     )
@@ -48,27 +73,44 @@ async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams
     translated = state.get("translated_query")
     if translated and translated.strip().lower() != query.strip().lower():
         queries.append(translated)
+    keyword = params.keyword and ctx.lexical is not None
 
-    async def search(f: SearchFilters) -> list[dict]:
-        found = await asyncio.gather(
-            *(asyncio.to_thread(ctx.searcher.search, q, k, f) for q in queries)
+    async def search(f: SearchFilters, limit: int) -> list[dict]:
+        calls = [asyncio.to_thread(ctx.searcher.search, q, limit, f) for q in queries]
+        if keyword:
+            calls += [asyncio.to_thread(ctx.lexical.keyword_search, q, limit, f) for q in queries]
+        found = await asyncio.gather(*calls)
+        vector = [[{**r, "source": "vector"} for r in lst] for lst in found[: len(queries)]]
+        if not keyword:
+            return _merge(vector, limit)
+        lexical = [[{**r, "source": "keyword"} for r in lst] for lst in found[len(queries) :]]
+        return _fuse(vector + lexical, limit, params.rrf_k)
+
+    results = await search(filters, k)
+    note = f"ATC7 {', '.join(atc7)}" if atc7 else ("vector+keyword" if keyword else "similarity")
+    if not results and atc7 and params.atc7_fallback:
+        filters.atc7_codes = ()
+        results = await search(filters, k)
+        note = "no ATC7 match, fell back to similarity"
+    if mode == "prefer" and domains and params.other_domains:
+        others = await search(
+            SearchFilters(vocabulary_id=filters.vocabulary_id, atc7_codes=filters.atc7_codes), k
         )
-        return _merge(found, k)
-
-    results = await search(filters)
+        seen = {r["concept_id"] for r in results}
+        extra = [
+            r for r in others if r["concept_id"] not in seen and r.get("domain_id") not in domains
+        ]
+        results = results + extra[: params.other_domains]
+        note += f", +{min(len(extra), params.other_domains)} from other domains"
     structured = state.get("structured_candidates") or []
     if structured:
-        # Tied deterministic drug matches go first, the similarity results fill up to k
+        # Tied deterministic matches go first, the search results fill up to k
         ids = {c["concept_id"] for c in structured}
         results = [{**c, "score": 1.0} for c in structured] + [
             r for r in results if r["concept_id"] not in ids
         ]
-        results = [{**r, "rank": i + 1} for i, r in enumerate(results[: max(k, len(structured))])]
-    note = f"ATC7 {', '.join(atc7)}" if atc7 else "similarity"
-    if not results and atc7 and params.atc7_fallback:
-        filters.atc7_codes = ()
-        results = await search(filters)
-        note = "no ATC7 match, fell back to similarity"
+        results = results[: max(len(results), len(structured))]
+    results = [{**r, "rank": i + 1} for i, r in enumerate(results)]
     if len(queries) > 1:
         query = " | ".join(queries)
     update: dict = {
@@ -76,6 +118,11 @@ async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams
         "method": "auto_drug" if drug else "auto_standard",
         "_summary": f"{len(results)} candidates for '{query}' (k={k}, {note})",
     }
+    if mode == "prefer" and domains:
+        update["notes"] = [
+            *(state.get("notes") or []),
+            f"Preferred domains: {', '.join(domains)}. Choose another domain only if it fits clearly better.",
+        ]
     if not results:
         update["outcome"] = "no_candidates"
     return update

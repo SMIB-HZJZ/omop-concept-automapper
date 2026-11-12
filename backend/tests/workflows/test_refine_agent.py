@@ -63,6 +63,9 @@ async def test_agent_refines_rejected_mapping():
     assert ("acetaminophen 500 mg tablet", 5, ("Drug",), ()) in searcher.calls
     assert [t["node"] for t in result["trace"]] == [
         "extract_atc7",
+        "match_previous",
+        "match_code",
+        "match_name",
         "retrieve",
         "rerank",
         "gate",

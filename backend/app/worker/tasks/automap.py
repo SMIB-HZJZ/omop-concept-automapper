@@ -6,6 +6,7 @@ persists accepted results either as pending suggestions (review mode) or directl
 """
 
 import asyncio
+import json
 import logging
 
 from sqlalchemy import text
@@ -13,6 +14,7 @@ from sqlalchemy import text
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.llm.gateway import aclose_async_client
+from app.models import SourceVocabulary
 from app.services import mapping
 from app.services.settings_store import get_effective_config
 from app.worker.base import TrackedTask
@@ -108,9 +110,38 @@ async def automap_concepts(
     user_id: int | None,
     concurrency: int,
     compiled: tuple | None = None,
+    domain_mode: str = "restrict",
+    code_vocabularies: list[str] | None = None,
 ) -> dict:
     compiled = compiled or get_pipeline(pipeline)
-    counts = {"processed": 0, "mapped": 0, "queued": 0, "skipped": 0, "errors": 0}
+    counts = {"processed": 0, "mapped": 0, "queued": 0, "skipped": 0, "errors": 0, "reused": 0}
+    # Source lists repeat terms: decide each distinct (name, code, structure) once per run
+    decisions: dict[tuple, asyncio.Future] = {}
+
+    def dedupe_key(concept: dict) -> tuple:
+        return (
+            " ".join((concept["source_concept_name"] or "").lower().split()),
+            (concept["source_value"] or "").strip().upper() if code_vocabularies else "",
+            json.dumps(concept.get("drug_structure"), sort_keys=True),
+        )
+
+    async def decide(concept: dict) -> dict:
+        return await run_pipeline(
+            initial_state(
+                source_id=concept["source_id"],
+                source_value=concept["source_value"],
+                source_name=concept["source_concept_name"],
+                domains=domains,
+                drug_specific=drug_specific,
+                threshold=threshold,
+                drug_structure=concept.get("drug_structure"),
+                domain_mode=domain_mode,
+                code_vocabularies=code_vocabularies,
+            ),
+            ctx,
+            compiled=compiled,
+        )
+
     outcomes: dict[str, int] = {}
     semaphore = asyncio.Semaphore(max(1, concurrency))
     cancelled = asyncio.Event()
@@ -121,19 +152,13 @@ async def automap_concepts(
             if cancelled.is_set():
                 return
             try:
-                state = await run_pipeline(
-                    initial_state(
-                        source_id=concept["source_id"],
-                        source_value=concept["source_value"],
-                        source_name=concept["source_concept_name"],
-                        domains=domains,
-                        drug_specific=drug_specific,
-                        threshold=threshold,
-                        drug_structure=concept.get("drug_structure"),
-                    ),
-                    ctx,
-                    compiled=compiled,
-                )
+                key = dedupe_key(concept)
+                future = decisions.get(key)
+                if future is None:
+                    future = decisions[key] = asyncio.ensure_future(decide(concept))
+                else:
+                    counts["reused"] += 1
+                state = {**(await future), "source_id": concept["source_id"]}
                 outcomes[state.get("outcome", "unknown")] = (
                     outcomes.get(state.get("outcome", "unknown"), 0) + 1
                 )
@@ -179,12 +204,15 @@ def run_automap(
     pipeline: str | None = None,
     limit: int | None = None,
     user_id: int | None = None,
+    domain_mode: str = "restrict",
 ) -> dict:
     pipeline = pipeline or default_pipeline(drug_specific)
     compiled = get_pipeline(pipeline)  # resolved once; also fails fast on an invalid pipeline
     with session_scope() as session:
         cfg = get_effective_config(session)
         concepts = mapping.get_unmapped_concepts_for_automap(session, vocabulary_id, limit)
+        vocabulary = session.get(SourceVocabulary, vocabulary_id)
+        code_vocabularies = list(vocabulary.code_vocabularies or []) if vocabulary else []
     self.progress.phase(
         f"Auto-mapping {len(concepts):,} concepts with '{pipeline}'", total=len(concepts)
     )
@@ -212,6 +240,8 @@ def run_automap(
                 user_id=user_id,
                 concurrency=get_settings().automap_concurrency,
                 compiled=compiled,
+                domain_mode=domain_mode,
+                code_vocabularies=code_vocabularies,
             )
         finally:
             await aclose_async_client()

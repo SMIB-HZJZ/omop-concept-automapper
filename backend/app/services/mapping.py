@@ -40,7 +40,7 @@ def list_source_vocabularies(session: Session) -> list[dict]:
     rows = session.execute(
         text(
             """
-            SELECT v.id, v.name, v.description, v.is_drug, v.created_at,
+            SELECT v.id, v.name, v.description, v.is_drug, v.code_vocabularies, v.created_at,
                    COUNT(sc.source_id) AS concept_count,
                    COUNT(sc.source_id) FILTER (
                        WHERE EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
@@ -148,7 +148,8 @@ def get_source_concept(session: Session, source_id: int) -> dict | None:
             text(
                 """
             SELECT sc.source_id, sc.source_value, sc.source_concept_name,
-                   sc.source_vocabulary_id, sc.freq, v.is_drug, sc.drug_structure
+                   sc.source_vocabulary_id, sc.freq, v.is_drug, sc.drug_structure,
+                   v.code_vocabularies
             FROM source_concepts sc JOIN source_vocabulary v ON v.id = sc.source_vocabulary_id
             WHERE sc.source_id = :s
             """

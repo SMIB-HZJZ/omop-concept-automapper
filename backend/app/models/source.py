@@ -15,6 +15,10 @@ class SourceVocabulary(SQLModel, table=True):
     name: str
     description: str | None = None
     is_drug: bool = False
+    # Code systems of source_value (e.g. ["ICD10"]) for deterministic code mapping
+    code_vocabularies: list[str] = Field(
+        default_factory=list, sa_column=Column(ARRAY(Text), server_default="{}", nullable=False)
+    )
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )

@@ -11,7 +11,7 @@ from app.llm.drug_parser import DrugParser
 from app.llm.embeddings import Embedder
 from app.llm.structured import Reranker, Translator
 from app.services import concepts as concept_service
-from app.services import drug_matching
+from app.services import drug_matching, lexical
 from app.services.settings_store import EffectiveConfig
 from app.vector.store import PgVectorStore, SearchFilters
 from app.workflows.builder import get_pipeline, load_definitions
@@ -88,6 +88,7 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
         drug_parser=drug_parser,
         # Both need drug_strength; without it the drug step falls back immediately
         drug_matcher=_match_drug if drug_parser is not None else None,
+        lexical=lexical,
         get_concepts=_get_concepts,
         get_ancestors=_get_ancestors,
         settings=get_settings(),
@@ -107,6 +108,8 @@ def initial_state(
     atc7_codes: list[str] | None = None,
     vocabulary_id: str | None = None,
     drug_structure: dict | None = None,
+    domain_mode: str = "restrict",
+    code_vocabularies: list[str] | None = None,
 ) -> AutomapState:
     return AutomapState(
         source_id=source_id,
@@ -124,6 +127,9 @@ def initial_state(
         rationale=None,
         translated_query=None,
         drug_structure=drug_structure,
+        domain_mode=domain_mode,
+        code_vocabularies=code_vocabularies or [],
+        match_type=None,
         structured_candidates=[],
         selected_concepts=[],
         notes=[],
