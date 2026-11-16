@@ -203,3 +203,48 @@ def test_non_standard_mappings_are_replaced_or_removed_after_reimport(
     assert audit.status_code == 200
     methods = {r["mapping_method"] for r in audit.json()}
     assert {"auto_vocab_update", "vocab_removed"} <= methods
+
+
+def test_vocabulary_import_reads_an_athena_zip(
+    client, admin_headers, loaded_vocabulary, tmp_path, monkeypatch
+):
+    import zipfile
+
+    from app.core.config import get_settings
+    from tests.conftest import FIXTURES
+
+    archive = tmp_path / "vocabulary_download_v5.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        for csv in (FIXTURES / "vocabulary").glob("*.csv"):
+            zf.write(csv, f"athena/{csv.name}")  # a sub-folder inside the zip is fine
+        zf.writestr("readme.txt", "not a table")
+    monkeypatch.setattr(get_settings(), "vocabulary_dir", str(tmp_path))
+
+    files = client.get("/api/vocabulary/status", headers=admin_headers).json()["files"]
+    by_table = {f["table_name"]: f for f in files}
+    assert by_table["concept"]["exists"] and by_table["concept"]["archive"] == archive.name
+    assert by_table["drug_strength"]["exists"] is False  # not in the fixtures, so not in the zip
+
+    resp = client.post("/api/vocabulary/import", headers=admin_headers)
+    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
+    assert task["status"] == "SUCCESS", task
+    assert task["result"]["tables"]["concept_relationship"]["status"] == "success"
+    assert task["result"]["tables"]["concept_relationship"]["records_imported"] > 0
+
+
+def test_newer_csv_wins_over_an_older_zip(tmp_path):
+    import os
+    import zipfile
+
+    from app.services.vocabulary_status import check_vocabulary_files
+
+    archive = tmp_path / "old.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("CONCEPT.csv", "concept_id\n")
+        zf.writestr("CONCEPT_ANCESTOR.csv", "ancestor_concept_id\n")
+    os.utime(archive, (1_000_000, 1_000_000))
+    (tmp_path / "CONCEPT.csv").write_text("concept_id\n")
+    files = check_vocabulary_files(str(tmp_path))
+    assert files["concept"]["archive"] is None  # the CSV is newer
+    assert files["concept_ancestor"]["archive"] == "old.zip"  # only in the zip
+    assert files["concept_relationship"]["exists"] is False

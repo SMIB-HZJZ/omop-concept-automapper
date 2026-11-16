@@ -1,6 +1,11 @@
 """Status of the OMOP vocabulary tables and the files waiting to be imported."""
 
+import glob
 import os
+import zipfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import IO
 
 from sqlalchemy import text
 from sqlmodel import Session
@@ -19,19 +24,72 @@ VOCABULARY_FILES = {
 }
 
 
+def latest_archive(vocabulary_dir: str) -> str | None:
+    """The newest ``.zip`` (an Athena download) in the vocabulary directory, if any."""
+    archives = [
+        p
+        for p in glob.glob(os.path.join(vocabulary_dir, "*"))
+        if p.lower().endswith(".zip") and os.path.isfile(p)
+    ]
+    return max(archives, key=os.path.getmtime) if archives else None
+
+
+def _archive_members(archive: str) -> dict[str, zipfile.ZipInfo]:
+    """Upper-cased file name -> entry; Athena puts the CSVs at the root, but a sub-folder works."""
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            return {
+                os.path.basename(i.filename).upper(): i for i in zf.infolist() if not i.is_dir()
+            }
+    except (zipfile.BadZipFile, OSError):
+        return {}
+
+
 def check_vocabulary_files(vocabulary_dir: str | None = None) -> dict[str, dict]:
+    """Where each table would be imported from: ``<dir>/<FILE>.csv`` or the same file inside the
+    newest zip in the directory. If both exist, the newer one wins (a fresh download is not
+    shadowed by CSVs left over from the previous release)."""
     vocabulary_dir = vocabulary_dir or get_settings().vocabulary_dir
+    archive = latest_archive(vocabulary_dir)
+    members = _archive_members(archive) if archive else {}
     status = {}
     for table, filename in VOCABULARY_FILES.items():
         path = os.path.join(vocabulary_dir, filename)
         exists = os.path.isfile(path)
-        status[table] = {
-            "filename": filename,
-            "path": path,
-            "exists": exists,
-            "size": os.path.getsize(path) if exists else 0,
-        }
+        entry = members.get(filename.upper())
+        use_archive = entry is not None and (
+            not exists or os.path.getmtime(archive) > os.path.getmtime(path)
+        )
+        if use_archive:
+            status[table] = {
+                "filename": filename,
+                "path": f"{archive}:{entry.filename}",
+                "exists": True,
+                "size": entry.file_size,  # uncompressed, for byte progress
+                "archive": os.path.basename(archive),
+                "archive_path": archive,
+                "member": entry.filename,
+            }
+        else:
+            status[table] = {
+                "filename": filename,
+                "path": path,
+                "exists": exists,
+                "size": os.path.getsize(path) if exists else 0,
+                "archive": None,
+            }
     return status
+
+
+@contextmanager
+def open_vocabulary_file(info: dict) -> Iterator[IO[bytes]]:
+    """A binary stream of one table's file, decompressed on the fly when it is in a zip."""
+    if info.get("archive"):
+        with zipfile.ZipFile(info["archive_path"]) as zf, zf.open(info["member"]) as fh:
+            yield fh
+    else:
+        with open(info["path"], "rb") as fh:
+            yield fh
 
 
 @cached("vocab")

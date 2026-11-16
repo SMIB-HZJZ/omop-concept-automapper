@@ -3208,6 +3208,17 @@
           "size": {
             "type": "integer",
             "title": "Size"
+          },
+          "archive": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive"
           }
         },
         "type": "object",

@@ -1073,6 +1073,8 @@ export interface components {
             exists: boolean;
             /** Size */
             size: number;
+            /** Archive */
+            archive?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {

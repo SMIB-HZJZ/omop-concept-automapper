@@ -12,5 +12,6 @@
 data/
 vocabulary/*.csv
 vocabulary/*.CSV
+vocabulary/*.zip
 docs/
 frontend/node_modules

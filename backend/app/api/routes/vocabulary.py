@@ -17,7 +17,7 @@ def vocabulary_status(_: CurrentUser, session: SessionDep):
     files = check_vocabulary_files()
     return VocabularyStatus(
         tables=get_table_status(session),
-        files=[{"table_name": t, **f} for t, f in files.items()],
+        files=[{"table_name": t, **f} for t, f in files.items()],  # extra keys are dropped
         vocabulary_dir=get_settings().vocabulary_dir,
     )
 

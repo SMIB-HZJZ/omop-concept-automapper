@@ -69,7 +69,7 @@ This version starts from an empty database: import the vocabulary and embed conc
 ## Using the app
 
 1. **Import → OMOP Vocabulary Tables** (admin).
-   - Put `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv` and `CONCEPT_ANCESTOR.csv` (tab-delimited Athena export) in `vocabulary/`. Add `DRUG_STRENGTH.csv` (optional) to enable deterministic drug mapping.
+   - Put the Athena download zip in `vocabulary/` as it is (it is read without unpacking), or the CSVs from it: `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv` and `CONCEPT_ANCESTOR.csv`, plus the optional `DRUG_STRENGTH.csv` (deterministic drug mapping) and `CONCEPT_SYNONYM.csv` (synonyms).
    - Start the import. It runs in the background with a progress bar, and you can leave the page.
    - Re-importing upserts concepts and removes mappings to concepts that are no longer standard.
 2. **Import → ATC7 Processing** (admin). Computes the 7-character ATC codes of every standard drug. These are used to narrow drug searches.

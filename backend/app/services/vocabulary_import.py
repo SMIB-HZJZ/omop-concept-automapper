@@ -1,5 +1,7 @@
 """OMOP vocabulary import, streamed from the vocabulary directory with COPY … FROM STDIN.
 
+Files are read as CSVs or straight from an Athena download zip (decompressed while streaming).
+
 Behaviour is ported from the Streamlit app:
 - ``concept`` is upserted through a temp table (existing concepts are updated, not deleted)
 - ``concept_relationship`` and ``concept_ancestor`` are replaced completely
@@ -15,7 +17,11 @@ import os
 
 import psycopg
 
-from app.services.vocabulary_status import VOCABULARY_FILES, check_vocabulary_files
+from app.services.vocabulary_status import (
+    VOCABULARY_FILES,
+    check_vocabulary_files,
+    open_vocabulary_file,
+)
 from app.worker.progress import ProgressReporter, TaskCancelled
 
 logger = logging.getLogger(__name__)
@@ -60,9 +66,12 @@ def _constraint_defs(cur: psycopg.Cursor, table: str) -> list[tuple[str, str]]:
 
 
 def _copy_file(
-    cur: psycopg.Cursor, target: str, path: str, tracker: ByteProgress, label: str
+    cur: psycopg.Cursor, target: str, info: dict, tracker: ByteProgress, label: str
 ) -> None:
-    with open(path, "rb") as fh, cur.copy(f"COPY {target} FROM STDIN {COPY_OPTIONS}") as copy:
+    with (
+        open_vocabulary_file(info) as fh,
+        cur.copy(f"COPY {target} FROM STDIN {COPY_OPTIONS}") as copy,
+    ):
         while chunk := fh.read(CHUNK):
             copy.write(chunk)
             tracker.advance(len(chunk), f"Loading {label}")
@@ -87,7 +96,7 @@ def _log_import(
 
 
 def import_concept_upsert(
-    conn: psycopg.Connection, path: str, tracker: ByteProgress, task_id: str | None
+    conn: psycopg.Connection, info: dict, tracker: ByteProgress, task_id: str | None
 ) -> int:
     """Upsert CONCEPT.csv. Indexes stay in place so searches keep working during the import;
     only rows that actually changed are written, which keeps a release-to-release update cheap."""
@@ -95,7 +104,7 @@ def import_concept_upsert(
         cur.execute(
             "CREATE TEMP TABLE temp_concept (LIKE concept INCLUDING DEFAULTS) ON COMMIT DROP"
         )
-        _copy_file(cur, "temp_concept", path, tracker, "CONCEPT.csv")
+        _copy_file(cur, "temp_concept", info, tracker, "CONCEPT.csv")
         if tracker.progress:
             tracker.progress.update(message="Upserting concepts", force=True)
         cur.execute("ANALYZE temp_concept")
@@ -121,12 +130,12 @@ def import_concept_upsert(
         written = cur.fetchall()
         records = sum(1 for (inserted,) in written if inserted)
         logger.info("concept: %d inserted, %d updated", records, len(written) - records)
-        _log_import(cur, "concept", path, records, "completed", None, task_id)
+        _log_import(cur, "concept", info["path"], records, "completed", None, task_id)
     return records
 
 
 def import_truncate_copy(
-    conn: psycopg.Connection, table: str, path: str, tracker: ByteProgress, task_id: str | None
+    conn: psycopg.Connection, table: str, info: dict, tracker: ByteProgress, task_id: str | None
 ) -> int:
     """Replace ``table`` with the file's contents without blocking readers.
 
@@ -139,7 +148,7 @@ def import_truncate_copy(
         constraints = _constraint_defs(cur, table)
         cur.execute(f"DROP TABLE IF EXISTS {shadow}")
         cur.execute(f"CREATE TABLE {shadow} (LIKE {table} INCLUDING DEFAULTS)")
-        _copy_file(cur, shadow, path, tracker, VOCABULARY_FILES[table])
+        _copy_file(cur, shadow, info, tracker, VOCABULARY_FILES[table])
         if tracker.progress:
             tracker.progress.update(message=f"Building {table} indexes", force=True)
         for name, definition in indexes:
@@ -164,7 +173,7 @@ def import_truncate_copy(
             cur.execute(f'ALTER INDEX "{name}_new" RENAME TO "{name}"')
         for name, _ in constraints:
             cur.execute(f'ALTER TABLE {table} RENAME CONSTRAINT "{name}_new" TO "{name}"')
-        _log_import(cur, table, path, records, "completed", None, task_id)
+        _log_import(cur, table, info["path"], records, "completed", None, task_id)
     return records
 
 
@@ -188,9 +197,9 @@ def import_all(
             continue
         try:
             if table == "concept":
-                records = import_concept_upsert(conn, info["path"], tracker, task_id)
+                records = import_concept_upsert(conn, info, tracker, task_id)
             else:
-                records = import_truncate_copy(conn, table, info["path"], tracker, task_id)
+                records = import_truncate_copy(conn, table, info, tracker, task_id)
             results[table] = {"status": "success", "records_imported": records, "error": None}
         except TaskCancelled:
             raise

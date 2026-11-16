@@ -51,6 +51,7 @@ Thumbs.db
 data/
 uploads/
 temp_*.csv
+vocabulary/*.zip
 # Data files (vocabularies, source concepts) are never committed
 *.csv
 store/

@@ -137,6 +137,8 @@ class FileStatus(BaseModel):
     filename: str
     exists: bool
     size: int
+    # Name of the zip the file is read from (None: a plain CSV in the directory)
+    archive: str | None = None
 
 
 class VocabularyStatus(BaseModel):

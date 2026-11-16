@@ -54,10 +54,12 @@ export function VocabularyTab() {
         <CardHeader>
           <CardTitle>Import OMOP vocabulary tables</CardTitle>
           <CardDescription>
-            Place your OMOP vocabulary files (from Athena) in the <code>vocabulary/</code> directory:{" "}
-            <code>CONCEPT.csv</code>, <code>CONCEPT_RELATIONSHIP.csv</code> and <code>CONCEPT_ANCESTOR.csv</code>, then
-            run the import. Concepts are upserted; relationships and ancestors are replaced. Mappings to concepts that
-            are no longer standard are removed afterwards. Search and mapping keep working while the import runs.
+            Put the Athena download zip (no need to unpack it) or its CSV files in the <code>vocabulary/</code>{" "}
+            directory: <code>CONCEPT.csv</code>, <code>CONCEPT_RELATIONSHIP.csv</code> and{" "}
+            <code>CONCEPT_ANCESTOR.csv</code>, optionally <code>DRUG_STRENGTH.csv</code> and{" "}
+            <code>CONCEPT_SYNONYM.csv</code>. With several zips, the newest is used; a CSV next to it is used only if it
+            is newer. Concepts are upserted; the other tables are replaced. Mappings to concepts that are no longer
+            standard are replaced by their successor or removed. Search and mapping keep working during the import.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -92,7 +94,10 @@ export function VocabularyTab() {
               ) : (
                 <XCircle className="text-destructive size-4" aria-hidden />
               )}
-              <span className="flex-1 font-medium">{f.filename}</span>
+              <span className="flex-1 font-medium">
+                {f.filename}
+                {f.archive && <span className="text-muted-foreground font-normal"> in {f.archive}</span>}
+              </span>
               <span className="text-muted-foreground w-24 text-right tabular-nums">
                 {f.exists ? formatBytes(f.size) : "Not found"}
               </span>

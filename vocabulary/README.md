@@ -19,10 +19,15 @@ Optional:
 
 They must be in the Athena download format: tab-delimited, with a header row. Missing files are skipped and reported.
 
+You can also leave the Athena download as it is: put the `.zip` here and the files are read straight
+from it (decompressed while importing, nothing is unpacked to disk). With several zips, the newest is
+used. If a CSV and the zip both contain a table, the newer of the two is used, so CSVs left over from
+an older release do not shadow a fresh download.
+
 ## Usage
 
 1. Download the OMOP vocabulary files from [OHDSI Athena](https://athena.ohdsi.org/).
-2. Place the CSV files in this directory.
+2. Place the downloaded `.zip` (or the CSV files from it) in this directory.
 3. Sign in as an admin and open **Import Data → OMOP Vocabulary Tables**, which shows whether each file was found and its size.
 4. Click **Import OMOP Vocabulary**. The import runs in the background, and you can follow its progress in the task tray.
 5. Afterwards, run **ATC7 Processing** and embed the standard concepts (**Embedding Management**).
