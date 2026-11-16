@@ -71,7 +71,11 @@ This version starts from an empty database: import the vocabulary and embed conc
 1. **Import → OMOP Vocabulary Tables** (admin).
    - Put the Athena download zip in `vocabulary/` as it is (it is read without unpacking), or the CSVs from it: `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv` and `CONCEPT_ANCESTOR.csv`, plus the optional `DRUG_STRENGTH.csv` (deterministic drug mapping) and `CONCEPT_SYNONYM.csv` (synonyms).
    - Start the import. It runs in the background with a progress bar, and you can leave the page.
-   - Re-importing upserts concepts and removes mappings to concepts that are no longer standard.
+   - Importing a new release updates everything derived from the vocabulary:
+     - mappings to concepts that are no longer standard are replaced by their `Maps to` successor, or removed (audit: `auto_vocab_update`, `vocab_removed`);
+     - ATC7 codes of drugs are recomputed;
+     - every embedding collection drops vectors of concepts that left the standard set, moves domain labels, and flags vectors whose embedded text (name, synonyms, class/domain) changed;
+     - the active collection is then re-embedded for changed concepts and new concepts in the domains it already covers (`AUTO_EMBED_AFTER_VOCABULARY_IMPORT`, default on).
 2. **Import → ATC7 Processing** (admin). Computes the 7-character ATC codes of every standard drug. These are used to narrow drug searches.
 3. **Import → Source Concepts**. Upload a comma-delimited CSV:
    - Required columns: `source_value` and `source_concept_name`.

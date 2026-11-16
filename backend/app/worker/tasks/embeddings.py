@@ -1,5 +1,6 @@
 """Embedding tasks: embed standard concepts and keep their metadata in sync."""
 
+import hashlib
 import logging
 
 from sqlalchemy import text
@@ -16,6 +17,11 @@ from app.worker.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
+def _text_hash(text_: str) -> str:
+    """Same as Postgres md5() of the text (UTF-8), see store.text_hash_sql."""
+    return hashlib.md5(text_.encode("utf-8")).hexdigest()
+
+
 def _active_collection(probe: bool):
     with session_scope() as session:
         cfg = get_effective_config(session)
@@ -23,7 +29,14 @@ def _active_collection(probe: bool):
         col = store.get_collection(session, cfg.collection_name)
         if col is None and probe:
             dims = embedder.probe_dims()
-            col = store.ensure_collection(session, cfg.collection_name, cfg.embedding_model, dims)
+            col = store.ensure_collection(
+                session,
+                cfg.collection_name,
+                cfg.embedding_model,
+                dims,
+                text_mode=cfg.embedding_text,
+                task_types=cfg.embedding_task_types,
+            )
         elif col is not None:
             col = store.ensure_collection(session, col.name, col.model, col.dims)
         return cfg, embedder, col
@@ -31,8 +44,16 @@ def _active_collection(probe: bool):
 
 @celery_app.task(bind=True, base=TrackedTask, name="embeddings.embed_standard", lock_name="embed")
 def embed_standard_concepts(
-    self, domain: str | None = None, batch_size: int = 1000, user_id: int | None = None
+    self,
+    domain: str | None = None,
+    batch_size: int = 1000,
+    refresh_only: bool = False,
+    user_id: int | None = None,
 ) -> dict:
+    """Embed standard concepts that have no vector yet, and re-embed those whose text changed.
+
+    ``refresh_only`` (after a vocabulary update): only changed vectors and new concepts in
+    domains the collection already covers, so a partly embedded vocabulary is not completed."""
     progress = self.progress
     progress.phase("Checking the embedding model")
     cfg, embedder, col = _active_collection(probe=True)
@@ -42,12 +63,17 @@ def embed_standard_concepts(
         store.ensure_domain_labels(conn)
 
     domain_sql = " AND c.domain_id = %s" if domain else ""
+    refresh_sql = (
+        f" AND (e.concept_id IS NOT NULL OR dl.label IN ({store.covered_labels_sql(table)}))"
+        if refresh_only
+        else ""
+    )
     base_query = f"""
         FROM concept c
         JOIN domain_label dl ON dl.domain_id = c.domain_id
         LEFT JOIN {table} e ON e.concept_id = c.concept_id
-        WHERE c.standard_concept = 'S' AND e.concept_id IS NULL
-          AND {store.EXCLUDED_CLASS_FILTER}{domain_sql}
+        WHERE c.standard_concept = 'S' AND (e.concept_id IS NULL OR e.text_hash IS NULL)
+          AND {store.EXCLUDED_CLASS_FILTER}{domain_sql}{refresh_sql}
     """
     params = (domain,) if domain else ()
 
@@ -76,7 +102,7 @@ def embed_standard_concepts(
             with read_conn.transaction(), read_conn.cursor(name="pending_concepts") as cur:
                 cur.itersize = batch_size
                 cur.execute(
-                    f"SELECT c.concept_id, {store.embedding_text_sql(cfg.embedding_text)}, dl.label "
+                    f"SELECT c.concept_id, {store.embedding_text_sql(col.text_mode)}, dl.label "
                     + base_query
                     + " ORDER BY c.concept_id",
                     params,
@@ -86,7 +112,10 @@ def embed_standard_concepts(
                     embedded += store.bulk_upsert(
                         write_conn,
                         table,
-                        ((row[0], vec, [row[2]]) for row, vec in zip(batch, vectors, strict=True)),
+                        (
+                            (row[0], vec, [row[2]], _text_hash(row[1]))
+                            for row, vec in zip(batch, vectors, strict=True)
+                        ),
                     )
                     progress.update(
                         current=embedded, message=f"Embedded {embedded:,}/{pending:,} concepts"

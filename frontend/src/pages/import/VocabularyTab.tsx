@@ -27,6 +27,12 @@ function VocabularyImportResult({ task }: { task: Task }) {
           ` Dropped ${formatNumber(r.stale_suggestions_removed)} pending suggestions to such concepts.`}
         {(r.vectors_pruned ?? 0) > 0 &&
           ` Removed ${formatNumber(r.vectors_pruned)} embeddings of concepts that are no longer standard.`}
+        {r.drugs_with_atc7 != null && ` ATC7 codes recomputed for ${formatNumber(r.drugs_with_atc7)} drugs.`}
+        {r.embedding_refresh &&
+          (r.embedding_refresh.changed > 0 || r.embedding_refresh.new > 0) &&
+          ` Embeddings: ${formatNumber(r.embedding_refresh.changed)} concepts with changed text, ${formatNumber(
+            r.embedding_refresh.new,
+          )} new concepts in embedded domains. ${r.embedding_refresh.message ?? ""}`}
       </div>
       <ul className="list-disc pl-5">
         {Object.entries(r.tables).map(([name, t]) => (

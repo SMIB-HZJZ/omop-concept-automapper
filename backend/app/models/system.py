@@ -63,6 +63,9 @@ class EmbeddingCollection(SQLModel, table=True):
     model: str
     dims: int
     table_name: str = Field(unique=True)
+    # How the embedded text is built (see Settings.embedding_text) and whether task types are sent
+    text_mode: str = "name"
+    task_types: bool = False
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )

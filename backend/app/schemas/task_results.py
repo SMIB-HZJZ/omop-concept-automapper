@@ -23,6 +23,13 @@ class TableImportResult(_Result):
     error: str | None = None
 
 
+class EmbeddingRefresh(_Result):
+    changed: int = 0
+    new: int = 0
+    task_id: str | None = None
+    message: str | None = None
+
+
 class VocabularyImportResult(_Result):
     tables: dict[str, TableImportResult]
     tables_imported: int
@@ -32,6 +39,9 @@ class VocabularyImportResult(_Result):
     stale_suggestions_removed: int = 0
     vectors_pruned: int = 0
     vectors_relabeled: int = 0
+    vectors_text_changed: int = 0
+    drugs_with_atc7: int | None = None
+    embedding_refresh: EmbeddingRefresh | None = None
 
 
 class Atc7Result(_Result):

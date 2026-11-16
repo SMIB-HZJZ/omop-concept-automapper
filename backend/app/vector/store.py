@@ -48,6 +48,11 @@ def embedding_text_sql(mode: str) -> str:
     return expr
 
 
+def text_hash_sql(mode: str) -> str:
+    """md5 of the embedded text: stored per vector to find concepts whose text changed."""
+    return f"md5({embedding_text_sql(mode)})"
+
+
 @dataclass
 class SearchFilters:
     domains: Sequence[str] = ()
@@ -92,7 +97,14 @@ def collection_exists(session: Session, name: str) -> bool:
     return bool(session.execute(text("SELECT to_regclass(:t)"), {"t": col.table_name}).scalar())
 
 
-def ensure_collection(session: Session, name: str, model: str, dims: int) -> EmbeddingCollection:
+def ensure_collection(
+    session: Session,
+    name: str,
+    model: str,
+    dims: int,
+    text_mode: str = "name",
+    task_types: bool = False,
+) -> EmbeddingCollection:
     col = get_collection(session, name)
     if col is not None and col.dims != dims:
         raise ValueError(
@@ -100,7 +112,12 @@ def ensure_collection(session: Session, name: str, model: str, dims: int) -> Emb
         )
     if col is None:
         col = EmbeddingCollection(
-            name=name, model=model, dims=dims, table_name=table_name_for(name)
+            name=name,
+            model=model,
+            dims=dims,
+            table_name=table_name_for(name),
+            text_mode=text_mode,
+            task_types=task_types,
         )
         session.add(col)
     table = _ident(col.table_name)
@@ -111,6 +128,8 @@ def ensure_collection(session: Session, name: str, model: str, dims: int) -> Emb
                 concept_id INTEGER PRIMARY KEY REFERENCES concept (concept_id) ON DELETE CASCADE,
                 embedding vector({int(dims)}) NOT NULL,
                 labels SMALLINT[] NOT NULL DEFAULT '{{}}',
+                -- md5 of the embedded text; NULL: the text changed, re-embed
+                text_hash TEXT,
                 embedded_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
             """
@@ -188,9 +207,13 @@ def ensure_domain_labels(conn: psycopg.Connection) -> None:
 def bulk_upsert(
     conn: psycopg.Connection,
     table: str,
-    rows: Iterable[tuple[int, Sequence[float], Sequence[int]]],
+    rows: Iterable[
+        tuple[int, Sequence[float], Sequence[int]]
+        | tuple[int, Sequence[float], Sequence[int], str | None]
+    ],
 ) -> int:
-    """Load (concept_id, vector, labels) rows with binary COPY, replacing existing vectors."""
+    """Load (concept_id, vector, labels[, text_hash]) rows with binary COPY, replacing existing
+    vectors."""
     register_vector(conn)
     table = _ident(table)
     count = 0
@@ -201,19 +224,24 @@ def bulk_upsert(
             f"CREATE TEMP TABLE _emb_stage (LIKE {table} INCLUDING DEFAULTS) ON COMMIT DROP"
         )
         with cur.copy(
-            "COPY _emb_stage (concept_id, embedding, labels) FROM STDIN WITH (FORMAT BINARY)"
+            "COPY _emb_stage (concept_id, embedding, labels, text_hash) FROM STDIN WITH (FORMAT BINARY)"
         ) as copy:
-            copy.set_types(["int4", "vector", "int2[]"])
-            for concept_id, vector, labels in rows:
-                copy.write_row([concept_id, np.asarray(vector, dtype=np.float32), list(labels)])
+            copy.set_types(["int4", "vector", "int2[]", "text"])
+            for row in rows:
+                concept_id, vector, labels = row[:3]
+                text_hash = row[3] if len(row) > 3 else None
+                copy.write_row(
+                    [concept_id, np.asarray(vector, dtype=np.float32), list(labels), text_hash]
+                )
                 count += 1
         cur.execute(
             f"""
-            INSERT INTO {table} (concept_id, embedding, labels)
-            SELECT s.concept_id, s.embedding, s.labels FROM _emb_stage s
+            INSERT INTO {table} (concept_id, embedding, labels, text_hash)
+            SELECT s.concept_id, s.embedding, s.labels, s.text_hash FROM _emb_stage s
             JOIN concept c ON c.concept_id = s.concept_id
             ON CONFLICT (concept_id) DO UPDATE
-                SET embedding = EXCLUDED.embedding, labels = EXCLUDED.labels, embedded_at = now()
+                SET embedding = EXCLUDED.embedding, labels = EXCLUDED.labels,
+                    text_hash = EXCLUDED.text_hash, embedded_at = now()
             """
         )
         inserted = cur.rowcount
@@ -237,6 +265,51 @@ def prune_non_standard(conn: psycopg.Connection, table: str) -> int:
         removed = cur.rowcount
     conn.commit()
     return removed
+
+
+def mark_changed_text(conn: psycopg.Connection, table: str, text_mode: str) -> int:
+    """After a vocabulary update: clear ``text_hash`` of vectors whose concept text (name,
+    synonyms, class/domain, depending on the collection) changed, so they are re-embedded."""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            UPDATE {_ident(table)} e SET text_hash = NULL
+            FROM concept c
+            WHERE c.concept_id = e.concept_id AND e.text_hash IS NOT NULL
+              AND e.text_hash <> {text_hash_sql(text_mode)}
+            """
+        )
+        changed = cur.rowcount
+    conn.commit()
+    return changed
+
+
+def refresh_pending(conn: psycopg.Connection, table: str) -> dict[str, int]:
+    """What a refresh would embed: vectors marked as changed, and standard concepts not yet
+    embedded in a domain the collection already covers (new concepts of a release)."""
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT COUNT(*) FROM {_ident(table)} WHERE text_hash IS NULL")
+        changed = cur.fetchone()[0]
+        cur.execute(
+            f"""
+            SELECT COUNT(*) FROM concept c
+            JOIN domain_label dl ON dl.domain_id = c.domain_id
+            WHERE c.standard_concept = 'S' AND {EXCLUDED_CLASS_FILTER}
+              AND dl.label IN ({covered_labels_sql(table)})
+              AND NOT EXISTS (SELECT 1 FROM {_ident(table)} e WHERE e.concept_id = c.concept_id)
+            """
+        )
+        new = cur.fetchone()[0]
+    conn.rollback()
+    return {"changed": int(changed), "new": int(new)}
+
+
+def covered_labels_sql(table: str) -> str:
+    """Domain labels that have at least one vector in the collection."""
+    return (
+        f"SELECT dl2.label FROM domain_label dl2 WHERE EXISTS "
+        f"(SELECT 1 FROM {_ident(table)} x WHERE x.labels && ARRAY[dl2.label]::smallint[])"
+    )
 
 
 def refresh_labels(conn: psycopg.Connection, table: str) -> int:
@@ -270,7 +343,8 @@ def embedding_status(session: Session, collection: str, domain: str | None = Non
         row = session.execute(
             text(
                 f"""
-                SELECT COUNT(*) AS total, COUNT(e.concept_id) AS embedded
+                SELECT COUNT(*) AS total, COUNT(e.concept_id) AS embedded,
+                       COUNT(e.concept_id) FILTER (WHERE e.text_hash IS NULL) AS changed
                 FROM concept c LEFT JOIN {table} e ON e.concept_id = c.concept_id
                 WHERE c.standard_concept = 'S' AND {EXCLUDED_CLASS_FILTER.replace("%%", "%")}{domain_sql}
                 """
@@ -278,7 +352,7 @@ def embedding_status(session: Session, collection: str, domain: str | None = Non
             params,
         ).one()
         points = session.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar_one()
-        total, embedded = int(row.total), int(row.embedded)
+        total, embedded, changed = int(row.total), int(row.embedded), int(row.changed)
     else:
         total = session.execute(
             text(
@@ -287,7 +361,7 @@ def embedding_status(session: Session, collection: str, domain: str | None = Non
             ),
             params,
         ).scalar_one()
-        embedded, points = 0, 0
+        embedded, points, changed = 0, 0, 0
     return {
         "collection": collection,
         "exists": exists,
@@ -295,6 +369,7 @@ def embedding_status(session: Session, collection: str, domain: str | None = Non
         "total": int(total),
         "embedded": embedded,
         "pending": int(total) - embedded,
+        "changed": changed,
         "percentage": (embedded / total * 100) if total else 0.0,
     }
 

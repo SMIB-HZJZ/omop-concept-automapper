@@ -1060,6 +1060,11 @@ export interface components {
             embedded: number;
             /** Pending */
             pending: number;
+            /**
+             * Changed
+             * @default 0
+             */
+            changed: number;
             /** Percentage */
             percentage: number;
         };
@@ -1746,6 +1751,31 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** EmbeddingRefresh */
+        EmbeddingRefresh: {
+            /**
+             * Changed
+             * @default 0
+             */
+            changed: number;
+            /**
+             * New
+             * @default 0
+             */
+            new: number;
+            /**
+             * Task Id
+             * @default null
+             */
+            task_id: string | null;
+            /**
+             * Message
+             * @default null
+             */
+            message: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** SourceImportResult */
         SourceImportResult: {
             /** Inserted */
@@ -1853,6 +1883,18 @@ export interface components {
              * @default 0
              */
             vectors_relabeled: number;
+            /**
+             * Vectors Text Changed
+             * @default 0
+             */
+            vectors_text_changed: number;
+            /**
+             * Drugs With Atc7
+             * @default null
+             */
+            drugs_with_atc7: number | null;
+            /** @default null */
+            embedding_refresh: components["schemas"]["EmbeddingRefresh"] | null;
         } & {
             [key: string]: unknown;
         };

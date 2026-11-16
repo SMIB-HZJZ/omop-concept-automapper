@@ -172,7 +172,15 @@ export function EmbeddingsTab() {
             value={formatNumber(s?.total)}
             hint={domain ? `Domain: ${domain}` : "All domains"}
           />
-          <StatCard label="Embedded" value={formatNumber(s?.embedded)} hint={`${formatNumber(s?.pending)} pending`} />
+          <StatCard
+            label="Embedded"
+            value={formatNumber(s?.embedded)}
+            hint={
+              (s?.changed ?? 0) > 0
+                ? `${formatNumber(s?.pending)} pending · ${formatNumber(s?.changed)} changed in a vocabulary update`
+                : `${formatNumber(s?.pending)} pending`
+            }
+          />
         </div>
         <div className="space-y-1">
           <Progress value={s?.percentage ?? 0} aria-label="Embedded standard concepts" />

@@ -248,3 +248,60 @@ def test_newer_csv_wins_over_an_older_zip(tmp_path):
     assert files["concept"]["archive"] is None  # the CSV is newer
     assert files["concept_ancestor"]["archive"] == "old.zip"  # only in the zip
     assert files["concept_relationship"]["exists"] is False
+
+
+def test_vocabulary_update_reembeds_changed_and_new_concepts(
+    client, admin_headers, embedded, tmp_path, monkeypatch
+):
+    """A new release: a renamed concept is re-embedded, a new concept in an embedded domain is
+    embedded, a new concept in a domain without vectors is not; ATC7 is recomputed."""
+    import shutil
+
+    from sqlalchemy import text
+
+    from app.core.config import get_settings
+    from app.core.db import session_scope
+    from tests.conftest import EMBED_CALLS, FIXTURES
+
+    for csv in (FIXTURES / "vocabulary").glob("*.csv"):
+        shutil.copy(csv, tmp_path / csv.name)
+    concept = tmp_path / "CONCEPT.csv"
+    rows = concept.read_text().splitlines()
+    rows = [
+        r.replace("201\tType 2 diabetes mellitus\t", "201\tType 2 diabetes mellitus, renamed\t")
+        for r in rows
+    ]
+    rows += [
+        "9001\tNewly released condition\tCondition\tSNOMED\tClinical Finding\tS\t9001\t19700101\t20991231\t",
+        "9002\tNewly released specimen\tSpecimen\tSNOMED\tSpecimen\tS\t9002\t19700101\t20991231\t",
+    ]
+    concept.write_text("\n".join(rows) + "\n")
+
+    def run_import():
+        resp = client.post("/api/vocabulary/import", headers=admin_headers)
+        task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
+        assert task["status"] == "SUCCESS", task
+        return task["result"]
+
+    monkeypatch.setattr(get_settings(), "vocabulary_dir", str(tmp_path))
+    try:
+        EMBED_CALLS.clear()
+        result = run_import()
+        assert result["vectors_text_changed"] == 1
+        assert result["drugs_with_atc7"] is not None
+        refresh = result["embedding_refresh"]
+        assert (refresh["changed"], refresh["new"]) == (1, 1), refresh
+        assert refresh["task_id"]
+        refresh_task = client.get(f"/api/tasks/{refresh['task_id']}", headers=admin_headers).json()
+        assert refresh_task["status"] == "SUCCESS", refresh_task
+        texts = [t for call in EMBED_CALLS for t in call]
+        assert sorted(texts) == ["Newly released condition", "Type 2 diabetes mellitus, renamed"]
+        status = client.get("/api/embeddings/status", headers=admin_headers).json()
+        assert status["changed"] == 0
+    finally:
+        monkeypatch.undo()
+        with session_scope() as session:
+            session.execute(text("DELETE FROM concept WHERE concept_id IN (9001, 9002)"))
+            session.commit()
+        restored = run_import()  # back to the fixture names (and their vectors)
+        assert restored["embedding_refresh"]["changed"] == 1

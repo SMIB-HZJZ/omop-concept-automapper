@@ -3172,6 +3172,11 @@
             "type": "integer",
             "title": "Pending"
           },
+          "changed": {
+            "type": "integer",
+            "title": "Changed",
+            "default": 0
+          },
           "percentage": {
             "type": "number",
             "title": "Percentage"
@@ -5253,6 +5258,47 @@
         "title": "EmbedResult",
         "type": "object"
       },
+      "EmbeddingRefresh": {
+        "additionalProperties": true,
+        "properties": {
+          "changed": {
+            "default": 0,
+            "title": "Changed",
+            "type": "integer"
+          },
+          "new": {
+            "default": 0,
+            "title": "New",
+            "type": "integer"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Task Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message"
+          }
+        },
+        "title": "EmbeddingRefresh",
+        "type": "object"
+      },
       "SourceImportResult": {
         "additionalProperties": true,
         "properties": {
@@ -5460,6 +5506,34 @@
             "default": 0,
             "title": "Vectors Relabeled",
             "type": "integer"
+          },
+          "vectors_text_changed": {
+            "default": 0,
+            "title": "Vectors Text Changed",
+            "type": "integer"
+          },
+          "drugs_with_atc7": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Drugs With Atc7"
+          },
+          "embedding_refresh": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbeddingRefresh"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "required": [

@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     workflow_definitions_dir: str = ""
 
     # --- Vector search (pgvectorscale) ---
+    # After a vocabulary import, re-embed concepts whose embedded text changed and embed new
+    # concepts in domains the active collection already covers (costs embedding calls)
+    auto_embed_after_vocabulary_import: bool = True
     diskann_query_rescore: int = 100
     diskann_query_search_list_size: int = 200
     diskann_rebuild_threshold: int = 10_000

@@ -349,6 +349,8 @@ class EmbeddingStatus(BaseModel):
     total: int
     embedded: int
     pending: int
+    # Embedded concepts whose text changed in a vocabulary update (re-embedded by the next run)
+    changed: int = 0
     percentage: float
 
 
