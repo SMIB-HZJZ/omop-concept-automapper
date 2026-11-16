@@ -14,5 +14,5 @@ export const DOMAIN_MODES: { value: DomainMode; label: string; hint: string }[] 
 
 /** Domain preference shared by "Auto map settings" and the per-concept "AI suggest". */
 export function useDomainMode() {
-  return usePersistentState<DomainMode>("automap-domain-mode", "restrict");
+  return usePersistentState<DomainMode>("automap-domain-mode", "prefer");
 }

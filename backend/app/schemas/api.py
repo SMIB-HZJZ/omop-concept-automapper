@@ -85,8 +85,8 @@ class ConfigOut(BaseModel):
     llm_model: str
     embedding_model: str
     embedding_dims: int | None
-    embedding_text: str = "name"
-    embedding_task_types: bool = False
+    embedding_text: str = "name_synonyms"
+    embedding_task_types: bool = True
     collection_name: str
     values: list[ConfigValue]
     automap_pipeline: str
@@ -460,7 +460,7 @@ class AutomapRequest(BaseModel):
     mode: Literal["review", "commit"] = "review"
     pipeline: str | None = None
     limit: int | None = Field(default=None, ge=1)
-    domain_mode: DomainMode = "restrict"
+    domain_mode: DomainMode = "prefer"
 
 
 class SuggestRequest(BaseModel):
@@ -470,7 +470,7 @@ class SuggestRequest(BaseModel):
     atc7_codes: list[str] | None = None
     threshold: int = Field(default=DEFAULT_CONFIDENCE_THRESHOLD, ge=1, le=10)
     pipeline: str | None = None
-    domain_mode: DomainMode = "restrict"
+    domain_mode: DomainMode = "prefer"
 
 
 class TraceStep(BaseModel):

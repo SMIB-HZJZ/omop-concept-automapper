@@ -148,9 +148,10 @@ def test_embedding_text_variants_are_separate_collections(client, admin_headers,
         json={"embedding_text": "name_context_synonyms", "embedding_task_types": True},
         headers=admin_headers,
     )
-    assert resp.status_code == 200
-    assert resp.json()["collection_name"] == "test_embedder_64_name_context_synonyms_tt"
     try:
+        assert resp.status_code == 200
+        # task types only change the collection for providers that take them (not test/)
+        assert resp.json()["collection_name"] == "test_embedder_64_name_context_synonyms"
         EMBED_CALLS.clear()
         resp = client.post(
             "/api/embeddings/embed", json={"domain": "Condition"}, headers=admin_headers
@@ -167,12 +168,23 @@ def test_embedding_text_variants_are_separate_collections(client, admin_headers,
     finally:
         client.delete(
             "/api/embeddings",
-            params={"confirm": "test_embedder_64_name_context_synonyms_tt"},
+            params={"confirm": "test_embedder_64_name_context_synonyms"},
             headers=admin_headers,
         )
         client.post("/api/config/reset", headers=admin_headers)
     assert client.get("/api/config", headers=admin_headers).json()["collection_name"] == (
         "test_embedder_64"
+    )
+
+
+def test_task_types_suffix_only_for_providers_that_take_them():
+    from app.services.settings_store import collection_name
+
+    assert collection_name("gemini/gemini-embedding-2", 1536, "name_synonyms", True) == (
+        "gemini_gemini_embedding_2_1536_name_synonyms_tt"
+    )
+    assert collection_name("openai/text-embedding-3-large", 1536, "name", True) == (
+        "openai_text_embedding_3_large_1536"
     )
 
 

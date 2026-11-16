@@ -202,9 +202,9 @@ Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workfl
 - **`automap_drug`**: the same, with the structured drug match (see [Drug mapping](#drug-mapping)) before translation.
 - **`automap_refine`**: like `automap`, but rejected concepts go to a Pydantic AI agent. The agent reformulates the query (translations, synonyms, ingredient splits) using search and hierarchy tools, and a second gate decides.
 
-**Domains** (Auto map settings, also used by AI suggest): *only these domains* (default), *prefer these domains* (a few candidates from other domains are added and the reranker is told the preference) or *all domains*.
+**Domains** (Auto map settings, also used by AI suggest): *only these domains*, *prefer these domains* (default: a few candidates from other domains are added and the reranker is told the preference) or *all domains*.
 
-**Embeddings** (Configuration page): the embedded text can be the name, the name with class and domain, the name with synonyms, or both; query/document task types can be sent to Gemini, Voyage and Cohere. Each combination is its own collection, so variants can be compared without losing the others.
+**Embeddings** (Configuration page): the embedded text can be the name, the name with class and domain, the name with synonyms (default), or both; query/document task types are sent to Gemini, Voyage and Cohere (default on; ignored by other providers). Each combination is its own collection, so variants can be compared without losing the others.
 
 **Review queue**: sort by *Priority* (frequency × uncertainty) to review what affects most records first. After 20 or more decisions, the Review page shows how often suggestions were accepted per confidence level and recommends the threshold that keeps at least 95 % of auto-accepted mappings correct.
 

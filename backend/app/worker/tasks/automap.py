@@ -112,7 +112,7 @@ async def automap_concepts(
     user_id: int | None,
     concurrency: int,
     compiled: tuple | None = None,
-    domain_mode: str = "restrict",
+    domain_mode: str = "prefer",
     code_vocabularies: list[str] | None = None,
 ) -> dict:
     compiled = compiled or get_pipeline(pipeline)
@@ -206,7 +206,7 @@ def run_automap(
     pipeline: str | None = None,
     limit: int | None = None,
     user_id: int | None = None,
-    domain_mode: str = "restrict",
+    domain_mode: str = "prefer",
 ) -> dict:
     pipeline = pipeline or default_pipeline(drug_specific)
     compiled = get_pipeline(pipeline)  # resolved once; also fails fast on an invalid pipeline

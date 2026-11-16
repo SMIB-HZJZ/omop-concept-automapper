@@ -55,10 +55,11 @@ class Settings(BaseSettings):
     # What is embedded per concept: its name, plus "context" (class and domain) and/or up to
     # 8 synonyms. Each choice is a separate embedding collection.
     embedding_text: Literal["name", "name_context", "name_synonyms", "name_context_synonyms"] = (
-        "name"
+        "name_synonyms"
     )
-    # Send query/document task types (Gemini task_type, Voyage/Cohere input_type)
-    embedding_task_types: bool = False
+    # Send query/document task types (Gemini task_type, Voyage/Cohere input_type; ignored for
+    # providers without them)
+    embedding_task_types: bool = True
     # Comma-separated model names offered in the Settings page (in addition to what the gateway lists)
     llm_model_options: str = (
         "anthropic/claude-sonnet-5-5,openai/gpt-6.1-terra,gemini/gemini-3.8-flash,"

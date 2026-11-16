@@ -23,6 +23,8 @@ OVERRIDABLE: dict[str, tuple[str, type]] = {
     "embedding.text": ("embedding_text", str),
     "embedding.task_types": ("embedding_task_types", bool),
 }
+# Embedding providers that take query/document task types (see app.llm.embeddings.task_params)
+TASK_TYPE_PROVIDERS = ("gemini/", "vertex_ai/", "voyage/", "cohere/")
 EMBEDDING_TEXT_OPTIONS = ["name", "name_context", "name_synonyms", "name_context_synonyms"]
 
 DIMENSION_OPTIONS = [512, 1024, 1536, 2048, 3072]
@@ -44,8 +46,8 @@ class EffectiveConfig:
     embedding_dims: int | None
     collection_name: str
     values: list[SettingValue]
-    embedding_text: str = "name"
-    embedding_task_types: bool = False
+    embedding_text: str = "name_synonyms"
+    embedding_task_types: bool = True
 
     @property
     def version(self) -> str:
@@ -155,6 +157,6 @@ def collection_name(
     name = f"{slug}_{dims or 'native'}"
     if text_mode and text_mode != "name":
         name += f"_{text_mode}"
-    if task_types:
+    if task_types and model.lower().startswith(TASK_TYPE_PROVIDERS):
         name += "_tt"
     return name
