@@ -193,3 +193,27 @@ def test_embedder_retries_only_transient_errors(monkeypatch):
         with pytest.raises(type(error)):
             embedder.embed(["x"])
         assert fake.calls == expected_calls, type(error).__name__
+
+
+def test_progress_accepts_byte_counts_above_int32(admin_headers, client):
+    """A full Athena release is ~3.5 GB; the import reports progress in bytes."""
+    from sqlalchemy import text
+
+    from app.core.db import session_scope
+
+    with session_scope() as session:
+        session.execute(
+            text(
+                "INSERT INTO task_run (id, kind, status, progress_current, progress_total) "
+                "VALUES ('big-progress', 'vocabulary.import', 'PROGRESS', 3245667766, 3501385512)"
+            )
+        )
+        session.commit()
+        assert (
+            session.execute(
+                text("SELECT progress_total FROM task_run WHERE id = 'big-progress'")
+            ).scalar_one()
+            == 3501385512
+        )
+        session.execute(text("DELETE FROM task_run WHERE id = 'big-progress'"))
+        session.commit()

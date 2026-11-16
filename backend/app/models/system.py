@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, SmallInteger, func
+from sqlalchemy import BigInteger, Column, DateTime, SmallInteger, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -41,8 +41,9 @@ class TaskRun(SQLModel, table=True):
     kind: str = Field(index=True)
     status: str = Field(default="PENDING", index=True)
     params: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    progress_current: int = 0
-    progress_total: int | None = None
+    # Bigint: the vocabulary import counts bytes (a full Athena release is > 2^31)
+    progress_current: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
+    progress_total: int | None = Field(default=None, sa_column=Column(BigInteger))
     message: str | None = None
     result: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     error: str | None = None
