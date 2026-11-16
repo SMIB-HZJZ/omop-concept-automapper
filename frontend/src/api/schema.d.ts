@@ -855,7 +855,7 @@ export interface components {
             limit?: number | null;
             /**
              * Domain Mode
-             * @default restrict
+             * @default prefer
              * @enum {string}
              */
             domain_mode: "restrict" | "prefer" | "all";
@@ -967,12 +967,12 @@ export interface components {
             embedding_dims: number | null;
             /**
              * Embedding Text
-             * @default name
+             * @default name_synonyms
              */
             embedding_text: string;
             /**
              * Embedding Task Types
-             * @default false
+             * @default true
              */
             embedding_task_types: boolean;
             /** Collection Name */
@@ -1332,7 +1332,7 @@ export interface components {
             pipeline?: string | null;
             /**
              * Domain Mode
-             * @default restrict
+             * @default prefer
              * @enum {string}
              */
             domain_mode: "restrict" | "prefer" | "all";
@@ -1831,6 +1831,16 @@ export interface components {
             records_imported: number;
             /** Non Standard Mappings Removed */
             non_standard_mappings_removed: number;
+            /**
+             * Non Standard Mappings Replaced
+             * @default 0
+             */
+            non_standard_mappings_replaced: number;
+            /**
+             * Stale Suggestions Removed
+             * @default 0
+             */
+            stale_suggestions_removed: number;
             /**
              * Vectors Pruned
              * @default 0

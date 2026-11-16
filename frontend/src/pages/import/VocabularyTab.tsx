@@ -20,8 +20,11 @@ function VocabularyImportResult({ task }: { task: Task }) {
   return (
     <div className="space-y-1">
       <div>
-        Imported {r.tables_imported} table(s), {formatNumber(r.records_imported)} records. Removed{" "}
-        {formatNumber(r.non_standard_mappings_removed)} mappings to non-standard concepts.
+        Imported {r.tables_imported} table(s), {formatNumber(r.records_imported)} records. Mappings to concepts that are
+        no longer standard: {formatNumber(r.non_standard_mappings_replaced ?? 0)} replaced by their successor (Maps to),{" "}
+        {formatNumber(r.non_standard_mappings_removed)} removed (now unmapped).
+        {(r.stale_suggestions_removed ?? 0) > 0 &&
+          ` Dropped ${formatNumber(r.stale_suggestions_removed)} pending suggestions to such concepts.`}
         {(r.vectors_pruned ?? 0) > 0 &&
           ` Removed ${formatNumber(r.vectors_pruned)} embeddings of concepts that are no longer standard.`}
       </div>

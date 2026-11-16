@@ -28,6 +28,8 @@ class VocabularyImportResult(_Result):
     tables_imported: int
     records_imported: int
     non_standard_mappings_removed: int
+    non_standard_mappings_replaced: int = 0
+    stale_suggestions_removed: int = 0
     vectors_pruned: int = 0
     vectors_relabeled: int = 0
 

@@ -475,16 +475,87 @@ def unmap(session: Session, source_ids: Sequence[int]) -> int:
     return deleted
 
 
-def clean_non_standard_mappings(conn) -> int:
-    """Remove mappings to concepts that are no longer standard (raw psycopg connection)."""
+def update_non_standard_mappings(conn) -> dict[str, int]:
+    """After a vocabulary release: mappings to concepts that are no longer standard (deprecated,
+    upgraded or demoted) are replaced by the concepts' valid ``Maps to`` targets; the rest are
+    removed, so their source concepts show up as unmapped again. Both are written to the audit
+    trail. Pending suggestions that point to such concepts are dropped (raw psycopg connection).
+
+    Replacements are logged as ``auto_vocab_update``: they count as unreviewed until accepted."""
     with conn.cursor() as cur:
         cur.execute(
             """
-            DELETE FROM source_standard_map
-            WHERE concept_id IN (
-                SELECT concept_id FROM concept
-                WHERE standard_concept IS NULL OR standard_concept != 'S'
-            )
+            CREATE TEMP TABLE stale_map ON COMMIT DROP AS
+            SELECT m.source_id, m.concept_id
+            FROM source_standard_map m JOIN concept c ON c.concept_id = m.concept_id
+            WHERE c.standard_concept IS DISTINCT FROM 'S' OR c.invalid_reason IS NOT NULL
             """
         )
-        return cur.rowcount
+        cur.execute(
+            """
+            CREATE TEMP TABLE stale_successor ON COMMIT DROP AS
+            SELECT DISTINCT s.source_id, s.concept_id AS old_id, r.concept_id_2 AS new_id
+            FROM stale_map s
+            JOIN concept_relationship r
+              ON r.concept_id_1 = s.concept_id AND r.relationship_id = 'Maps to'
+             AND r.invalid_reason IS NULL
+            JOIN concept t ON t.concept_id = r.concept_id_2
+             AND t.standard_concept = 'S' AND t.invalid_reason IS NULL
+            """
+        )
+        cur.execute(
+            """
+            INSERT INTO source_standard_map (source_id, concept_id)
+            SELECT DISTINCT source_id, new_id FROM stale_successor
+            ON CONFLICT (source_id, concept_id) DO NOTHING
+            """
+        )
+        cur.execute(
+            """
+            INSERT INTO auto_mapping_audit (source_id, concept_id, mapping_method, rationale)
+            SELECT source_id, new_id, 'auto_vocab_update',
+                   'Vocabulary update: replaces concept ' || old_id || ', no longer standard'
+            FROM stale_successor
+            """
+        )
+        cur.execute("SELECT COUNT(*) FROM stale_map")
+        stale = cur.fetchone()[0]
+        cur.execute(
+            """
+            SELECT COUNT(*) FROM stale_map s WHERE NOT EXISTS (
+                SELECT 1 FROM stale_successor x
+                WHERE x.source_id = s.source_id AND x.old_id = s.concept_id)
+            """
+        )
+        removed = cur.fetchone()[0]
+        cur.execute(
+            """
+            INSERT INTO auto_mapping_audit (source_id, concept_id, mapping_method, rationale)
+            SELECT s.source_id, s.concept_id, 'vocab_removed',
+                   'Vocabulary update: concept no longer standard and has no Maps to target'
+            FROM stale_map s WHERE NOT EXISTS (
+                SELECT 1 FROM stale_successor x
+                WHERE x.source_id = s.source_id AND x.old_id = s.concept_id)
+            """
+        )
+        cur.execute(
+            """
+            DELETE FROM source_standard_map m USING stale_map s
+            WHERE m.source_id = s.source_id AND m.concept_id = s.concept_id
+            """
+        )
+        cur.execute(
+            """
+            DELETE FROM mapping_suggestion ms
+            WHERE ms.status = 'pending' AND EXISTS (
+                SELECT 1 FROM concept c
+                WHERE c.concept_id = ANY(ms.extra_concept_ids || ms.concept_id)
+                  AND (c.standard_concept IS DISTINCT FROM 'S' OR c.invalid_reason IS NOT NULL))
+            """
+        )
+        suggestions = cur.rowcount
+    return {
+        "non_standard_mappings_replaced": stale - removed,
+        "non_standard_mappings_removed": removed,
+        "stale_suggestions_removed": suggestions,
+    }

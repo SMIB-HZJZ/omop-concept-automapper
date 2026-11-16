@@ -177,20 +177,29 @@ def test_vocabulary_crud(client, user_headers):
     assert resp.json()["is_drug"] is True and resp.json()["description"] == "lab codes"
 
 
-def test_clean_non_standard_mappings_after_reimport(
+def test_non_standard_mappings_are_replaced_or_removed_after_reimport(
     client, user_headers, admin_headers, loaded_vocabulary
 ):
     import_source_csv(
         client,
         user_headers,
         11,
-        content=b"source_value,source_concept_name,concept_id\nE11,dm2,501\nE11b,dm2 b,201\n",
+        content=(
+            b"source_value,source_concept_name,concept_id\n"
+            b"E11,dm2,501\nX1,metformin class,101\nE11b,dm2 b,201\n"
+        ),
     )
     stats = client.get("/api/source-vocabularies/11/stats", headers=user_headers).json()
-    assert stats["mapped"] == 2  # pre-mapping to a non-standard concept is accepted on import
+    assert stats["mapped"] == 3  # pre-mapping to a non-standard concept is accepted on import
     resp = client.post("/api/vocabulary/import", headers=admin_headers)
     task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
-    assert task["result"]["non_standard_mappings_removed"] >= 1
+    # ICD10 501 has "Maps to" SNOMED 201 and is replaced; ATC class 101 has no successor
+    assert task["result"]["non_standard_mappings_replaced"] == 1
+    assert task["result"]["non_standard_mappings_removed"] == 1
     assert (
-        client.get("/api/source-vocabularies/11/stats", headers=user_headers).json()["mapped"] == 1
+        client.get("/api/source-vocabularies/11/stats", headers=user_headers).json()["mapped"] == 2
     )
+    audit = client.get("/api/source-vocabularies/11/audit/stats", headers=user_headers)
+    assert audit.status_code == 200
+    methods = {r["mapping_method"] for r in audit.json()}
+    assert {"auto_vocab_update", "vocab_removed"} <= methods

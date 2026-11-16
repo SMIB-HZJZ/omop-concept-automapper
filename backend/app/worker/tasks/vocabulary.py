@@ -29,8 +29,8 @@ def _sync_collections(conn) -> dict:
 def import_vocabulary(self, user_id: int | None = None) -> dict:
     with raw_connection() as conn:
         results = import_all(conn, self.progress, task_id=self.request.id)
-        self.progress.phase("Removing mappings to concepts that are no longer standard")
-        removed = mapping.clean_non_standard_mappings(conn)
+        self.progress.phase("Updating mappings to concepts that are no longer standard")
+        stale = mapping.update_non_standard_mappings(conn)
         conn.commit()
         # Vectors of concepts that left the standard set go, and domain labels (used by the
         # filtered vector search) follow concepts that changed domain
@@ -44,7 +44,7 @@ def import_vocabulary(self, user_id: int | None = None) -> dict:
         "tables": results,
         "tables_imported": succeeded,
         "records_imported": sum(r["records_imported"] for r in results.values()),
-        "non_standard_mappings_removed": removed,
+        **stale,
         "vectors_pruned": vectors["pruned"],
         "vectors_relabeled": vectors["relabeled"],
     }

@@ -2535,7 +2535,7 @@
               "all"
             ],
             "title": "Domain Mode",
-            "default": "restrict"
+            "default": "prefer"
           }
         },
         "type": "object",
@@ -2883,12 +2883,12 @@
           "embedding_text": {
             "type": "string",
             "title": "Embedding Text",
-            "default": "name"
+            "default": "name_synonyms"
           },
           "embedding_task_types": {
             "type": "boolean",
             "title": "Embedding Task Types",
-            "default": false
+            "default": true
           },
           "collection_name": {
             "type": "string",
@@ -3971,7 +3971,7 @@
               "all"
             ],
             "title": "Domain Mode",
-            "default": "restrict"
+            "default": "prefer"
           }
         },
         "type": "object",
@@ -5428,6 +5428,16 @@
           },
           "non_standard_mappings_removed": {
             "title": "Non Standard Mappings Removed",
+            "type": "integer"
+          },
+          "non_standard_mappings_replaced": {
+            "default": 0,
+            "title": "Non Standard Mappings Replaced",
+            "type": "integer"
+          },
+          "stale_suggestions_removed": {
+            "default": 0,
+            "title": "Stale Suggestions Removed",
             "type": "integer"
           },
           "vectors_pruned": {
