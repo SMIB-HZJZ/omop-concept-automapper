@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     embedding_task_types: bool = True
     # Comma-separated model names offered in the Settings page (in addition to what the gateway lists)
     llm_model_options: str = (
-        "anthropic/claude-sonnet-5-5,openai/gpt-6.1-terra,gemini/gemini-3.8-flash,"
+        "anthropic/claude-sonnet-5-5,openai/gpt-6.1-terra,gemini/gemini-4-hydrogen,"
         "mistral/mistral-large-latest,anthropic/claude-haiku-5-5,openai/gpt-6-luna,"
         "ollama/mistral-small"
     )
