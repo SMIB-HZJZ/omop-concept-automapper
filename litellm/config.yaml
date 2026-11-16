@@ -27,6 +27,9 @@ model_list:
   - model_name: "cohere/*"             # COHERE_API_KEY (embeddings)
     litellm_params:
       model: "cohere/*"
+  - model_name: "openrouter/*"         # OPENROUTER_API_KEY: many providers and open-weight models
+    litellm_params:                    # (e.g. openrouter/qwen/qwen3-embedding-8b) behind one key
+      model: "openrouter/*"
   # --- Local / self-hosted (no data leaves your network) ---
   - model_name: "ollama/*"             # OLLAMA_API_BASE, e.g. http://host.docker.internal:11434
     litellm_params:
