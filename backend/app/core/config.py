@@ -76,7 +76,12 @@ class Settings(BaseSettings):
     # Instructor mode for structured output: tools (most portable via LiteLLM), json, json_schema, md_json
     instructor_mode: str = "tools"
     llm_timeout_seconds: float = 120.0
-    embedding_max_retries: int = 3
+    embedding_max_retries: int = 8
+    # Parallel embedding requests while embedding concepts, and texts per request (empty: a
+    # per-provider default, see app.llm.embeddings.REQUEST_SIZES). Lower the concurrency for
+    # providers with tight rate limits (e.g. a free tier).
+    embedding_concurrency: int = 4
+    embedding_request_size: int | None = None
     query_embedding_cache_ttl: int = 7 * 24 * 3600
     # Reranker answers are reused for an identical prompt and model (0 = never cache)
     llm_cache_ttl: int = 30 * 24 * 3600
@@ -170,7 +175,7 @@ class Settings(BaseSettings):
             return make_url(self.database_url_override).password or ""
         return self.postgres_password
 
-    @field_validator("llm_temperature", mode="before")
+    @field_validator("llm_temperature", "embedding_request_size", mode="before")
     @classmethod
     def _empty_temperature(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value

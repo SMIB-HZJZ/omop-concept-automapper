@@ -3,6 +3,7 @@
 import hashlib
 import logging
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import openai
@@ -53,6 +54,22 @@ def task_params(model: str, kind: str) -> dict:
     return {}
 
 
+# Texts per request: below each provider's limit (Gemini and Cohere take ~100 per call), and small
+# enough for OpenAI that one batch of the embedding task is split over parallel requests
+REQUEST_SIZES = {"gemini/": 100, "vertex_ai/": 100, "cohere/": 96, "voyage/": 128, "mistral/": 128}
+DEFAULT_REQUEST_SIZE = 256
+
+
+def request_size(model: str) -> int:
+    configured = get_settings().embedding_request_size
+    if configured:
+        return configured
+    m = model.lower()
+    return next(
+        (n for prefix, n in REQUEST_SIZES.items() if m.startswith(prefix)), DEFAULT_REQUEST_SIZE
+    )
+
+
 class Embedder:
     def __init__(self, model: str, dims: int | None, task_types: bool = False):
         self.model = model
@@ -61,7 +78,8 @@ class Embedder:
         retries = get_settings().embedding_max_retries
         self._retry = retry(
             stop=stop_after_attempt(retries),
-            wait=wait_exponential(multiplier=2, min=2, max=30),
+            # Rate limits (e.g. a free tier's requests per minute) need waits of up to a minute
+            wait=wait_exponential(multiplier=2, min=2, max=60),
             retry=retry_if_exception_type(RETRYABLE_ERRORS),
             reraise=True,
         )
@@ -87,6 +105,18 @@ class Embedder:
             return call()
         except openai.APIConnectionError as exc:
             raise _unreachable(exc) from exc
+
+    def embed_many(self, texts: Sequence[str], kind: str = "document") -> list[list[float]]:
+        """Embed many texts: split into provider-sized requests sent in parallel
+        (``EMBEDDING_CONCURRENCY``); the vectors come back in input order."""
+        size = request_size(self.model)
+        chunks = [list(texts[i : i + size]) for i in range(0, len(texts), size)]
+        workers = max(1, min(get_settings().embedding_concurrency, len(chunks)))
+        if workers == 1:
+            return [v for chunk in chunks for v in self.embed(chunk, kind)]
+        with ThreadPoolExecutor(workers, thread_name_prefix="embed") as pool:
+            results = list(pool.map(lambda chunk: self.embed(chunk, kind), chunks))
+        return [v for vectors in results for v in vectors]
 
     async def aembed(self, texts: Sequence[str], kind: str = "document") -> list[list[float]]:
         @self._retry

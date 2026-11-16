@@ -102,3 +102,26 @@ async def test_translations_are_cached(monkeypatch):
         "headache",
         True,
     )
+
+
+def test_embed_many_splits_into_parallel_requests_in_order(monkeypatch):
+    from app.core.config import get_settings
+    from app.llm.embeddings import Embedder, request_size
+
+    calls = []
+
+    def embed(self, texts, kind="document"):
+        calls.append(list(texts))
+        return [[float(t)] for t in texts]
+
+    monkeypatch.setattr(Embedder, "embed", embed)
+    monkeypatch.setattr(get_settings(), "embedding_concurrency", 3)
+    assert request_size("gemini/gemini-embedding-2") == 100
+    assert request_size("openai/text-embedding-3-large") == 256
+    texts = [str(i) for i in range(250)]
+    vectors = Embedder("gemini/gemini-embedding-2", 8).embed_many(texts)
+    assert [v[0] for v in vectors] == [float(i) for i in range(250)]  # input order kept
+    assert sorted(len(c) for c in calls) == [50, 100, 100]
+
+    monkeypatch.setattr(get_settings(), "embedding_request_size", 40)
+    assert request_size("gemini/gemini-embedding-2") == 40

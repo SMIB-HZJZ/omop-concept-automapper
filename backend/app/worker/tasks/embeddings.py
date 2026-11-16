@@ -108,7 +108,7 @@ def embed_standard_concepts(
                     params,
                 )
                 while batch := cur.fetchmany(batch_size):
-                    vectors = embedder.embed([row[1] for row in batch])
+                    vectors = embedder.embed_many([row[1] for row in batch])
                     embedded += store.bulk_upsert(
                         write_conn,
                         table,
