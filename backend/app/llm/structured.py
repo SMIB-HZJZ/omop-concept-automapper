@@ -32,10 +32,21 @@ _MODES = {
 }
 
 
-def get_instructor() -> instructor.AsyncInstructor:
+def instructor_mode_for(model: str | None) -> instructor.Mode:
+    """INSTRUCTOR_MODE, or the INSTRUCTOR_MODE_OVERRIDES entry with the longest matching prefix."""
+    settings = get_settings()
+    name = settings.instructor_mode
+    best = -1
+    for item in settings.instructor_mode_overrides.split(","):
+        prefix, _, mode = item.strip().partition("=")
+        if mode and model and model.startswith(prefix.strip()) and len(prefix) > best:
+            name, best = mode.strip(), len(prefix)
+    return _MODES.get(name.lower(), instructor.Mode.TOOLS)
+
+
+def get_instructor(model: str | None = None) -> instructor.AsyncInstructor:
     """Instructor client for the running event loop (cheap: it wraps the per-loop gateway client)."""
-    mode = _MODES.get(get_settings().instructor_mode.lower(), instructor.Mode.TOOLS)
-    return instructor.from_openai(get_async_client(), mode=mode)
+    return instructor.from_openai(get_async_client(), mode=instructor_mode_for(model))
 
 
 @dataclass
@@ -119,7 +130,7 @@ class Reranker:
                 return RerankResult(**json.loads(hit))
         except Exception:
             logger.debug("Rerank cache read failed", exc_info=True)
-        client = self._client or get_instructor()
+        client = self._client or get_instructor(self.model)
         response: RerankerResponse = await client.chat.completions.create(
             model=self.model,
             response_model=RerankerResponse,
@@ -255,7 +266,7 @@ class Translator:
                 return TranslationResult(data["english"], data.get("language"), cached=True)
         except Exception:
             logger.debug("Translation cache read failed", exc_info=True)
-        client = self._client or get_instructor()
+        client = self._client or get_instructor(self.model)
         response: TranslationResponse = await client.chat.completions.create(
             model=self.model,
             response_model=TranslationResponse,

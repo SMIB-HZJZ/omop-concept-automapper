@@ -3,7 +3,7 @@
 import instructor
 from openai import AsyncOpenAI
 
-from app.llm.structured import CascadeReranker, Reranker
+from app.llm.structured import CascadeReranker, Reranker, instructor_mode_for
 from app.workflows.service import initial_state, run_pipeline
 from tests.workflows.helpers import make_context
 from tests.workflows.test_automap_workflow import MockProvider
@@ -92,3 +92,13 @@ async def test_pipeline_marks_judge_decisions_in_the_rationale():
     result = await run_pipeline(state, make_context(cascade))
     assert result["rationale"].startswith("[voters disagreed, judge decided]")
     assert result["meta"]["rerank_route"] == "judge"
+
+
+def test_instructor_mode_override_by_model_prefix():
+    # Default override: Claude via OpenRouter rejects forced tool choice, so it uses JSON schema
+    assert (
+        instructor_mode_for("openrouter/anthropic/claude-sonnet-5.5") == instructor.Mode.JSON_SCHEMA
+    )
+    assert instructor_mode_for("openrouter/openai/gpt-oss-120b") == instructor.Mode.TOOLS
+    assert instructor_mode_for("anthropic/claude-sonnet-5-5") == instructor.Mode.TOOLS
+    assert instructor_mode_for(None) == instructor.Mode.TOOLS

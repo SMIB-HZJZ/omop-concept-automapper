@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     llm_max_retries: int = 2
     # Instructor mode for structured output: tools (most portable via LiteLLM), json, json_schema, md_json
     instructor_mode: str = "tools"
+    # Per-model exceptions, comma-separated "<model name prefix>=<mode>"; the longest matching
+    # prefix wins. Claude 5.5 via OpenRouter rejects the forced tool choice that "tools" sends.
+    instructor_mode_overrides: str = "openrouter/anthropic/=json_schema"
     llm_timeout_seconds: float = 120.0
     embedding_max_retries: int = 8
     # Parallel embedding requests while embedding concepts, and texts per request (empty: a

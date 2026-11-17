@@ -69,7 +69,7 @@ class DrugParser:
                 return ParsedDrug.model_validate_json(hit)
         except Exception:
             logger.debug("Drug parse cache read failed", exc_info=True)
-        client = self._client or get_instructor()
+        client = self._client or get_instructor(self.model)
         parsed: ParsedDrug = await client.chat.completions.create(
             model=self.model,
             response_model=ParsedDrug,
