@@ -1,5 +1,6 @@
 """Running pipelines: building the node context and invoking compiled graphs."""
 
+import logging
 from pathlib import Path
 
 from sqlmodel import Session
@@ -9,7 +10,7 @@ from app.core.config import get_settings
 from app.core.db import get_engine
 from app.llm.drug_parser import DrugParser
 from app.llm.embeddings import Embedder
-from app.llm.structured import Reranker, Translator
+from app.llm.structured import CascadeReranker, Reranker, Translator
 from app.services import concepts as concept_service
 from app.services import drug_matching, lexical
 from app.services.settings_store import EffectiveConfig
@@ -19,6 +20,8 @@ from app.workflows.context import NodeContext
 from app.workflows.plugins import load_errors, load_plugins
 from app.workflows.registry import all_steps
 from app.workflows.state import AutomapState
+
+logger = logging.getLogger(__name__)
 
 
 class SessionSearcher:
@@ -77,6 +80,19 @@ def default_pipeline(drug_specific: bool) -> str:
     return settings.automap_pipeline
 
 
+def build_reranker(llm_model: str) -> Reranker | CascadeReranker:
+    """One model, or the voter/judge cascade when RERANK_VOTERS lists at least two models."""
+    settings = get_settings()
+    voters = settings.rerank_voter_list
+    if len(voters) < 2:
+        if voters:
+            logger.warning("RERANK_VOTERS needs at least two models; using %s alone", llm_model)
+        return Reranker(llm_model)
+    return CascadeReranker(
+        [Reranker(m) for m in voters], Reranker(settings.rerank_judge.strip() or llm_model)
+    )
+
+
 def build_context(cfg: EffectiveConfig) -> NodeContext:
     drug_parser = _drug_parser(cfg.llm_model)
     return NodeContext(
@@ -84,7 +100,7 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
             cfg.collection_name,
             Embedder(cfg.embedding_model, cfg.embedding_dims, cfg.embedding_task_types),
         ),
-        reranker=Reranker(cfg.llm_model),
+        reranker=build_reranker(cfg.llm_model),
         translator=Translator(cfg.llm_model),
         drug_parser=drug_parser,
         # Both need drug_strength; without it the drug step falls back immediately

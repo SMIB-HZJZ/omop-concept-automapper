@@ -47,22 +47,33 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
             "error": f"{type(exc).__name__}: {exc}",
             "_summary": f"reranker error: {exc}",
         }
+    route = getattr(result, "route", None)
+    rationale = result.rationale
+    meta: dict = {}
+    if route:
+        # Kept with the mapping: terms the judge decided are the ones to review first
+        tag = "voters agreed" if route == "agreed" else "voters disagreed, judge decided"
+        rationale = f"[{tag}] {rationale or ''}".strip()
+        meta = {"rerank_route": route, "rerank_votes": result.votes}
     if result.index is None:
         return {
+            **({"meta": meta} if meta else {}),
             "selected": None,
             "confidence": None,
             "outcome": "no_match",
-            "rationale": result.rationale,
-            "_summary": "LLM found no match",
+            "rationale": rationale,
+            "_summary": "LLM found no match" + (f" ({route})" if route else ""),
         }
     selected = candidates[result.index]
     additional = [candidates[i] for i in getattr(result, "additional", None) or []]
     return {
+        **({"meta": meta} if meta else {}),
         "selected": selected,
         "selected_concepts": [selected, *additional] if additional else [],
         "confidence": result.confidence,
         "match_type": getattr(result, "match_type", None),
         "outcome": "selected",
-        "rationale": result.rationale,
-        "_summary": f"picked #{result.index} '{selected['concept_name']}' (confidence {result.confidence})",
+        "rationale": rationale,
+        "_summary": f"picked #{result.index} '{selected['concept_name']}' (confidence {result.confidence})"
+        + (f", {route}" if route else ""),
     }

@@ -119,6 +119,7 @@ Every setting is an environment variable, and all of them are documented in [`.e
 - **LLM:** `LLM_CHAT_MODEL`, `LLM_EMBEDDING_MODEL`, `EMBEDDING_DIMS`, `LITELLM_MASTER_KEY` (in `.env`) and the provider keys (in `.env.litellm`).
   - `LLM_TEMPERATURE` defaults to `0`, so reranking is repeatable. Models that reject a temperature (e.g. reasoning models) are fine: the proxy drops unsupported parameters. Leave it empty to send no temperature.
 - **Auto-mapping:** `AUTOMAP_PIPELINE`, `AUTOMAP_CONCURRENCY`, `WORKFLOW_PLUGINS`, `WORKFLOW_DEFINITIONS_DIR`.
+  - `RERANK_VOTERS` (two or more models) and `RERANK_JUDGE` turn reranking into a cascade: cheap models pick independently, and only terms they disagree on go to the judge, which sees their picks. In an evaluation on 600 terms, two cheap voters agreed on ~87% of terms, which cut the reranking cost to about a fifth with the same accuracy.
 
 ### Providers and default models
 

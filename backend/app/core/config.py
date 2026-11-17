@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     # Used instead of AUTOMAP_PIPELINE for drug vocabularies when no pipeline is chosen
     automap_drug_pipeline: str = "automap_drug"
     automap_concurrency: int = 4
+    # Rerank cascade: comma-separated models that each pick a candidate (at least two). When
+    # they all pick the same one it stands; otherwise the judge decides, seeing their picks.
+    # Empty: one model (the configured LLM) reranks every term.
+    rerank_voters: str = ""
+    # Model that settles disagreements; empty = the configured LLM model
+    rerank_judge: str = ""
     workflow_plugins: str = ""
     workflow_definitions_dir: str = ""
 
@@ -149,6 +155,10 @@ class Settings(BaseSettings):
     @property
     def llm_model_option_list(self) -> list[str]:
         return [m.strip() for m in self.llm_model_options.split(",") if m.strip()]
+
+    @property
+    def rerank_voter_list(self) -> list[str]:
+        return [m.strip() for m in self.rerank_voters.split(",") if m.strip()]
 
     @property
     def embedding_model_option_map(self) -> dict[str, int | None]:
