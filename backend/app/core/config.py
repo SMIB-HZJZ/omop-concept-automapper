@@ -53,9 +53,10 @@ class Settings(BaseSettings):
     llm_embedding_model: str = "openai/text-embedding-3-large"
     embedding_dims: int | None = 1536
     # What is embedded per concept: its name, plus "context" (class and domain) and/or up to
-    # 8 synonyms. Each choice is a separate embedding collection.
+    # 8 synonyms. Each choice is a separate embedding collection. The name alone retrieved best
+    # in the 2026-11 evaluation (synonyms and context both lowered R@1).
     embedding_text: Literal["name", "name_context", "name_synonyms", "name_context_synonyms"] = (
-        "name_synonyms"
+        "name"
     )
     # Send query/document task types (Gemini task_type, Voyage/Cohere input_type; ignored for
     # providers without them)
