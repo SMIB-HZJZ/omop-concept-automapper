@@ -151,4 +151,84 @@ async def test_failed_first_answer_is_escalated_and_failed_escalation_keeps_the_
 
 def test_no_temperature_for_models_that_reject_sampling():
     assert chat_model_settings("anthropic/claude-fable-5-2") == {}
-    assert chat_model_settings("anthropic/claude-sonnet-5-5") == {"temperature": 0.0}
+    # Claude 5.x returns a 400 for a non-default temperature
+    assert chat_model_settings("anthropic/claude-sonnet-5-5") == {}
+    assert chat_model_settings("openrouter/anthropic/claude-opus-5.5") == {}
+    assert chat_model_settings("openai/gpt-6.1-terra") == {"temperature": 0.0}
+
+
+def test_effort_is_sent_as_reasoning_effort():
+    assert chat_model_settings("anthropic/claude-sonnet-5-5", "low") == {"reasoning_effort": "low"}
+    assert chat_model_settings("openai/gpt-6.1-terra", "high") == {
+        "temperature": 0.0,
+        "reasoning_effort": "high",
+    }
+    assert chat_model_settings("openai/gpt-6.1-terra", "") == {"temperature": 0.0}
+
+
+def _effort_reranker(model: str, provider, effort: str | None) -> Reranker:
+    client = AsyncOpenAI(api_key="test", base_url="http://127.0.0.1:9/v1")
+    client.chat.completions.create = provider.create  # type: ignore[method-assign]
+    return Reranker(
+        model, client=instructor.from_openai(client, mode=instructor.Mode.TOOLS), effort=effort
+    )
+
+
+async def test_reranker_sends_its_effort_and_caches_per_effort():
+    low = MockProvider({"most_similar_item_id": 0, "confidence_score": 6})
+    high = MockProvider({"most_similar_item_id": 1, "confidence_score": 9})
+    # Same model and prompt, different effort: separate answers (no cache hit across efforts)
+    a = await _effort_reranker("test/effort-1", low, "low").rerank(
+        "metformin 850 mg tbl", CANDIDATES, drug_specific=True
+    )
+    b = await _effort_reranker("test/effort-1", high, "high").rerank(
+        "metformin 850 mg tbl", CANDIDATES, drug_specific=True
+    )
+    assert (a.index, b.index) == (0, 1)
+    assert low.requests[0]["reasoning_effort"] == "low"
+    assert high.requests[0]["reasoning_effort"] == "high"
+
+
+async def test_escalation_to_the_same_model_with_more_effort():
+    first = MockProvider({"most_similar_item_id": 0, "confidence_score": 5})
+    again = MockProvider({"most_similar_item_id": 1, "confidence_score": 9})
+    reranker = EscalatingReranker(
+        _effort_reranker("test/effort-2", first, None),
+        _effort_reranker("test/effort-2", again, "xhigh"),
+        below=8,
+    )
+    result = await reranker.rerank("metformin 850 mg tbl", CANDIDATES, drug_specific=True)
+    assert (result.index, result.route) == (1, "escalated")
+    assert "reasoning_effort" not in first.requests[0]
+    assert again.requests[0]["reasoning_effort"] == "xhigh"
+    assert reranker.label == "test/effort-2 → test/effort-2 (xhigh effort) (confidence < 8)"
+
+
+def test_build_reranker_effort_settings():
+    from app.workflows import service
+
+    settings = service.get_settings()
+    saved = (
+        settings.llm_reasoning_effort,
+        settings.rerank_escalate_model,
+        settings.rerank_escalate_effort,
+        settings.rerank_voters,
+    )
+    try:
+        settings.rerank_voters = ""
+        settings.llm_reasoning_effort = "medium"
+        settings.rerank_escalate_model = "test/chat"
+        settings.rerank_escalate_effort = "medium"
+        # Same model, same effort: escalation would only repeat the answer
+        assert isinstance(service.build_reranker("test/chat"), Reranker)
+        settings.rerank_escalate_effort = "max"
+        built = service.build_reranker("test/chat")
+        assert isinstance(built, EscalatingReranker)
+        assert (built.first.effort, built.stronger.effort) == ("medium", "max")
+    finally:
+        (
+            settings.llm_reasoning_effort,
+            settings.rerank_escalate_model,
+            settings.rerank_escalate_effort,
+            settings.rerank_voters,
+        ) = saved

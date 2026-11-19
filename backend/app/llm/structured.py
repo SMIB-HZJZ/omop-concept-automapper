@@ -71,11 +71,22 @@ def format_candidates(candidates: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def model_label(model: str, effort: str | None) -> str:
+    return f"{model} ({effort} effort)" if effort else model
+
+
 class Reranker:
     """Picks the best candidate for a source term (drug or general concept prompt)."""
 
-    def __init__(self, model: str, client: instructor.AsyncInstructor | None = None):
+    def __init__(
+        self,
+        model: str,
+        client: instructor.AsyncInstructor | None = None,
+        effort: str | None = None,
+    ):
         self.model = model
+        self.effort = effort or None
+        self.label = model_label(model, self.effort)
         # Resolved per call: the client must belong to the event loop that awaits it
         self._client = client
 
@@ -118,11 +129,9 @@ class Reranker:
                 ),
             },
         ]
-        # Same prompt, same model -> same answer (temperature 0): reuse it across runs
-        key = (
-            "rerank:"
-            + hashlib.sha1(json.dumps([self.model, messages], sort_keys=True).encode()).hexdigest()
-        )
+        # Same prompt, same model and effort -> reuse the answer across runs
+        ident = [self.model, messages] if not self.effort else [self.model, self.effort, messages]
+        key = "rerank:" + hashlib.sha1(json.dumps(ident, sort_keys=True).encode()).hexdigest()
         ttl = get_settings().llm_cache_ttl
         try:
             hit = await asyncio.to_thread(get_redis().get, key) if ttl else None
@@ -137,7 +146,7 @@ class Reranker:
             messages=messages,
             max_retries=get_settings().llm_max_retries,
             context={"n_candidates": len(candidates)},
-            **chat_model_settings(self.model),
+            **chat_model_settings(self.model, self.effort),
         )
         result = RerankResult(
             response.most_similar_item_id,
@@ -187,6 +196,7 @@ class EscalatingReranker:
         self.stronger = stronger
         self.below = below
         self.model = f"{first.model} → {stronger.model} (confidence < {below})"
+        self.label = f"{first.label} → {stronger.label} (confidence < {below})"
 
     async def rerank(
         self,
@@ -204,11 +214,11 @@ class EscalatingReranker:
         try:
             first = await self.first.rerank(term, candidates, drug_specific, **kwargs)
         except Exception as exc:
-            logger.warning("Reranker %s failed for %r, escalating: %s", self.first.model, term, exc)
+            logger.warning("Reranker %s failed for %r, escalating: %s", self.first.label, term, exc)
         if first is not None and first.index is not None and (first.confidence or 0) >= self.below:
             return dataclasses.replace(first, route=first.route or "first")
         first_vote = {
-            "model": self.first.model,
+            "model": self.first.label,
             "index": first.index if first else None,
             "confidence": first.confidence if first else None,
             **({} if first else {"error": "failed"}),
@@ -220,7 +230,7 @@ class EscalatingReranker:
                 raise
             logger.warning(
                 "Escalation to %s failed for %r; keeping the first answer",
-                self.stronger.model,
+                self.stronger.label,
                 term,
                 exc_info=True,
             )
@@ -245,6 +255,7 @@ class CascadeReranker:
         self.voters = voters
         self.judge = judge
         self.model = f"{'+'.join(v.model for v in voters)} → {judge.model}"
+        self.label = f"{'+'.join(v.label for v in voters)} → {judge.label}"
 
     async def rerank(
         self,
@@ -306,13 +317,19 @@ class Translator:
 
     CACHE_TTL = 90 * 24 * 3600
 
-    def __init__(self, model: str, client: instructor.AsyncInstructor | None = None):
+    def __init__(
+        self,
+        model: str,
+        client: instructor.AsyncInstructor | None = None,
+        effort: str | None = None,
+    ):
         self.model = model
+        self.effort = effort or None
         self._client = client
 
     def _key(self, term: str) -> str:
         digest = hashlib.sha1(term.strip().encode()).hexdigest()
-        return f"translate:{self.model}:{digest}"
+        return f"translate:{model_label(self.model, self.effort)}:{digest}"
 
     async def translate(self, term: str) -> TranslationResult:
         key = self._key(term)
@@ -332,7 +349,7 @@ class Translator:
                 {"role": "user", "content": f"Term: {term}"},
             ],
             max_retries=get_settings().llm_max_retries,
-            **chat_model_settings(self.model),
+            **chat_model_settings(self.model, self.effort),
         )
         result = TranslationResult(response.english.strip(), response.language)
         try:

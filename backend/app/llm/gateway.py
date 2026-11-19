@@ -84,19 +84,23 @@ def gateway_healthy() -> bool:
         return False
 
 
-def chat_model_settings(model: str | None = None) -> dict:
+def chat_model_settings(model: str | None = None, effort: str | None = None) -> dict:
     """Extra parameters for chat calls.
 
     Temperature defaults to 0 so mapping is as repeatable as the model allows. Reasoning models
     (e.g. gpt-5, o-series) reject it; the LiteLLM proxy runs with ``drop_params: true`` and drops it
     for the models it knows. Models matching LLM_NO_TEMPERATURE_MODELS (e.g. Claude Fable, which
     rejects sampling parameters) never get it. Set LLM_TEMPERATURE to an empty value to never
-    send it."""
+    send it.
+
+    ``effort`` (low ... max) is sent as ``reasoning_effort``; LiteLLM turns it into Claude's
+    ``output_config.effort`` with adaptive thinking."""
     s = get_settings()
+    extra: dict = {"reasoning_effort": effort} if effort else {}
     if s.llm_temperature is None:
-        return {}
+        return extra
     if model and any(
         frag.strip() and frag.strip() in model for frag in s.llm_no_temperature_models.split(",")
     ):
-        return {}
-    return {"temperature": s.llm_temperature}
+        return extra
+    return {"temperature": s.llm_temperature, **extra}

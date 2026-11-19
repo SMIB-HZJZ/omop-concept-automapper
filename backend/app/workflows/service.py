@@ -67,7 +67,7 @@ def _drug_parser(llm_model: str) -> DrugParser | None:
         info = _drug_vocabulary_info(session)
     if not info["has_drug_strength"]:
         return None
-    return DrugParser(llm_model, info["dose_forms"])
+    return DrugParser(llm_model, info["dose_forms"], effort=get_settings().llm_reasoning_effort)
 
 
 def default_pipeline(drug_specific: bool) -> str:
@@ -82,22 +82,33 @@ def default_pipeline(drug_specific: bool) -> str:
 
 def build_reranker(llm_model: str) -> Reranker | CascadeReranker | EscalatingReranker:
     """The configured LLM (or the RERANK_VOTERS cascade), escalating unsure terms to
-    RERANK_ESCALATE_MODEL when that is set."""
+    RERANK_ESCALATE_MODEL (at RERANK_ESCALATE_EFFORT) when that is set."""
     settings = get_settings()
+    effort = settings.llm_reasoning_effort or None
     voters = settings.rerank_voter_list
     first: Reranker | CascadeReranker
     if len(voters) >= 2:
+        judge = settings.rerank_judge.strip() or llm_model
         first = CascadeReranker(
-            [Reranker(m) for m in voters], Reranker(settings.rerank_judge.strip() or llm_model)
+            [Reranker(m) for m in voters],
+            Reranker(judge, effort=effort if judge == llm_model else None),
         )
     else:
         if voters:
             logger.warning("RERANK_VOTERS needs at least two models; using %s alone", llm_model)
-        first = Reranker(llm_model)
+        first = Reranker(llm_model, effort=effort)
     stronger = settings.rerank_escalate_model.strip()
-    if not stronger or settings.rerank_escalate_below <= 0 or stronger == llm_model:
+    stronger_effort = settings.rerank_escalate_effort or None
+    if (
+        not stronger
+        or settings.rerank_escalate_below <= 0
+        # Escalating to the same model at the same effort would only repeat the answer
+        or (stronger == llm_model and stronger_effort == effort and len(voters) < 2)
+    ):
         return first
-    return EscalatingReranker(first, Reranker(stronger), settings.rerank_escalate_below)
+    return EscalatingReranker(
+        first, Reranker(stronger, effort=stronger_effort), settings.rerank_escalate_below
+    )
 
 
 def build_context(cfg: EffectiveConfig) -> NodeContext:
@@ -108,7 +119,7 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
             Embedder(cfg.embedding_model, cfg.embedding_dims, cfg.embedding_task_types),
         ),
         reranker=build_reranker(cfg.llm_model),
-        translator=Translator(cfg.llm_model),
+        translator=Translator(cfg.llm_model, effort=get_settings().llm_reasoning_effort),
         drug_parser=drug_parser,
         # Both need drug_strength; without it the drug step falls back immediately
         drug_matcher=_match_drug if drug_parser is not None else None,

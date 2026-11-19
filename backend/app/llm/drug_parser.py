@@ -51,14 +51,17 @@ class DrugParser:
         model: str,
         dose_forms: list[str],
         client: instructor.AsyncInstructor | None = None,
+        effort: str | None = None,
     ):
         self.model = model
         self.dose_forms = dose_forms
+        self.effort = effort or None
         self._client = client
 
     def _key(self, term: str) -> str:
         digest = hashlib.sha1(term.strip().encode()).hexdigest()
-        return f"drugparse:{self.model}:{digest}"
+        label = f"{self.model}@{self.effort}" if self.effort else self.model
+        return f"drugparse:{label}:{digest}"
 
     async def parse(self, term: str, hint: str | None = None) -> ParsedDrug:
         text = term if not hint else f"{term}\n(known structure, may be partial: {hint})"
@@ -81,7 +84,7 @@ class DrugParser:
                 {"role": "user", "content": f"Drug name: {text}"},
             ],
             max_retries=get_settings().llm_max_retries,
-            **chat_model_settings(self.model),
+            **chat_model_settings(self.model, self.effort),
         )
         try:
             await asyncio.to_thread(

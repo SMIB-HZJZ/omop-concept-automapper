@@ -120,7 +120,7 @@ def fake_reranker(monkeypatch):
     import app.workflows.service as service
 
     reranker = FakeReranker()
-    monkeypatch.setattr(service, "Reranker", lambda model: reranker)
+    monkeypatch.setattr(service, "Reranker", lambda model, effort=None: reranker)
     # One fake answers every term; escalation to a second model would only call it twice
     monkeypatch.setattr(service.get_settings(), "rerank_escalate_model", "")
     return reranker

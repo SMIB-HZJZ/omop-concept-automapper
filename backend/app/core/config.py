@@ -73,7 +73,14 @@ class Settings(BaseSettings):
     )
     llm_temperature: float | None = 0.0
     # Model name fragments that reject sampling parameters: no temperature is sent to them
-    llm_no_temperature_models: str = "claude-fable-,claude-mythos-"
+    # (Claude 5.x returns a 400 for a non-default temperature)
+    llm_no_temperature_models: str = (
+        "claude-fable-,claude-mythos-,claude-opus-5,claude-sonnet-5,claude-haiku-5"
+    )
+    # Reasoning effort for the chat model (reranker, translation, drug parser, agents), sent as
+    # reasoning_effort; LiteLLM maps it to Claude's output_config.effort. Empty = the model's
+    # default (Sonnet 5.5 and Fable 5.2: high, Opus 5.5: medium).
+    llm_reasoning_effort: Literal["", "low", "medium", "high", "xhigh", "max"] = ""
     llm_max_retries: int = 2
     # Instructor mode for structured output: tools (most portable via LiteLLM), json, json_schema, md_json
     instructor_mode: str = "tools"
@@ -107,6 +114,9 @@ class Settings(BaseSettings):
     # Empty or a threshold of 0 = no escalation.
     rerank_escalate_model: str = "anthropic/claude-opus-5-5"
     rerank_escalate_below: int = Field(default=8, ge=0, le=10)
+    # Reasoning effort of the escalation model (empty = its default). With the same model as
+    # the reranker and a higher effort, escalation means "think again, harder".
+    rerank_escalate_effort: Literal["", "low", "medium", "high", "xhigh", "max"] = ""
     workflow_plugins: str = ""
     workflow_definitions_dir: str = ""
 

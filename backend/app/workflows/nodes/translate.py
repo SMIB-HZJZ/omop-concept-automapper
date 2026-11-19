@@ -20,7 +20,9 @@ class TranslateParams(BaseModel):
 )
 async def translate(state: AutomapState, ctx: NodeContext, params: TranslateParams) -> dict:
     term = state.get("query") or state.get("source_name", "")
-    translator = ctx.translator or Translator(ctx.llm_model)
+    translator = ctx.translator or Translator(
+        ctx.llm_model, effort=ctx.settings.llm_reasoning_effort
+    )
     try:
         result = await translator.translate(term)
     except Exception as exc:
