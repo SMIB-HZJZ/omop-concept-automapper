@@ -3,7 +3,13 @@
 import instructor
 from openai import AsyncOpenAI
 
-from app.llm.structured import CascadeReranker, Reranker, instructor_mode_for
+from app.llm.gateway import chat_model_settings
+from app.llm.structured import (
+    CascadeReranker,
+    EscalatingReranker,
+    Reranker,
+    instructor_mode_for,
+)
 from app.workflows.service import initial_state, run_pipeline
 from tests.workflows.helpers import make_context
 from tests.workflows.test_automap_workflow import MockProvider
@@ -102,3 +108,47 @@ def test_instructor_mode_override_by_model_prefix():
     assert instructor_mode_for("openrouter/openai/gpt-oss-120b") == instructor.Mode.TOOLS
     assert instructor_mode_for("anthropic/claude-sonnet-5-5") == instructor.Mode.TOOLS
     assert instructor_mode_for(None) == instructor.Mode.TOOLS
+
+
+async def test_confident_first_answer_is_not_escalated():
+    first = MockProvider({"most_similar_item_id": 0, "confidence_score": 9})
+    strong = MockProvider()
+    reranker = EscalatingReranker(
+        _reranker("test/esc-f1", first), _reranker("test/esc-s1", strong), below=8
+    )
+    result = await reranker.rerank("metformin 500 mg tbl", CANDIDATES, drug_specific=True)
+    assert (result.index, result.confidence, result.route) == (0, 9, "first")
+    assert strong.requests == []
+
+
+async def test_unsure_answer_is_escalated_with_the_same_prompt():
+    first = MockProvider({"most_similar_item_id": 0, "confidence_score": 6})
+    strong = MockProvider({"most_similar_item_id": 1, "confidence_score": 9})
+    reranker = EscalatingReranker(
+        _reranker("test/esc-f2", first), _reranker("test/esc-s2", strong), below=8
+    )
+    result = await reranker.rerank("metformin 850 mg tbl", CANDIDATES, drug_specific=True)
+    assert (result.index, result.confidence, result.route) == (1, 9, "escalated")
+    assert result.votes == [{"model": "test/esc-f2", "index": 0, "confidence": 6}]
+    assert _user_prompt(strong) == _user_prompt(first)
+
+
+async def test_failed_first_answer_is_escalated_and_failed_escalation_keeps_the_first():
+    strong = MockProvider({"most_similar_item_id": 1, "confidence_score": 8})
+    reranker = EscalatingReranker(
+        _reranker("test/esc-f3", FailingProvider()), _reranker("test/esc-s3", strong), below=8
+    )
+    result = await reranker.rerank("metformin 850 mg tbl", CANDIDATES, drug_specific=True)
+    assert (result.index, result.route) == (1, "escalated")
+
+    first = MockProvider({"most_similar_item_id": 0, "confidence_score": 5})
+    reranker = EscalatingReranker(
+        _reranker("test/esc-f4", first), _reranker("test/esc-s4", FailingProvider()), below=8
+    )
+    result = await reranker.rerank("metformin 500 mg tbl", CANDIDATES, drug_specific=True)
+    assert (result.index, result.confidence, result.route) == (0, 5, "first")
+
+
+def test_no_temperature_for_models_that_reject_sampling():
+    assert chat_model_settings("anthropic/claude-fable-5-2") == {}
+    assert chat_model_settings("anthropic/claude-sonnet-5-5") == {"temperature": 0.0}

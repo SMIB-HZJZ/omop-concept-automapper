@@ -97,6 +97,7 @@ class FakeReranker:
         self.confidence = confidence
         self.overrides = overrides or {}
         self.calls: list[str] = []
+        self.model = "fake/reranker"
 
     async def rerank(self, term, candidates, drug_specific, **kwargs):
         from app.llm.structured import RerankResult
@@ -120,6 +121,8 @@ def fake_reranker(monkeypatch):
 
     reranker = FakeReranker()
     monkeypatch.setattr(service, "Reranker", lambda model: reranker)
+    # One fake answers every term; escalation to a second model would only call it twice
+    monkeypatch.setattr(service.get_settings(), "rerank_escalate_model", "")
     return reranker
 
 

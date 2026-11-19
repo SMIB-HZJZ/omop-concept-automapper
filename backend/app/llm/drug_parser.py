@@ -81,7 +81,7 @@ class DrugParser:
                 {"role": "user", "content": f"Drug name: {text}"},
             ],
             max_retries=get_settings().llm_max_retries,
-            **chat_model_settings(),
+            **chat_model_settings(self.model),
         )
         try:
             await asyncio.to_thread(

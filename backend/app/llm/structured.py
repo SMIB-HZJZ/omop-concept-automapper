@@ -137,7 +137,7 @@ class Reranker:
             messages=messages,
             max_retries=get_settings().llm_max_retries,
             context={"n_candidates": len(candidates)},
-            **chat_model_settings(),
+            **chat_model_settings(self.model),
         )
         result = RerankResult(
             response.most_similar_item_id,
@@ -173,6 +173,63 @@ def votes_note(votes: list[dict], candidates: list[dict]) -> str:
         "Other reviewers disagreed on this term. Their picks (they may all be wrong; "
         "decide independently under the rules):\n" + "\n".join(lines)
     )
+
+
+class EscalatingReranker:
+    """The first reranker decides; when it is unsure (confidence below ``below``, no pick, or an
+    error) the stronger model reranks the term from scratch and its answer is used.
+
+    The stronger model gets the same prompt, not the first pick: in the evaluation, showing
+    other models' picks to the deciding model did not help."""
+
+    def __init__(self, first: "Reranker | CascadeReranker", stronger: Reranker, below: int):
+        self.first = first
+        self.stronger = stronger
+        self.below = below
+        self.model = f"{first.model} → {stronger.model} (confidence < {below})"
+
+    async def rerank(
+        self,
+        term: str,
+        candidates: list[dict],
+        drug_specific: bool,
+        translation: str | None = None,
+        notes: list[str] | None = None,
+        examples: list[dict] | None = None,
+    ) -> RerankResult:
+        if not candidates:
+            return RerankResult(None, None)
+        kwargs = {"translation": translation, "notes": notes, "examples": examples}
+        first: RerankResult | None = None
+        try:
+            first = await self.first.rerank(term, candidates, drug_specific, **kwargs)
+        except Exception as exc:
+            logger.warning("Reranker %s failed for %r, escalating: %s", self.first.model, term, exc)
+        if first is not None and first.index is not None and (first.confidence or 0) >= self.below:
+            return dataclasses.replace(first, route=first.route or "first")
+        first_vote = {
+            "model": self.first.model,
+            "index": first.index if first else None,
+            "confidence": first.confidence if first else None,
+            **({} if first else {"error": "failed"}),
+        }
+        try:
+            result = await self.stronger.rerank(term, candidates, drug_specific, **kwargs)
+        except Exception:
+            if first is None:
+                raise
+            logger.warning(
+                "Escalation to %s failed for %r; keeping the first answer",
+                self.stronger.model,
+                term,
+                exc_info=True,
+            )
+            return dataclasses.replace(first, route=first.route or "first")
+        return dataclasses.replace(
+            result,
+            route="escalated",
+            votes=[*(first.votes if first else []), first_vote],
+        )
 
 
 class CascadeReranker:
@@ -275,7 +332,7 @@ class Translator:
                 {"role": "user", "content": f"Term: {term}"},
             ],
             max_retries=get_settings().llm_max_retries,
-            **chat_model_settings(),
+            **chat_model_settings(self.model),
         )
         result = TranslationResult(response.english.strip(), response.language)
         try:

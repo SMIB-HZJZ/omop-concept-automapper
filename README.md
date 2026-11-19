@@ -120,6 +120,7 @@ Every setting is an environment variable, and all of them are documented in [`.e
   - `LLM_TEMPERATURE` defaults to `0`, so reranking is repeatable. Models that reject a temperature (e.g. reasoning models) are fine: the proxy drops unsupported parameters. Leave it empty to send no temperature.
 - **Auto-mapping:** `AUTOMAP_PIPELINE`, `AUTOMAP_CONCURRENCY`, `WORKFLOW_PLUGINS`, `WORKFLOW_DEFINITIONS_DIR`.
   - `RERANK_VOTERS` (two or more models) and `RERANK_JUDGE` turn reranking into a cascade: cheap models pick independently, and only terms they disagree on go to the judge, which sees their picks. In an evaluation on 600 terms, two cheap voters agreed on ~87% of terms, which cut the reranking cost to about a fifth with the same accuracy.
+  - `RERANK_ESCALATE_MODEL` (default `anthropic/claude-opus-5-5`) reranks again every term where the first answer's confidence is below `RERANK_ESCALATE_BELOW` (default 8), or that found no match or failed. With Sonnet first, about 20% of terms are escalated. In the 600-term evaluation, Opus with the same prompt was no more accurate than Sonnet on those terms; Claude Fable 5.2 (`anthropic/claude-fable-5-2`) is untested. Set the model empty to turn escalation off.
 
 ### Providers and default models
 
@@ -130,9 +131,10 @@ All LLM traffic goes through the LiteLLM proxy, and models use LiteLLM names (`<
 | Role | Default | Price per 1M tokens | Why |
 |---|---|---|---|
 | Reranker, translation, agent | `anthropic/claude-sonnet-5-5` | $2 in / $10 out | Mid-tier model of a current family (Opus 5.5 at $4/$20 is the expensive tier); strong multilingual reading and reliable structured output |
-| Embeddings | `gemini/gemini-embedding-2`, `EMBEDDING_DIMS=1536` | $0.20 | Highest MTEB Multilingual score of the hosted APIs checked (69.9, Google's figure); Matryoshka dims 128–3072 (3072 also works with DiskANN, at twice the storage) |
+| Escalation of unsure terms | `anthropic/claude-opus-5-5` (`RERANK_ESCALATE_MODEL`), below confidence 8 | $4 in / $20 out | Second opinion from a stronger model on the ~20% of terms Sonnet is unsure about; `anthropic/claude-fable-5-2` ($8/$40) is the alternative |
+| Embeddings | `openai/text-embedding-3-large`, `EMBEDDING_DIMS=1536` | $0.13 | Best of the models compared on 856 OMOP terms in five domains (with translation of non-English terms); 3072 dims gained at most one point |
 
-Prices are from LiteLLM's model registry (v1.104) and the providers' pricing pages; check them before budgeting. Rough cost, assuming ~1,150 input and ~80 output tokens per reranked concept: about $31 per 10,000 source concepts with Sonnet 5.5 (translation adds ~20%, and is cached per term). Embedding the standard vocabulary is a one-off of roughly 12 tokens per concept name (e.g. ~36M tokens, about $7, for 3 million concepts).
+Prices are from the providers' pricing pages; check them before budgeting. Measured cost with up to 30 candidates per term (~2,900 input and ~240 output tokens): about $8 per 1,000 terms with Sonnet 5.5, plus about $3 for escalating ~20% of them to Opus 5.5. Translation is extra and cached per term. Embedding the standard vocabulary is a one-off of roughly 12 tokens per concept name (e.g. ~36M tokens, about $7, for 3 million concepts).
 
 **Alternatives** (reranker / embeddings, prices per 1M tokens):
 
@@ -142,7 +144,7 @@ Prices are from LiteLLM's model registry (v1.104) and the providers' pricing pag
 | Only Google | `gemini/gemini-3.8-flash` ($0.75/$3.75 introductory, $1.50/$7.50 from 2027) | `gemini/gemini-embedding-2` | One key |
 | EU provider | `mistral/mistral-large-latest` ($0.50/$1.50) | `mistral/mistral-embed` ($0.10, 1024 dims) | Mistral is EU-based; its embedder is weaker on retrieval than the default |
 | Other embedders | — | `voyage/voyage-4-large`, `cohere/embed-v5.0-pro` ($0.12) | Multilingual retrieval models; no independent multilingual scores found |
-| Budget | `anthropic/claude-haiku-5-5` or `openai/gpt-6-luna` ($0.10/$0.50) | — | ~20× cheaper; check the accuracy loss on known mappings first |
+| Budget | `openai/gpt-6-luna` ($0.10/$0.50) | — | ~20× cheaper; check the accuracy loss on known mappings first |
 | Local (Ollama) | `ollama/mistral-small` | `ollama/bge-m3` (1024 dims) | No data leaves your network. Needs a GPU for usable speed. For local models set `INSTRUCTOR_MODE=json` if tool calling fails |
 | Azure / Vertex / Bedrock | deployment names | deployment names | For EU data residency; add a deployment entry to `litellm/config.yaml` |
 

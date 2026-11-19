@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     # (see README, "Providers and default models"): Claude Sonnet 5.5 reranks/translates,
     # Gemini Embedding 2 retrieves.
     llm_chat_model: str = "anthropic/claude-sonnet-5-5"
-    llm_embedding_model: str = "gemini/gemini-embedding-2"
+    llm_embedding_model: str = "openai/text-embedding-3-large"
     embedding_dims: int | None = 1536
     # What is embedded per concept: its name, plus "context" (class and domain) and/or up to
     # 8 synonyms. Each choice is a separate embedding collection.
@@ -62,9 +62,9 @@ class Settings(BaseSettings):
     embedding_task_types: bool = True
     # Comma-separated model names offered in the Settings page (in addition to what the gateway lists)
     llm_model_options: str = (
-        "anthropic/claude-sonnet-5-5,openai/gpt-6.1-terra,gemini/gemini-4-hydrogen,"
-        "mistral/mistral-large-latest,anthropic/claude-haiku-5-5,openai/gpt-6-luna,"
-        "ollama/mistral-small"
+        "anthropic/claude-sonnet-5-5,anthropic/claude-opus-5-5,anthropic/claude-fable-5-2,"
+        "openai/gpt-6.1-terra,gemini/gemini-4-hydrogen,mistral/mistral-large-latest,"
+        "openai/gpt-6-luna,ollama/mistral-small"
     )
     # Comma-separated "model:max_dims" pairs
     embedding_model_options: str = (
@@ -72,6 +72,8 @@ class Settings(BaseSettings):
         "openai/text-embedding-3-large:3072,mistral/mistral-embed:1024,ollama/bge-m3:1024"
     )
     llm_temperature: float | None = 0.0
+    # Model name fragments that reject sampling parameters: no temperature is sent to them
+    llm_no_temperature_models: str = "claude-fable-,claude-mythos-"
     llm_max_retries: int = 2
     # Instructor mode for structured output: tools (most portable via LiteLLM), json, json_schema, md_json
     instructor_mode: str = "tools"
@@ -100,6 +102,11 @@ class Settings(BaseSettings):
     rerank_voters: str = ""
     # Model that settles disagreements; empty = the configured LLM model
     rerank_judge: str = ""
+    # Escalation: when the reranker's confidence is below RERANK_ESCALATE_BELOW (or it picks
+    # nothing or fails), this model reranks the term again and its answer is used.
+    # Empty or a threshold of 0 = no escalation.
+    rerank_escalate_model: str = "anthropic/claude-opus-5-5"
+    rerank_escalate_below: int = Field(default=8, ge=0, le=10)
     workflow_plugins: str = ""
     workflow_definitions_dir: str = ""
 

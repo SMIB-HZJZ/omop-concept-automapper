@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.core.db import get_engine
 from app.llm.drug_parser import DrugParser
 from app.llm.embeddings import Embedder
-from app.llm.structured import CascadeReranker, Reranker, Translator
+from app.llm.structured import CascadeReranker, EscalatingReranker, Reranker, Translator
 from app.services import concepts as concept_service
 from app.services import drug_matching, lexical
 from app.services.settings_store import EffectiveConfig
@@ -80,17 +80,24 @@ def default_pipeline(drug_specific: bool) -> str:
     return settings.automap_pipeline
 
 
-def build_reranker(llm_model: str) -> Reranker | CascadeReranker:
-    """One model, or the voter/judge cascade when RERANK_VOTERS lists at least two models."""
+def build_reranker(llm_model: str) -> Reranker | CascadeReranker | EscalatingReranker:
+    """The configured LLM (or the RERANK_VOTERS cascade), escalating unsure terms to
+    RERANK_ESCALATE_MODEL when that is set."""
     settings = get_settings()
     voters = settings.rerank_voter_list
-    if len(voters) < 2:
+    first: Reranker | CascadeReranker
+    if len(voters) >= 2:
+        first = CascadeReranker(
+            [Reranker(m) for m in voters], Reranker(settings.rerank_judge.strip() or llm_model)
+        )
+    else:
         if voters:
             logger.warning("RERANK_VOTERS needs at least two models; using %s alone", llm_model)
-        return Reranker(llm_model)
-    return CascadeReranker(
-        [Reranker(m) for m in voters], Reranker(settings.rerank_judge.strip() or llm_model)
-    )
+        first = Reranker(llm_model)
+    stronger = settings.rerank_escalate_model.strip()
+    if not stronger or settings.rerank_escalate_below <= 0 or stronger == llm_model:
+        return first
+    return EscalatingReranker(first, Reranker(stronger), settings.rerank_escalate_below)
 
 
 def build_context(cfg: EffectiveConfig) -> NodeContext:

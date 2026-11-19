@@ -9,7 +9,7 @@ from app.llm.gateway import chat_model_settings, get_async_client
 def gateway_model(model_name: str) -> OpenAIChatModel:
     """Must be called inside the event loop that runs the agent (it reuses that loop's client)."""
     provider = LiteLLMProvider(openai_client=get_async_client())
-    settings = chat_model_settings()
+    settings = chat_model_settings(model_name)
     return OpenAIChatModel(
         model_name,
         provider=provider,

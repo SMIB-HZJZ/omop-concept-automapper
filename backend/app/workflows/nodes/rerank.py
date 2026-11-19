@@ -52,8 +52,13 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
     meta: dict = {}
     if route:
         # Kept with the mapping: terms the judge decided are the ones to review first
-        tag = "voters agreed" if route == "agreed" else "voters disagreed, judge decided"
-        rationale = f"[{tag}] {rationale or ''}".strip()
+        tag = {
+            "agreed": "voters agreed",
+            "judge": "voters disagreed, judge decided",
+            "escalated": "unsure first answer, decided by the stronger model",
+        }.get(route)
+        if tag:
+            rationale = f"[{tag}] {rationale or ''}".strip()
         meta = {"rerank_route": route, "rerank_votes": result.votes}
     if result.index is None:
         return {
