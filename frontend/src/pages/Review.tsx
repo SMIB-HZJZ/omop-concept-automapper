@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ListChecks, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -169,8 +169,10 @@ export function ReviewPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Review auto-mapping suggestions"
-        description="Auto-mapping in review mode queues its confident matches here. Accepting a suggestion maps the source concept and records it in the audit trail."
+        icon={ListChecks}
+        step={3}
+        title="Review AI suggestions"
+        description="Check what the AI proposed. Accepted suggestions become mappings; rejected ones go back to the terms still to map."
       />
       <VocabularySelector selection={selection} showDrug={false} />
       <CalibrationPanel vocabularyId={vocabularyId} />
@@ -239,6 +241,7 @@ export function ReviewPage() {
           {pending && (data?.total ?? 0) > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               <Button
+                variant="cta"
                 disabled={selected.length === 0 || busy}
                 onClick={() => decide("accept", { ids: selected.map(Number) })}
               >

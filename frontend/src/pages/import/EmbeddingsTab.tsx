@@ -206,6 +206,7 @@ export function EmbeddingsTab() {
         {isAdmin ? (
           <div className="flex flex-wrap gap-2">
             <Button
+              variant="cta"
               disabled={disabled}
               onClick={() =>
                 void run(

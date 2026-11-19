@@ -120,6 +120,7 @@ export function VocabularyTab() {
 
       {isAdmin ? (
         <Button
+          variant="cta"
           disabled={busy || !!active || !status.data?.files.some((f) => f.exists)}
           onClick={() => void run(async () => unwrap(await api.POST("/api/vocabulary/import")), "Vocabulary import")}
         >

@@ -1,4 +1,4 @@
-import { Info, SlidersHorizontal } from "lucide-react";
+import { Info, Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ApiError } from "@/api/client";
@@ -110,7 +110,11 @@ export function SearchPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Search OMOP Concepts" description="Semantic search over the embedded standard concepts." />
+      <PageHeader
+        icon={SearchIcon}
+        title="Search concepts"
+        description="Find standard OMOP concepts by meaning, in any language. Only embedded concepts are searched."
+      />
 
       <div className="grid items-end gap-3 md:grid-cols-[minmax(0,4fr)_minmax(0,2fr)_8rem_auto]">
         <div className="grid gap-1.5">

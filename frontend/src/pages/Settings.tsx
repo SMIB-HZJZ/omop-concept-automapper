@@ -1,4 +1,4 @@
-import { AlertTriangle, Info, RotateCcw, Save } from "lucide-react";
+import { AlertTriangle, Info, RotateCcw, Save, Settings as SettingsIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -314,7 +314,7 @@ function UpdateForm({ config }: { config: Config }) {
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={save} disabled={!canSave || update.isPending}>
+          <Button variant="cta" onClick={save} disabled={!canSave || update.isPending}>
             <Save /> Save configuration
           </Button>
           <ConfirmDialog
@@ -437,7 +437,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Configuration" description={description} />
+      <PageHeader icon={SettingsIcon} title="Configuration" description={description} />
       <ErrorAlert error={config.error} title="Could not load the configuration" />
       {config.data && <CurrentConfig config={config.data} />}
       {config.data && isAdmin && (

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { KeyRound, Trash2, UserPlus } from "lucide-react";
+import { KeyRound, Trash2, UserPlus, Users as UsersIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -276,6 +276,7 @@ export function UsersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        icon={UsersIcon}
         title="Users"
         description="Manage who can sign in and what they can do."
         actions={<AddUserDialog create={create} />}

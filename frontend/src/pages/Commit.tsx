@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Download, Trash2, Unlink } from "lucide-react";
+import { ClipboardCheck, Download, Trash2, Unlink } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
@@ -177,8 +177,10 @@ export function CommitPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Check & Commit Mappings"
-        description="Review the final mappings, export them, or remove ones that are wrong."
+        icon={ClipboardCheck}
+        step={4}
+        title="Check & commit"
+        description="Look over the final mappings, remove wrong ones, and download them as CSV."
       />
       <VocabularySelector selection={selection} showDrug={false} />
       <ErrorAlert error={stats.error} title="Could not load mapping statistics" />
@@ -204,7 +206,7 @@ export function CommitPage() {
                 <a
                   href={`/api/source-vocabularies/${vocabularyId}/mapped.csv`}
                   download={`vocabulary_${vocabularyId}_mappings.csv`}
-                  className={buttonVariants({ variant: "outline" })}
+                  className={buttonVariants({ variant: "cta" })}
                 >
                   <Download /> Download CSV
                 </a>

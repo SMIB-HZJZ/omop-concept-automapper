@@ -70,8 +70,9 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
     trigger: (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" className="gap-2">
-            <Settings2 className="size-4" /> Auto map settings
+          <Button variant="cta" className="gap-2">
+            <Bot className="size-4" /> Auto-map with AI
+            <Settings2 className="size-4 opacity-70" />
           </Button>
         </PopoverTrigger>
         <PopoverContent
@@ -169,7 +170,7 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
               onChange={(e) => setLimit(e.target.value)}
             />
           </div>
-          <Button className="w-full gap-2" onClick={() => void submit()} disabled={busy}>
+          <Button variant="cta" className="w-full gap-2" onClick={() => void submit()} disabled={busy}>
             <Bot className="size-4" /> Start auto mapping
           </Button>
         </PopoverContent>

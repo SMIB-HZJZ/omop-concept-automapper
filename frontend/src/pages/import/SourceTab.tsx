@@ -231,6 +231,7 @@ export function SourceTab() {
       )}
 
       <Button
+        variant="cta"
         disabled={!file || !preview || missing.length > 0 || busy || !!active}
         onClick={() => file && void submit(file)}
       >

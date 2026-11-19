@@ -6,6 +6,7 @@ import { Atc7Tab } from "./import/Atc7Tab";
 import { EmbeddingsTab } from "./import/EmbeddingsTab";
 import { SourceTab } from "./import/SourceTab";
 import { VocabularyTab } from "./import/VocabularyTab";
+import { Upload } from "lucide-react";
 
 const TABS = ["vocabulary", "source", "atc7", "embeddings"] as const;
 type Tab = (typeof TABS)[number];
@@ -18,8 +19,10 @@ export function ImportPage() {
   return (
     <div>
       <PageHeader
-        title="Data Import & Embedding"
-        description="Import OMOP standard vocabularies and your source concepts, process ATC7 codes, and embed concepts for similarity search."
+        icon={Upload}
+        step={1}
+        title="Import data"
+        description="Load the OMOP vocabularies and your source terms, then embed the standard concepts so the AI can search them. Work through the tabs from left to right."
       />
       <Tabs
         value={tab}
@@ -30,10 +33,10 @@ export function ImportPage() {
         }}
       >
         <TabsList className="mb-4 flex-wrap">
-          <TabsTrigger value="vocabulary">OMOP Vocabulary Tables</TabsTrigger>
-          <TabsTrigger value="source">Source Concepts</TabsTrigger>
-          <TabsTrigger value="atc7">ATC7 Processing</TabsTrigger>
-          <TabsTrigger value="embeddings">Embedding Management</TabsTrigger>
+          <TabsTrigger value="vocabulary">1 · OMOP vocabulary</TabsTrigger>
+          <TabsTrigger value="source">2 · Source terms</TabsTrigger>
+          <TabsTrigger value="atc7">3 · ATC7 codes</TabsTrigger>
+          <TabsTrigger value="embeddings">4 · Embeddings</TabsTrigger>
         </TabsList>
         <TabsContent value="vocabulary">
           <VocabularyTab />

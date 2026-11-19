@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/motion";
 
 type Props<T> = {
   columns: ColumnDef<T, unknown>[];
@@ -133,10 +134,20 @@ export function DataTable<T>({
           ))}
         </TableHeader>
         <TableBody>
-          {table.getRowModel().rows.length === 0 ? (
+          {table.getRowModel().rows.length === 0 && isLoading ? (
+            [0, 1, 2, 3, 4].map((i) => (
+              <TableRow key={`loading-${i}`} aria-hidden>
+                {allColumns.map((_, c) => (
+                  <TableCell key={c}>
+                    <Skeleton className="h-4 w-full max-w-48" />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          ) : table.getRowModel().rows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={allColumns.length} className="text-muted-foreground h-20 text-center">
-                {isLoading ? "Loading…" : emptyText}
+                {emptyText}
               </TableCell>
             </TableRow>
           ) : (

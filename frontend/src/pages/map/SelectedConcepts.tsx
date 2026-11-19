@@ -43,8 +43,8 @@ export function SelectedConcepts({
               <div className="text-muted-foreground text-xs">Vocabulary: {c.vocabulary_id}</div>
             </div>
           ))}
-          <Button className="w-full" onClick={onConfirm} disabled={confirming}>
-            Confirm mapping
+          <Button variant="cta" className="w-full" onClick={onConfirm} disabled={confirming}>
+            {confirming ? "Saving…" : "Confirm mapping"}
           </Button>
         </>
       )}

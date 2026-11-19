@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MotionConfig } from "motion/react";
 import { lazy, Suspense, type ReactNode } from "react";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 
@@ -7,6 +8,7 @@ import { AuthProvider } from "@/auth/AuthProvider";
 import { RequireAdmin, RequireAuth } from "@/auth/guards";
 import { EmptyState } from "@/components/common";
 import { Layout } from "@/components/Layout";
+import { PageSkeleton } from "@/components/motion";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LoginPage } from "@/pages/Login";
@@ -20,11 +22,7 @@ const CommitPage = lazy(() => import("@/pages/Commit").then((m) => ({ default: m
 const SettingsPage = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.SettingsPage })));
 const UsersPage = lazy(() => import("@/pages/Users").then((m) => ({ default: m.UsersPage })));
 
-const page = (element: ReactNode) => (
-  <Suspense fallback={<div className="text-muted-foreground p-10 text-center text-sm">Loading…</div>}>
-    {element}
-  </Suspense>
-);
+const page = (element: ReactNode) => <Suspense fallback={<PageSkeleton />}>{element}</Suspense>;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,12 +63,15 @@ const router = createBrowserRouter([
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <RouterProvider router={router} />
-        </AuthProvider>
-        <Toaster richColors position="bottom-right" />
-      </TooltipProvider>
+      {/* Animations follow the operating system's "reduce motion" setting */}
+      <MotionConfig reducedMotion="user">
+        <TooltipProvider>
+          <AuthProvider>
+            <RouterProvider router={router} />
+          </AuthProvider>
+          <Toaster richColors position="bottom-right" />
+        </TooltipProvider>
+      </MotionConfig>
     </QueryClientProvider>
   );
 }

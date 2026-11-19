@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { CheckCircle2, ChevronDown } from "lucide-react";
+import { CheckCircle2, ChevronDown, Map as MapIcon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
@@ -119,19 +119,25 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
         {stats.data && (
           <>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="Total concepts" value={formatNumber(stats.data.total)} />
-              <StatCard label="Mapped" value={formatNumber(stats.data.mapped)} />
-              <StatCard label="Unmapped" value={formatNumber(stats.data.unmapped)} />
-              <StatCard label="Progress" value={`${stats.data.percentage.toFixed(1)}%`} />
+              <StatCard label="Total concepts" value={stats.data.total} />
+              <StatCard label="Mapped" value={stats.data.mapped} tone="success" />
+              <StatCard
+                label="Still to map"
+                value={stats.data.unmapped}
+                tone={stats.data.unmapped > 0 ? "warning" : "success"}
+              />
+              <StatCard label="Progress" value={`${stats.data.percentage.toFixed(1)}%`} tone="primary" />
             </div>
             <Progress value={stats.data.percentage} />
             {stats.data.pending_suggestions > 0 && (
-              <p className="text-sm">
-                {formatNumber(stats.data.pending_suggestions)} auto-map suggestions wait for review —{" "}
-                <Link to="/review" className="text-primary underline">
-                  open the review queue
+              <div className="bg-accent text-accent-foreground flex flex-wrap items-center justify-between gap-2 rounded-lg px-4 py-3 text-sm">
+                <span>
+                  <b>{formatNumber(stats.data.pending_suggestions)}</b> AI suggestions are waiting for your review.
+                </span>
+                <Link to="/review" className="font-medium underline-offset-4 hover:underline">
+                  Go to Review →
                 </Link>
-              </p>
+              </div>
             )}
           </>
         )}
@@ -197,7 +203,9 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
             />
           ) : (
             items.length > 0 && (
-              <p className="text-muted-foreground text-sm">Select a concept from the table above to start mapping.</p>
+              <p className="text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-center text-sm">
+                Select a term in the table above to map it by hand.
+              </p>
             )
           )}
         </>
@@ -212,12 +220,13 @@ export function MapPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Map Concepts"
+        icon={MapIcon}
+        step={2}
+        title="Map concepts"
         description={
           <>
-            <b>Auto map all</b>: map every unmapped concept with AI similarity search. <b>Manual mapping</b>: review and
-            map single concepts with search and filters. Tip: import the vocabulary and embed concepts (Import Data)
-            before mapping.
+            Let the AI map all remaining terms with <b>Auto-map with AI</b>, or pick a term in the table to map it by
+            hand.
           </>
         }
       />
