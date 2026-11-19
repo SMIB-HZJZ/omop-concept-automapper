@@ -117,7 +117,8 @@ def test_embed_many_splits_into_parallel_requests_in_order(monkeypatch):
     monkeypatch.setattr(Embedder, "embed", embed)
     monkeypatch.setattr(get_settings(), "embedding_concurrency", 3)
     assert request_size("gemini/gemini-embedding-2") == 100
-    assert request_size("openai/text-embedding-3-large") == 256
+    assert request_size("openai/text-embedding-3-large") == 1024
+    assert request_size("ollama/bge-m3") == 256
     texts = [str(i) for i in range(250)]
     vectors = Embedder("gemini/gemini-embedding-2", 8).embed_many(texts)
     assert [v[0] for v in vectors] == [float(i) for i in range(250)]  # input order kept

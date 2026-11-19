@@ -331,13 +331,16 @@ def refresh_labels(conn: psycopg.Connection, table: str) -> int:
 
 
 @cache.cached("embeddings", ttl=30)
-def embedding_status(session: Session, collection: str, domain: str | None = None) -> dict:
-    """Counts for the Embeddings tab. Counting the concept table is slow, so it is cached briefly
-    (the namespace is invalidated whenever embeddings change)."""
+def embedding_status(
+    session: Session, collection: str, domains: tuple[str, ...] | str | None = None
+) -> dict:
+    """Counts for the Embeddings tab, optionally for some domains. Counting the concept table is
+    slow, so it is cached briefly (the namespace is invalidated whenever embeddings change)."""
     col = get_collection(session, collection)
     exists = col is not None and collection_exists(session, collection)
-    domain_sql = " AND c.domain_id = :domain" if domain else ""
-    params = {"domain": domain} if domain else {}
+    wanted = [domains] if isinstance(domains, str) else list(domains or ())
+    domain_sql = " AND c.domain_id = ANY(:domains)" if wanted else ""
+    params = {"domains": wanted} if wanted else {}
     if exists:
         table = _ident(col.table_name)  # type: ignore[union-attr]
         row = session.execute(

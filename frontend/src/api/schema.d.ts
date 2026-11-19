@@ -608,6 +608,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/concepts/{concept_id}/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Concept Details */
+        get: operations["get_concept_details_api_concepts__concept_id__details_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/concepts/{concept_id}/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explain */
+        post: operations["explain_api_concepts__concept_id__explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/search": {
         parameters: {
             query?: never;
@@ -929,6 +963,36 @@ export interface components {
             /** Concept Class Id */
             concept_class_id: string;
         };
+        /** ConceptDetails */
+        ConceptDetails: {
+            concept: components["schemas"]["ConceptOut"];
+            /** Synonyms */
+            synonyms: string[];
+            /** Parents */
+            parents: components["schemas"]["ConceptOut"][];
+            /** Parent Count */
+            parent_count: number;
+            /** Children */
+            children: components["schemas"]["ConceptOut"][];
+            /** Child Count */
+            child_count: number;
+            /** Related */
+            related: components["schemas"]["RelatedConcept"][];
+        };
+        /** ConceptExplanation */
+        ConceptExplanation: {
+            /** Concept Id */
+            concept_id: number;
+            /** Explanation */
+            explanation: string;
+            /** Model */
+            model: string;
+            /**
+             * Cached
+             * @default false
+             */
+            cached: boolean;
+        };
         /** ConceptLookup */
         ConceptLookup: {
             /** Found */
@@ -1027,11 +1091,16 @@ export interface components {
         };
         /** EmbedRequest */
         EmbedRequest: {
+            /**
+             * Domains
+             * @default []
+             */
+            domains: string[];
             /** Domain */
             domain?: string | null;
             /**
              * Batch Size
-             * @default 1000
+             * @default 4000
              */
             batch_size: number;
         };
@@ -1202,6 +1271,29 @@ export interface components {
             dimension_options: number[];
             /** Gateway Models Available */
             gateway_models_available: boolean;
+        };
+        /** RelatedConcept */
+        RelatedConcept: {
+            /** Concept Id */
+            concept_id: number;
+            /** Concept Name */
+            concept_name: string;
+            /** Concept Class Id */
+            concept_class_id: string;
+            /** Domain Id */
+            domain_id: string;
+            /** Vocabulary Id */
+            vocabulary_id: string;
+            /** Concept Code */
+            concept_code: string;
+            /** Standard Concept */
+            standard_concept?: string | null;
+            /** Invalid Reason */
+            invalid_reason?: string | null;
+            /** Atc7 Codes */
+            atc7_codes?: string[] | null;
+            /** Relationship Id */
+            relationship_id: string;
         };
         /** SearchRequest */
         SearchRequest: {
@@ -3062,6 +3154,68 @@ export interface operations {
             };
         };
     };
+    get_concept_details_api_concepts__concept_id__details_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                concept_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    explain_api_concepts__concept_id__explain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                concept_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptExplanation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_api_search_post: {
         parameters: {
             query?: never;
@@ -3098,7 +3252,8 @@ export interface operations {
     embedding_status_api_embeddings_status_get: {
         parameters: {
             query?: {
-                domain?: string | null;
+                /** @description Repeat for several domains */
+                domain?: string[] | null;
             };
             header?: never;
             path?: never;

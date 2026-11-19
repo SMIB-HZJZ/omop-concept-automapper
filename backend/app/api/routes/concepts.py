@@ -1,15 +1,27 @@
+import asyncio
+import logging
 import re
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.config import get_settings
 from app.llm.embeddings import Embedder
-from app.schemas.api import ConceptLookup, ConceptOut, SearchRequest, SearchResponse
+from app.llm.explain import explain_concept
+from app.schemas.api import (
+    ConceptDetails,
+    ConceptExplanation,
+    ConceptLookup,
+    ConceptOut,
+    SearchRequest,
+    SearchResponse,
+)
 from app.services import concepts as concept_service
 from app.services.settings_store import get_effective_config
 from app.vector.store import CollectionMissing, PgVectorStore, SearchFilters
 
 router = APIRouter(tags=["concepts"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/concepts", response_model=ConceptLookup)
@@ -37,6 +49,33 @@ def get_concept(concept_id: int, _: CurrentUser, session: SessionDep):
     if not found:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Concept ID {concept_id} not found")
     return found[0]
+
+
+@router.get("/concepts/{concept_id}/details", response_model=ConceptDetails)
+def get_concept_details(concept_id: int, _: CurrentUser, session: SessionDep):
+    details = concept_service.get_details(session, concept_id)
+    if details is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Concept ID {concept_id} not found")
+    return details
+
+
+@router.post("/concepts/{concept_id}/explain", response_model=ConceptExplanation)
+async def explain(concept_id: int, _: CurrentUser, session: SessionDep):
+    details = await asyncio.to_thread(concept_service.get_details, session, concept_id)
+    if details is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Concept ID {concept_id} not found")
+    # A separate, cheaper model (LLM_EXPLAIN_MODEL); empty = the configured chat model
+    model = get_settings().llm_explain_model.strip()
+    if not model:
+        model = (await asyncio.to_thread(get_effective_config, session)).llm_model
+    try:
+        text_, cached = await explain_concept(details, model)
+    except Exception as exc:
+        logger.warning("Explaining concept %s failed: %s", concept_id, exc)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"The AI explanation failed: {type(exc).__name__}"
+        ) from exc
+    return ConceptExplanation(concept_id=concept_id, explanation=text_, model=model, cached=cached)
 
 
 @router.post("/search", response_model=SearchResponse)

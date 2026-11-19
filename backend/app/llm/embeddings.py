@@ -56,7 +56,15 @@ def task_params(model: str, kind: str) -> dict:
 
 # Texts per request: below each provider's limit (Gemini and Cohere take ~100 per call), and small
 # enough for OpenAI that one batch of the embedding task is split over parallel requests
-REQUEST_SIZES = {"gemini/": 100, "vertex_ai/": 100, "cohere/": 96, "voyage/": 128, "mistral/": 128}
+REQUEST_SIZES = {
+    "gemini/": 100,
+    "vertex_ai/": 100,
+    "cohere/": 96,
+    "voyage/": 128,
+    "mistral/": 128,
+    # OpenAI allows 2048 inputs (and 300k tokens) per request; concept names are short
+    "openai/": 1024,
+}
 DEFAULT_REQUEST_SIZE = 256
 
 

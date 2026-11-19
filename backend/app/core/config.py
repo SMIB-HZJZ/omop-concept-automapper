@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     llm_no_temperature_models: str = (
         "claude-fable-,claude-mythos-,claude-opus-5,claude-sonnet-5,claude-haiku-5"
     )
+    # Model for the AI explanation of a concept in the concept window (short, cheap text)
+    llm_explain_model: str = "anthropic/claude-haiku-5-5"
     # Reasoning effort for the chat model (reranker, translation, drug parser, agents), sent as
     # reasoning_effort; LiteLLM maps it to Claude's output_config.effort. Empty = the model's
     # default (Sonnet 5.5 and Fable 5.2: high, Opus 5.5: medium).

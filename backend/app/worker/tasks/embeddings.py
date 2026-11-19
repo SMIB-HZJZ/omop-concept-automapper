@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+from concurrent.futures import Future, ThreadPoolExecutor
 
 from sqlalchemy import text
 
@@ -46,14 +47,19 @@ def _active_collection(probe: bool):
 def embed_standard_concepts(
     self,
     domain: str | None = None,
-    batch_size: int = 1000,
+    batch_size: int = 4000,
     refresh_only: bool = False,
     user_id: int | None = None,
+    domains: list[str] | None = None,
 ) -> dict:
     """Embed standard concepts that have no vector yet, and re-embed those whose text changed.
 
-    ``refresh_only`` (after a vocabulary update): only changed vectors and new concepts in
-    domains the collection already covers, so a partly embedded vocabulary is not completed."""
+    ``domains`` (or the older single ``domain``) limits the run; several domains in one run
+    rebuild the DiskANN index once instead of once per domain. ``refresh_only`` (after a
+    vocabulary update): only changed vectors and new concepts in domains the collection already
+    covers, so a partly embedded vocabulary is not completed.
+
+    The next batch is sent to the embedding model while the previous one is written."""
     progress = self.progress
     progress.phase("Checking the embedding model")
     cfg, embedder, col = _active_collection(probe=True)
@@ -62,7 +68,8 @@ def embed_standard_concepts(
     with raw_connection() as conn:
         store.ensure_domain_labels(conn)
 
-    domain_sql = " AND c.domain_id = %s" if domain else ""
+    wanted = sorted(set(domains or ([domain] if domain else [])))
+    domain_sql = " AND c.domain_id = ANY(%s)" if wanted else ""
     refresh_sql = (
         f" AND (e.concept_id IS NOT NULL OR dl.label IN ({store.covered_labels_sql(table)}))"
         if refresh_only
@@ -75,7 +82,7 @@ def embed_standard_concepts(
         WHERE c.standard_concept = 'S' AND (e.concept_id IS NULL OR e.text_hash IS NULL)
           AND {store.EXCLUDED_CLASS_FILTER}{domain_sql}{refresh_sql}
     """
-    params = (domain,) if domain else ()
+    params = (wanted,) if wanted else ()
 
     with raw_connection() as read_conn, raw_connection() as write_conn:
         with read_conn.cursor() as cur:
@@ -107,20 +114,35 @@ def embed_standard_concepts(
                     + " ORDER BY c.concept_id",
                     params,
                 )
-                while batch := cur.fetchmany(batch_size):
-                    vectors = embedder.embed_many([row[1] for row in batch])
-                    embedded += store.bulk_upsert(
-                        write_conn,
-                        table,
-                        (
-                            (row[0], vec, [row[2]], _text_hash(row[1]))
-                            for row, vec in zip(batch, vectors, strict=True)
-                        ),
-                    )
-                    progress.update(
-                        current=embedded, message=f"Embedded {embedded:,}/{pending:,} concepts"
-                    )
-                    progress.check_cancelled()
+                # One batch is embedded (in a thread) while the previous one is written
+                with ThreadPoolExecutor(1, thread_name_prefix="embed-next") as pool:
+                    previous: tuple[list, Future] | None = None
+                    while True:
+                        batch = cur.fetchmany(batch_size)
+                        upcoming = (
+                            (batch, pool.submit(embedder.embed_many, [row[1] for row in batch]))
+                            if batch
+                            else None
+                        )
+                        if previous is not None:
+                            done_batch, future = previous
+                            vectors = future.result()
+                            embedded += store.bulk_upsert(
+                                write_conn,
+                                table,
+                                (
+                                    (row[0], vec, [row[2]], _text_hash(row[1]))
+                                    for row, vec in zip(done_batch, vectors, strict=True)
+                                ),
+                            )
+                            progress.update(
+                                current=embedded,
+                                message=f"Embedded {embedded:,}/{pending:,} concepts",
+                            )
+                            progress.check_cancelled()
+                        if upcoming is None:
+                            break
+                        previous = upcoming
         finally:
             # Always leave a usable index behind, even after a cancel or an error. A failed batch
             # leaves write_conn in an aborted transaction, and the phase must not re-raise the

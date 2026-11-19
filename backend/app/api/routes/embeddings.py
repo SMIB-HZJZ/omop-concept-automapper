@@ -13,9 +13,13 @@ router = APIRouter(prefix="/embeddings", tags=["embeddings"])
 
 
 @router.get("/status", response_model=EmbeddingStatus)
-def embedding_status(_: CurrentUser, session: SessionDep, domain: str | None = Query(None)):
+def embedding_status(
+    _: CurrentUser,
+    session: SessionDep,
+    domain: list[str] | None = Query(None, description="Repeat for several domains"),
+):
     cfg = get_effective_config(session)
-    status_ = store.embedding_status(session, cfg.collection_name, domain)
+    status_ = store.embedding_status(session, cfg.collection_name, tuple(sorted(domain or [])))
     col = store.get_collection(session, cfg.collection_name)
     return EmbeddingStatus(
         **status_,
@@ -26,7 +30,11 @@ def embedding_status(_: CurrentUser, session: SessionDep, domain: str | None = Q
 
 @router.post("/embed", response_model=TaskRef, status_code=status.HTTP_202_ACCEPTED)
 def embed(body: EmbedRequest, user: AdminUser, session: SessionDep):
-    return start_task(session, "embeddings.embed", embed_standard_concepts, body.model_dump(), user)
+    params = body.model_dump()
+    if params["domain"] and not params["domains"]:
+        params["domains"] = [params["domain"]]
+    params.pop("domain")
+    return start_task(session, "embeddings.embed", embed_standard_concepts, params, user)
 
 
 @router.post("/sync-metadata", response_model=TaskRef, status_code=status.HTTP_202_ACCEPTED)

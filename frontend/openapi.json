@@ -1834,6 +1834,100 @@
         }
       }
     },
+    "/api/concepts/{concept_id}/details": {
+      "get": {
+        "tags": [
+          "concepts"
+        ],
+        "summary": "Get Concept Details",
+        "operationId": "get_concept_details_api_concepts__concept_id__details_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Concept Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/concepts/{concept_id}/explain": {
+      "post": {
+        "tags": [
+          "concepts"
+        ],
+        "summary": "Explain",
+        "operationId": "explain_api_concepts__concept_id__explain_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "concept_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Concept Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptExplanation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/search": {
       "post": {
         "tags": [
@@ -1900,14 +1994,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Repeat for several domains",
               "title": "Domain"
-            }
+            },
+            "description": "Repeat for several domains"
           }
         ],
         "responses": {
@@ -2761,6 +2860,88 @@
         ],
         "title": "ConceptBrief"
       },
+      "ConceptDetails": {
+        "properties": {
+          "concept": {
+            "$ref": "#/components/schemas/ConceptOut"
+          },
+          "synonyms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Synonyms"
+          },
+          "parents": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptOut"
+            },
+            "type": "array",
+            "title": "Parents"
+          },
+          "parent_count": {
+            "type": "integer",
+            "title": "Parent Count"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptOut"
+            },
+            "type": "array",
+            "title": "Children"
+          },
+          "child_count": {
+            "type": "integer",
+            "title": "Child Count"
+          },
+          "related": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedConcept"
+            },
+            "type": "array",
+            "title": "Related"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept",
+          "synonyms",
+          "parents",
+          "parent_count",
+          "children",
+          "child_count",
+          "related"
+        ],
+        "title": "ConceptDetails"
+      },
+      "ConceptExplanation": {
+        "properties": {
+          "concept_id": {
+            "type": "integer",
+            "title": "Concept Id"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "cached": {
+            "type": "boolean",
+            "title": "Cached",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "explanation",
+          "model"
+        ],
+        "title": "ConceptExplanation"
+      },
       "ConceptLookup": {
         "properties": {
           "found": {
@@ -3085,6 +3266,14 @@
       },
       "EmbedRequest": {
         "properties": {
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Domains",
+            "default": []
+          },
           "domain": {
             "anyOf": [
               {
@@ -3098,10 +3287,10 @@
           },
           "batch_size": {
             "type": "integer",
-            "maximum": 2000.0,
+            "maximum": 10000.0,
             "minimum": 10.0,
             "title": "Batch Size",
-            "default": 1000
+            "default": 4000
           }
         },
         "type": "object",
@@ -3590,6 +3779,85 @@
           "gateway_models_available"
         ],
         "title": "ModelOptions"
+      },
+      "RelatedConcept": {
+        "properties": {
+          "concept_id": {
+            "type": "integer",
+            "title": "Concept Id"
+          },
+          "concept_name": {
+            "type": "string",
+            "title": "Concept Name"
+          },
+          "concept_class_id": {
+            "type": "string",
+            "title": "Concept Class Id"
+          },
+          "domain_id": {
+            "type": "string",
+            "title": "Domain Id"
+          },
+          "vocabulary_id": {
+            "type": "string",
+            "title": "Vocabulary Id"
+          },
+          "concept_code": {
+            "type": "string",
+            "title": "Concept Code"
+          },
+          "standard_concept": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard Concept"
+          },
+          "invalid_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalid Reason"
+          },
+          "atc7_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atc7 Codes"
+          },
+          "relationship_id": {
+            "type": "string",
+            "title": "Relationship Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "concept_id",
+          "concept_name",
+          "concept_class_id",
+          "domain_id",
+          "vocabulary_id",
+          "concept_code",
+          "relationship_id"
+        ],
+        "title": "RelatedConcept"
       },
       "SearchRequest": {
         "properties": {

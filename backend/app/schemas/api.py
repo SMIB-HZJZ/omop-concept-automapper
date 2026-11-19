@@ -296,6 +296,29 @@ class ConceptOut(BaseModel):
     atc7_codes: list[str] | None = None
 
 
+class RelatedConcept(ConceptOut):
+    relationship_id: str
+
+
+class ConceptDetails(BaseModel):
+    concept: ConceptOut
+    synonyms: list[str]
+    # Direct parents/children (one level); the counts include those beyond the shown limit
+    parents: list[ConceptOut]
+    parent_count: int
+    children: list[ConceptOut]
+    child_count: int
+    # Other relationships from this concept (Maps to, Has ingredient, ...), hierarchy excluded
+    related: list[RelatedConcept]
+
+
+class ConceptExplanation(BaseModel):
+    concept_id: int
+    explanation: str
+    model: str
+    cached: bool = False
+
+
 class ConceptLookup(BaseModel):
     found: list[ConceptOut]
     missing: list[int]
@@ -355,8 +378,12 @@ class EmbeddingStatus(BaseModel):
 
 
 class EmbedRequest(BaseModel):
+    # Domains to embed in one run (one index build); empty = all. ``domain`` is the older
+    # single-domain form.
+    domains: list[str] = []
     domain: str | None = None
-    batch_size: int = Field(default=1000, ge=10, le=2000)
+    # Concepts read and written per database batch (requests to the model are sized per provider)
+    batch_size: int = Field(default=4000, ge=10, le=10000)
 
 
 # --------------------------------------------------------------------------- tasks
