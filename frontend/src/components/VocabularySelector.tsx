@@ -3,10 +3,9 @@ import { Link } from "react-router";
 
 import { useUpdateVocabulary } from "@/api/queries";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/MultiSelect";
+import { VocabularyTypeSwitch } from "@/components/VocabularyTypeSwitch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 
@@ -55,21 +54,11 @@ export function VocabularySelector({ selection, showDrug = true }: { selection: 
         </Select>
       </div>
       {showDrug && vocabulary && (
-        <div className="flex h-9 items-center gap-2">
-          <Checkbox id="drug-vocabulary" checked={selection.isDrug} onCheckedChange={(v) => selection.setIsDrug(!!v)} />
-          <Label htmlFor="drug-vocabulary">Drug vocabulary</Label>
-          {selection.drugDiffersFromDefault && (
-            <Button
-              variant="link"
-              size="sm"
-              className="h-auto px-1"
-              disabled={update.isPending}
-              onClick={() => update.mutate({ id: vocabulary.id, is_drug: selection.isDrug })}
-            >
-              save as default
-            </Button>
-          )}
-        </div>
+        <VocabularyTypeSwitch
+          isDrug={selection.isDrug}
+          onChange={selection.setIsDrug}
+          disabled={selection.isSavingDrug}
+        />
       )}
       {vocabulary && (
         <div className="grid gap-1.5">

@@ -1,21 +1,22 @@
-import { useSourceVocabularies } from "@/api/queries";
+import { useSourceVocabularies, useUpdateVocabulary } from "@/api/queries";
 import type { SourceVocabulary } from "@/api/types";
 import { usePersistentState } from "@/hooks/usePersistentState";
 
 /** The selected source vocabulary is shared by the Map, Review and Commit pages. */
 export function useSelectedVocabulary() {
   const vocabularies = useSourceVocabularies();
+  const update = useUpdateVocabulary();
   const [selectedId, setSelectedId] = usePersistentState<number | null>("vocabulary", null);
-  const [drugOverride, setDrugOverride] = usePersistentState<Record<string, boolean>>("drug-override", {});
 
   const list = vocabularies.data ?? [];
   // Falls back to the first vocabulary when nothing (or a deleted one) is selected
   const vocabulary: SourceVocabulary | null =
     list.find((v) => v.id === selectedId) ?? (list.length > 0 ? list[0] : null);
 
-  const isDrug = vocabulary ? (drugOverride[vocabulary.id] ?? vocabulary.is_drug) : false;
+  // The vocabulary's own setting is the only switch for drug mode (auto-map and manual mapping)
+  const isDrug = vocabulary?.is_drug ?? false;
   const setIsDrug = (value: boolean) => {
-    if (vocabulary) setDrugOverride({ ...drugOverride, [vocabulary.id]: value });
+    if (vocabulary) update.mutate({ id: vocabulary.id, is_drug: value });
   };
 
   return {
@@ -26,6 +27,6 @@ export function useSelectedVocabulary() {
     select: setSelectedId,
     isDrug,
     setIsDrug,
-    drugDiffersFromDefault: !!vocabulary && isDrug !== vocabulary.is_drug,
+    isSavingDrug: update.isPending,
   };
 }

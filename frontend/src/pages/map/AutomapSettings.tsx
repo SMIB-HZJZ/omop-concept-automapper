@@ -8,9 +8,8 @@ import { taskVocabularyId } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 import { MultiSelect } from "@/components/MultiSelect";
 import { TaskProgress } from "@/components/TaskProgress";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DrugModeNote } from "@/components/VocabularyTypeSwitch";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -30,9 +29,8 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
   const [domains, setDomains] = usePersistentState<string[]>("automap-domains", []);
   const [threshold, setThreshold] = useAutomapThreshold();
   const [domainMode, setDomainMode] = useDomainMode();
-  // Follows the vocabulary's drug flag until the user overrides it
-  const [drugOverride, setDrugOverride] = useState<boolean | null>(null);
-  const drugSpecific = drugOverride ?? isDrug;
+  // Drug mode comes from the vocabulary type (set on the vocabulary bar)
+  const drugSpecific = isDrug;
   const [mode, setMode] = useState<"review" | "commit">("review");
   const [pipeline, setPipeline] = useState(DEFAULT_PIPELINE);
   const [limit, setLimit] = useState("");
@@ -126,18 +124,7 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
               Minimum confidence score (1–10) required to auto-map a concept. AI suggest uses the same threshold.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Checkbox id="drug-specific" checked={drugSpecific} onCheckedChange={(v) => setDrugOverride(!!v)} />
-            <Label htmlFor="drug-specific">Drug-specific mapping</Label>
-          </div>
-          {drugSpecific && (
-            <Alert>
-              <AlertDescription className="text-xs">
-                ATC7 enhanced mapping: ATC7 codes are extracted from the start of source values (e.g. A10BA02) and used
-                to limit the search space.
-              </AlertDescription>
-            </Alert>
-          )}
+          <DrugModeNote isDrug={drugSpecific} />
           <div className="grid gap-1.5">
             <Label id="automap-mode-label">Mode</Label>
             <RadioGroup

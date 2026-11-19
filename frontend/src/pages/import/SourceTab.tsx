@@ -9,6 +9,7 @@ import { taskResult } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 import { ErrorAlert } from "@/components/common";
 import { TaskProgress } from "@/components/TaskProgress";
+import { VocabularyTypeSwitch } from "@/components/VocabularyTypeSwitch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -166,10 +167,11 @@ export function SourceTab() {
 
       <Alert>
         <Info />
-        <AlertTitle>Drug-specific mapping enhancement</AlertTitle>
+        <AlertTitle>Drug vocabularies</AlertTitle>
         <AlertDescription>
-          For drug vocabularies, if your <code>source_value</code> starts with an ATC7 code (e.g. 'A10BA02XYZ'), the
-          system uses this code to limit the search space during drug-specific mapping.
+          Set <b>Vocabulary type</b> to <b>Drugs</b> for medicine lists. Mapping then uses drug rules: an ATC7 code at
+          the start of <code>source_value</code> (e.g. 'A10BA02XYZ') narrows the search, and drugs are matched on
+          ingredient, strength and dose form. You can change the type later on the Map page.
         </AlertDescription>
       </Alert>
 
@@ -209,10 +211,7 @@ export function SourceTab() {
             onChange={(e) => setName(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-2 pt-6">
-          <Checkbox id="source-is-drug" checked={isDrug} onCheckedChange={(v) => setIsDrug(!!v)} />
-          <Label htmlFor="source-is-drug">Drug vocabulary</Label>
-        </div>
+        <VocabularyTypeSwitch isDrug={isDrug} onChange={setIsDrug} />
       </div>
 
       {parseError && <ErrorAlert error={parseError} title="Could not read the file" />}

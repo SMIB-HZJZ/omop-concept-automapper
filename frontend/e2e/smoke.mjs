@@ -34,14 +34,14 @@ await step("login", async () => {
   await page.getByLabel("Username").fill("admin");
   await page.getByLabel("Password").fill(PW);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByRole("heading", { name: "Map Concepts" }).waitFor({ timeout: 10000 });
+  await page.getByRole("heading", { name: "Map concepts" }).waitFor({ timeout: 10000 });
   if (!page.url().endsWith("/map")) throw new Error(`redirected to ${page.url()}`);
 });
 for (const [path, heading, file] of [
-  ["/import", "Data Import & Embedding", "01-import-vocabulary"],
-  ["/import?tab=source", "Data Import & Embedding", "02-import-source"],
-  ["/import?tab=atc7", "Data Import & Embedding", "03-import-atc7"],
-  ["/import?tab=embeddings", "Data Import & Embedding", "04-import-embeddings"],
+  ["/import", "Import data", "01-import-vocabulary"],
+  ["/import?tab=source", "Import data", "02-import-source"],
+  ["/import?tab=atc7", "Import data", "03-import-atc7"],
+  ["/import?tab=embeddings", "Import data", "04-import-embeddings"],
 ]) {
   await step(`page ${path}`, async () => {
     await page.goto(`${BASE}${path}`);
@@ -60,7 +60,7 @@ await step("search", async () => {
 });
 await step("map: select concept and search", async () => {
   await page.goto(`${BASE}/map`);
-  await page.getByRole("heading", { name: "Map Concepts" }).waitFor();
+  await page.getByRole("heading", { name: "Map concepts" }).waitFor();
   await settle();
   await shot("06-map");
   const row = page.locator("table").first().locator("tbody tr").first();
@@ -77,7 +77,7 @@ await step("map: AI suggest", async () => {
   await shot("08-map-ai-suggest");
 });
 await step("map: auto-map settings", async () => {
-  await page.getByRole("button", { name: "Auto map settings" }).click();
+  await page.getByRole("button", { name: /Auto-map with AI/ }).click();
   await page.waitForTimeout(500);
   await shot("10-map-automap-settings");
   await page.keyboard.press("Escape");
@@ -91,8 +91,8 @@ await step("map: select result and confirm", async () => {
   await shot("09-map-confirmed");
 });
 for (const [path, heading, file] of [
-  ["/review", "Review auto-mapping suggestions", "11-review"],
-  ["/commit", "Check & Commit Mappings", "12-commit"],
+  ["/review", "Review AI suggestions", "11-review"],
+  ["/commit", "Check & commit", "12-commit"],
   ["/settings", "Configuration", "13-settings"],
   ["/users", "Users", "14-users"],
 ]) {
