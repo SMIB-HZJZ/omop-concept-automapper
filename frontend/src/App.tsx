@@ -44,13 +44,14 @@ const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <Navigate to="/import" replace /> },
-      { path: "import", element: page(<ImportPage />) },
+      // Mapping is the main page for everyone
+      { index: true, element: <Navigate to="/map" replace /> },
+      { path: "import", element: <RequireAdmin>{page(<ImportPage />)}</RequireAdmin> },
       { path: "search", element: page(<SearchPage />) },
       { path: "map", element: page(<MapPage />) },
       { path: "review", element: page(<ReviewPage />) },
-      { path: "commit", element: page(<CommitPage />) },
-      { path: "settings", element: page(<SettingsPage />) },
+      { path: "commit", element: <RequireAdmin>{page(<CommitPage />)}</RequireAdmin> },
+      { path: "settings", element: <RequireAdmin>{page(<SettingsPage />)}</RequireAdmin> },
       {
         path: "users",
         element: <RequireAdmin>{page(<UsersPage />)}</RequireAdmin>,

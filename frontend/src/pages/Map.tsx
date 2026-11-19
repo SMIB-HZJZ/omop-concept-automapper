@@ -14,7 +14,17 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Link } from "react-router";
 
 import { api, unwrap } from "@/api/client";
-import { keys, useAuditRecent, useAuditStats, useMappingStats, useUnmapped, type UnmappedView } from "@/api/queries";
+import { useAuth } from "@/auth/useAuth";
+import {
+  keys,
+  leaveVocabulary,
+  useAuditRecent,
+  useAuditStats,
+  useMappingStats,
+  usePresence,
+  useUnmapped,
+  type UnmappedView,
+} from "@/api/queries";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/lib/utils";
@@ -33,18 +43,33 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Progress } from "@/components/ui/progress";
 import { useAutomapControls } from "./map/AutomapSettings";
 import { ConceptDetail } from "./map/ConceptDetail";
+import { TeamStatus } from "./map/Team";
+import { UserAvatar } from "@/components/UserAvatar";
 import { defaultSearchRequest } from "./map/searchRequest";
 
-const UNMAPPED_COLUMNS: ColumnDef<UnmappedItem, unknown>[] = [
+/** Columns of the term list; ``othersOn`` maps a source term to colleagues who have it open. */
+const unmappedColumns = (othersOn: Map<number, string[]>): ColumnDef<UnmappedItem, unknown>[] => [
   {
     id: "term",
     header: "Source term",
-    cell: ({ row }) => (
-      <div className="min-w-0">
-        <div className="leading-snug font-medium">{row.original.source_concept_name}</div>
-        <div className="text-muted-foreground truncate font-mono text-xs">{row.original.source_value}</div>
-      </div>
-    ),
+    cell: ({ row }) => {
+      const others = othersOn.get(row.original.source_id) ?? [];
+      return (
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="leading-snug font-medium">{row.original.source_concept_name}</div>
+            <div className="text-muted-foreground truncate font-mono text-xs">{row.original.source_value}</div>
+          </div>
+          {others.length > 0 && (
+            <div className="flex -space-x-1.5 pt-0.5" title={`Open by ${others.join(", ")}`}>
+              {others.map((name) => (
+                <UserAvatar key={name} name={name} className="size-5 text-[9px]" />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    },
   },
   {
     accessorKey: "freq",
@@ -177,7 +202,7 @@ function ListTabs({
 }
 
 /** Mapped / total with a bar, what is left, and a link to waiting suggestions. */
-function ProgressStrip({ vocabularyId, action }: { vocabularyId: number; action: ReactNode }) {
+function ProgressStrip({ vocabularyId, action, team }: { vocabularyId: number; action: ReactNode; team: ReactNode }) {
   const stats = useMappingStats(vocabularyId);
   const d = stats.data;
   return (
@@ -205,7 +230,10 @@ function ProgressStrip({ vocabularyId, action }: { vocabularyId: number; action:
             <b className="tabular-nums">{formatNumber(d.pending_suggestions)}</b> suggestions to review →
           </Link>
         )}
-        <div className="ml-auto">{action}</div>
+        <div className="ml-auto flex items-center gap-3">
+          {team}
+          {action}
+        </div>
       </CardContent>
     </Card>
   );
@@ -285,10 +313,27 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
   }, [items, selectedSource, isDrug, mapDomains, qc]);
 
   const allMapped = stats.data && stats.data.unmapped === 0;
+  const { isAdmin, user } = useAuth();
+
+  // Presence: renew "I have this term open" while it is open, and see who else is where
+  const presence = usePresence(vocabularyId, concept?.source_id ?? null);
+  const others = useMemo(() => (presence.data ?? []).filter((p) => p.user_id !== user?.id), [presence.data, user?.id]);
+  const othersOn = useMemo(() => {
+    const by = new Map<number, string[]>();
+    for (const p of others) by.set(p.source_id, [...(by.get(p.source_id) ?? []), p.username]);
+    return by;
+  }, [others]);
+  const onlineOthers = useMemo(() => [...new Set(others.map((p) => p.username))], [others]);
+  const columns = useMemo(() => unmappedColumns(othersOn), [othersOn]);
+  useEffect(() => () => void leaveVocabulary(vocabularyId).catch(() => {}), [vocabularyId]);
 
   return (
     <>
-      <ProgressStrip vocabularyId={vocabularyId} action={!allMapped && automap.trigger} />
+      <ProgressStrip
+        vocabularyId={vocabularyId}
+        action={!allMapped && isAdmin && automap.trigger}
+        team={<TeamStatus vocabularyId={vocabularyId} online={onlineOthers} />}
+      />
       {automap.progress}
 
       {allMapped ? (
@@ -327,7 +372,7 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
               </div>
               <ErrorAlert error={unmapped.error} />
               <DataTable
-                columns={UNMAPPED_COLUMNS}
+                columns={columns}
                 data={items}
                 getRowId={(r) => String(r.source_id)}
                 selection="single"
@@ -353,6 +398,7 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
                 isDrug={isDrug}
                 onMapped={afterMapped}
                 onUndone={(id) => select(String(id))}
+                othersHere={othersOn.get(concept.source_id) ?? []}
               />
             ) : (
               <div className="h-full">
@@ -374,6 +420,7 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
 export function MapPage() {
   const selection = useSelectedVocabulary();
   const vocabularyId = selection.vocabularyId;
+  const { isAdmin } = useAuth();
   return (
     <div className="space-y-6">
       <PageHeader
@@ -381,10 +428,17 @@ export function MapPage() {
         step={2}
         title="Map concepts"
         description={
-          <>
-            Let the AI map all remaining terms with <b>Auto-map with AI</b>, or pick a term in the table to map it by
-            hand.
-          </>
+          isAdmin ? (
+            <>
+              Let the AI map all remaining terms with <b>Auto-map with AI</b>, or pick a term in the table to map it by
+              hand.
+            </>
+          ) : (
+            <>
+              Pick a term on the left, tick its standard concept on the right and confirm. Not sure? Use{" "}
+              <b>AI suggest</b>, or <b>Flag</b> the term for a colleague.
+            </>
+          )
         }
       />
       <VocabularySelector selection={selection} />

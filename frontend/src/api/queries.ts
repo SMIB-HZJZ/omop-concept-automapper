@@ -29,6 +29,8 @@ export const keys = {
   search: (body: object) => ["search", body] as const,
   concepts: (ids: string) => ["concepts", ids] as const,
   conceptDetails: (id: number) => ["concept-details", id] as const,
+  presence: (vocabularyId: number) => ["presence", vocabularyId] as const,
+  activity: (vocabularyId: number) => ["activity", vocabularyId] as const,
   conceptExplanation: (id: number) => ["concept-explanation", id] as const,
 };
 
@@ -351,5 +353,49 @@ export function useFlagSource(vocabularyId: number | null) {
         }),
       ),
     onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
+  });
+}
+
+// ----------------------------------------------------------------------------- collaboration
+
+/** Who has which term open in this vocabulary. While ``sourceId`` is set, this user's presence on
+ * that term is renewed with every poll (the server forgets it after 45 s without renewal). */
+export const usePresence = (vocabularyId: number | null, sourceId: number | null) =>
+  useQuery({
+    queryKey: [...keys.presence(vocabularyId ?? 0), sourceId] as const,
+    queryFn: async () =>
+      sourceId !== null
+        ? unwrap(
+            await api.PUT("/api/source-concepts/{source_id}/presence", {
+              params: { path: { source_id: sourceId } },
+            }),
+          )
+        : unwrap(
+            await api.GET("/api/source-vocabularies/{vocabulary_id}/presence", {
+              params: { path: { vocabulary_id: vocabularyId! } },
+            }),
+          ),
+    enabled: vocabularyId !== null,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+  });
+
+export const useTeamActivity = (vocabularyId: number | null, enabled = true) =>
+  useQuery({
+    queryKey: keys.activity(vocabularyId ?? 0),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/source-vocabularies/{vocabulary_id}/activity", {
+          params: { path: { vocabulary_id: vocabularyId! } },
+        }),
+      ),
+    enabled: vocabularyId !== null && enabled,
+    refetchInterval: 60_000,
+  });
+
+export async function leaveVocabulary(vocabularyId: number) {
+  await api.DELETE("/api/source-vocabularies/{vocabulary_id}/presence", {
+    params: { path: { vocabulary_id: vocabularyId } },
   });
 }

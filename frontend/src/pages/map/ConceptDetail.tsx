@@ -39,6 +39,7 @@ import { FlagBanner, FlagButton, WaitingSuggestion } from "./TermExtras";
 import { DEFAULT_LIMIT } from "./searchRequest";
 import type { ConceptLike } from "./types";
 import { ConceptLink } from "@/components/ConceptLink";
+import { UserAvatar } from "@/components/UserAvatar";
 import { useConceptModal } from "@/hooks/useConceptModal";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +121,8 @@ type Props = {
   onMapped: () => void;
   /** Called after "Undo" removed the mapping just confirmed, with the source term's ID */
   onUndone: (sourceId: number) => void;
+  /** Colleagues who have this term open right now */
+  othersHere: string[];
 };
 
 function isTyping(target: EventTarget | null) {
@@ -127,7 +130,7 @@ function isTyping(target: EventTarget | null) {
   return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 }
 
-export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndone }: Props) {
+export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndone, othersHere }: Props) {
   const meta = useMeta();
   const [name, setName] = useState(concept.source_concept_name);
   const [domains, setDomains] = usePersistentState<string[]>("map-domains", []);
@@ -483,6 +486,19 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
           {!concept.flag && <FlagButton concept={concept} vocabularyId={vocabularyId} onFlagged={onMapped} />}
         </div>
 
+        {othersHere.length > 0 && (
+          <div className="border-warning/40 bg-warning/10 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
+            <div className="flex -space-x-1.5">
+              {othersHere.map((name) => (
+                <UserAvatar key={name} name={name} />
+              ))}
+            </div>
+            <span>
+              <b>{othersHere.join(", ")}</b> {othersHere.length === 1 ? "has" : "have"} this term open too. Agree on who
+              maps it, or pick another term.
+            </span>
+          </div>
+        )}
         <FlagBanner concept={concept} vocabularyId={vocabularyId} />
         {waiting && !suggestion && (
           <WaitingSuggestion

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { errorMessage } from "@/api/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/auth/useAuth";
 import { AnimatedNumber } from "@/components/motion";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,9 @@ export function PageHeader({
   /** Position in the Import → Map → Review → Commit workflow */
   step?: number;
 }) {
+  // The four-step workflow is the admin's view; users only have mapping and review
+  const { isAdmin } = useAuth();
+  if (!isAdmin) step = undefined;
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}

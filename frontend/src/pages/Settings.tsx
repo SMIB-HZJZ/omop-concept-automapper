@@ -45,9 +45,11 @@ const EMBEDDING_TEXTS: { value: string; label: string }[] = [
 
 function CurrentConfig({ config }: { config: Config }) {
   const stale = config.values.filter((v) => v.stale_override);
+  const main: [string, string, string | null][] = [
+    ["AI model for mapping and translation", config.llm_model, "llm.model"],
+    ["Search model (embeddings)", config.embedding_model, "embedding.model"],
+  ];
   const rows: [string, string, string | null][] = [
-    ["LLM model", config.llm_model, "llm.model"],
-    ["Embedding model", config.embedding_model, "embedding.model"],
     ["Dimensions", config.embedding_dims ? String(config.embedding_dims) : "native", "embedding.dims"],
     [
       "Embedded text",
@@ -63,12 +65,14 @@ function CurrentConfig({ config }: { config: Config }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Current configuration</CardTitle>
-        <CardDescription>Defaults come from environment variables; admins can override them here.</CardDescription>
+        <CardTitle>In use now</CardTitle>
+        <CardDescription>
+          Defaults come from the server's settings file (<i>env</i>); changes made here show as <i>override</i>.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
-          {rows.map(([label, value, key]) => (
+          {main.map(([label, value, key]) => (
             <div key={label} className="contents">
               <dt className="text-muted-foreground">{label}</dt>
               <dd className="flex flex-wrap items-center gap-2">
@@ -80,6 +84,24 @@ function CurrentConfig({ config }: { config: Config }) {
             </div>
           ))}
         </dl>
+        <details className="group">
+          <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm">
+            Technical details
+          </summary>
+          <dl className="mt-2 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
+            {rows.map(([label, value, key]) => (
+              <div key={label} className="contents">
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="flex flex-wrap items-center gap-2">
+                  <code className="bg-muted rounded px-1.5 py-0.5 text-xs break-all">{value}</code>
+                  {key && source(key) && (
+                    <Badge variant={source(key) === "override" ? "default" : "outline"}>{source(key)}</Badge>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </details>
         {stale.map((v) => (
           <Alert key={v.key}>
             <AlertTriangle />
@@ -207,7 +229,7 @@ function UpdateForm({ config }: { config: Config }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Update configuration</CardTitle>
+        <CardTitle>Change models</CardTitle>
         <CardDescription>
           Model names use LiteLLM's <code>provider/model</code> form.{" "}
           {options.data && !options.data.gateway_models_available && (
@@ -219,66 +241,71 @@ function UpdateForm({ config }: { config: Config }) {
         <div className="grid items-start gap-6 md:grid-cols-2">
           <ModelPicker
             id="llm-model"
-            label="LLM model"
+            label="AI model for mapping and translation"
             options={options.data?.llm_models ?? []}
             value={llm}
             onChange={setLlm}
-            help="Used for concept reranking, the mapping agent and AI suggestions."
+            help="Picks the best standard concept for each term, translates terms and writes AI suggestions."
           />
           <div className="space-y-4">
             <ModelPicker
               id="embedding-model"
-              label="Embedding model"
+              label="Search model (embeddings)"
               options={embeddingOptions.map((m) => m.name)}
               value={embedding}
               onChange={setEmbedding}
-              help="Used to create vector embeddings for similarity search."
+              help="Turns terms and concepts into vectors so that similar meanings are found. Changing it means embedding all concepts again."
             />
-            <div className="grid gap-1.5">
-              <Label htmlFor="embedding-dims">Dimensions</Label>
-              <Select
-                value={dims === null ? NATIVE : String(dims)}
-                onValueChange={(v) => setDims(v === NATIVE ? null : Number(v))}
-              >
-                <SelectTrigger id="embedding-dims" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NATIVE}>Native size</SelectItem>
-                  {dimensionOptions.map((d) => (
-                    <SelectItem key={d} value={String(d)} disabled={maxDims !== null && d > maxDims}>
-                      {d}
-                      {maxDims !== null && d > maxDims ? ` (max ${maxDims})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-muted-foreground text-xs">
-                Higher dimensions can be more accurate but use more storage and are slower.
-              </p>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="embedding-text">Embedded text</Label>
-              <Select value={text} onValueChange={setText}>
-                <SelectTrigger id="embedding-text" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {EMBEDDING_TEXTS.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>
-                      {t.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-muted-foreground text-xs">
-                Synonyms need CONCEPT_SYNONYM.csv. Each choice is its own collection.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox id="embedding-task-types" checked={taskTypes} onCheckedChange={(v) => setTaskTypes(!!v)} />
-              <Label htmlFor="embedding-task-types">Query/document task types (Gemini, Voyage, Cohere)</Label>
-            </div>
+            <details className="space-y-4 rounded-lg border px-3 py-2">
+              <summary className="cursor-pointer text-sm font-medium">Advanced search settings</summary>
+              <div className="mt-3 space-y-4">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="embedding-dims">Dimensions</Label>
+                  <Select
+                    value={dims === null ? NATIVE : String(dims)}
+                    onValueChange={(v) => setDims(v === NATIVE ? null : Number(v))}
+                  >
+                    <SelectTrigger id="embedding-dims" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NATIVE}>Native size</SelectItem>
+                      {dimensionOptions.map((d) => (
+                        <SelectItem key={d} value={String(d)} disabled={maxDims !== null && d > maxDims}>
+                          {d}
+                          {maxDims !== null && d > maxDims ? ` (max ${maxDims})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-muted-foreground text-xs">
+                    Higher dimensions can be more accurate but use more storage and are slower.
+                  </p>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="embedding-text">Embedded text</Label>
+                  <Select value={text} onValueChange={setText}>
+                    <SelectTrigger id="embedding-text" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EMBEDDING_TEXTS.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-muted-foreground text-xs">
+                    Synonyms need CONCEPT_SYNONYM.csv. Each choice is its own collection.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox id="embedding-task-types" checked={taskTypes} onCheckedChange={(v) => setTaskTypes(!!v)} />
+                  <Label htmlFor="embedding-task-types">Query/document task types (Gemini, Voyage, Cohere)</Label>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -431,7 +458,7 @@ export function SettingsPage() {
   const workflows = useWorkflows();
   const description = useMemo(
     () =>
-      "Configure the LLM and embedding models used by the Auto OMOP Mapper. Changing the embedding model or dimensions uses a new embedding collection, which must be embedded again.",
+      "Which AI models the mapper uses. Most installations only ever change the AI model; search settings and pipelines are under Advanced.",
     [],
   );
 
@@ -454,7 +481,14 @@ export function SettingsPage() {
         </Alert>
       )}
       <ErrorAlert error={workflows.error} title="Could not load pipelines" />
-      {workflows.data && <Pipelines catalog={workflows.data} />}
+      {workflows.data && (
+        <details className="group">
+          <summary className="text-muted-foreground hover:text-foreground mb-3 cursor-pointer text-sm font-medium">
+            Advanced: mapping pipelines (the steps auto-mapping goes through)
+          </summary>
+          <Pipelines catalog={workflows.data} />
+        </details>
+      )}
     </div>
   );
 }

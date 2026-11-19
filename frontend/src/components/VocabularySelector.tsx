@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import { Link } from "react-router";
 
 import { useUpdateVocabulary } from "@/api/queries";
+import { useAuth } from "@/auth/useAuth";
+import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/MultiSelect";
@@ -13,6 +15,7 @@ type Selection = ReturnType<typeof useSelectedVocabulary>;
 
 export function VocabularySelector({ selection, showDrug = true }: { selection: Selection; showDrug?: boolean }) {
   const update = useUpdateVocabulary();
+  const { isAdmin } = useAuth();
   const { vocabularies, vocabulary, isLoading } = selection;
   const sorted = useMemo(() => [...vocabularies].sort((a, b) => a.id - b.id), [vocabularies]);
 
@@ -53,14 +56,23 @@ export function VocabularySelector({ selection, showDrug = true }: { selection: 
           </SelectContent>
         </Select>
       </div>
-      {showDrug && vocabulary && (
+      {/* Vocabulary settings are the admin's; users see them read-only */}
+      {showDrug && vocabulary && isAdmin && (
         <VocabularyTypeSwitch
           isDrug={selection.isDrug}
           onChange={selection.setIsDrug}
           disabled={selection.isSavingDrug}
         />
       )}
-      {vocabulary && (
+      {vocabulary && !isAdmin && (
+        <div className="flex h-9 items-center gap-2 text-sm">
+          <Badge variant="secondary">{vocabulary.is_drug ? "Drugs" : "General"}</Badge>
+          {(vocabulary.code_vocabularies ?? []).length > 0 && (
+            <span className="text-muted-foreground">codes: {(vocabulary.code_vocabularies ?? []).join(", ")}</span>
+          )}
+        </div>
+      )}
+      {vocabulary && isAdmin && (
         <div className="grid gap-1.5">
           <Label htmlFor="code-vocabularies">Source codes are</Label>
           <MultiSelect

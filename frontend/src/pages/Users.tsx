@@ -191,6 +191,45 @@ function ResetPasswordDialog({ user, patch }: { user: User; patch: ReturnType<ty
   );
 }
 
+const ROLE_ROWS: [string, boolean, boolean][] = [
+  ["Map terms by hand, use AI suggest, flag terms", true, true],
+  ["Review AI suggestions (accept / reject)", true, true],
+  ["Search concepts, open the concept window, AI explanations", true, true],
+  ["Undo their own mappings", true, true],
+  ["Run auto-mapping on a whole vocabulary", false, true],
+  ["Import vocabularies and source terms, embed concepts", false, true],
+  ["Change a vocabulary's type and code systems", false, true],
+  ["Check & commit: remove anyone's mappings, export, delete a vocabulary", false, true],
+  ["Configuration and user accounts", false, true],
+];
+
+/** What each role may do (the server enforces the same rules). */
+function RolesExplained() {
+  return (
+    <details className="bg-card group rounded-xl border px-4 py-3 shadow-[var(--shadow-soft)]">
+      <summary className="cursor-pointer text-sm font-medium">What can users and admins do?</summary>
+      <table className="mt-3 w-full text-sm">
+        <thead>
+          <tr className="text-muted-foreground text-left text-xs">
+            <th className="pb-1 font-medium" />
+            <th className="w-20 pb-1 text-center font-medium">User</th>
+            <th className="w-20 pb-1 text-center font-medium">Admin</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ROLE_ROWS.map(([what, user, admin]) => (
+            <tr key={what} className="border-t">
+              <td className="py-1.5">{what}</td>
+              <td className="text-center">{user ? "✓" : "—"}</td>
+              <td className="text-center">{admin ? "✓" : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+}
+
 export function UsersPage() {
   const { user: me } = useAuth();
   const users = useUsers();
@@ -281,6 +320,7 @@ export function UsersPage() {
         description="Manage who can sign in and what they can do."
         actions={<AddUserDialog create={create} />}
       />
+      <RolesExplained />
       <ErrorAlert error={users.error} title="Could not load users" />
       <DataTable
         columns={columns}

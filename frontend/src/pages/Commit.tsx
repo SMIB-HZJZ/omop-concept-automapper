@@ -215,6 +215,14 @@ export function CommitPage() {
                 >
                   <Download /> Download CSV
                 </a>
+                <a
+                  href={`/api/source-vocabularies/${vocabularyId}/source_to_concept_map.csv`}
+                  download={`source_to_concept_map_${vocabularyId}.csv`}
+                  className={buttonVariants({ variant: "outline" })}
+                  title="The OMOP SOURCE_TO_CONCEPT_MAP table: load it into your CDM's vocabulary schema"
+                >
+                  <Download /> OMOP source_to_concept_map
+                </a>
                 <div className="ml-auto">{deleteButton}</div>
               </div>
             )}

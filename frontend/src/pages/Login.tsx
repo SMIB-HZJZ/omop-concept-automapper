@@ -18,7 +18,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const from = (location.state as { from?: string } | null)?.from ?? "/import";
+  const from = (location.state as { from?: string } | null)?.from ?? "/map";
 
   if (user) return <Navigate to={from} replace />;
 

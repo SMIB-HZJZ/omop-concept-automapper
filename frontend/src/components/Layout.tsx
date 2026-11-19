@@ -61,17 +61,31 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: "Workflow",
     items: [
-      { to: "/import", label: "Import data", icon: Upload, step: 1, hint: "Vocabularies, source terms, embeddings" },
+      {
+        to: "/import",
+        label: "Import data",
+        icon: Upload,
+        step: 1,
+        hint: "Vocabularies, source terms, embeddings",
+        adminOnly: true,
+      },
       { to: "/map", label: "Map concepts", icon: MapIcon, step: 2, hint: "Auto-map with AI or map by hand" },
       { to: "/review", label: "Review", icon: ListChecks, step: 3, hint: "Accept or reject AI suggestions" },
-      { to: "/commit", label: "Check & commit", icon: ClipboardCheck, step: 4, hint: "Verify and export mappings" },
+      {
+        to: "/commit",
+        label: "Check & commit",
+        icon: ClipboardCheck,
+        step: 4,
+        hint: "Verify and export mappings",
+        adminOnly: true,
+      },
     ],
   },
   { title: "Tools", items: [{ to: "/search", label: "Search concepts", icon: Search }] },
   {
     title: "Administration",
     items: [
-      { to: "/settings", label: "Configuration", icon: Settings },
+      { to: "/settings", label: "Configuration", icon: Settings, adminOnly: true },
       { to: "/users", label: "Users", icon: Users, adminOnly: true },
     ],
   },
@@ -340,9 +354,12 @@ function AnimatedOutlet() {
 
 export function Layout() {
   const { isAdmin } = useAuth();
-  const groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !i.adminOnly || isAdmin) })).filter(
-    (g) => g.items.length > 0,
-  );
+  const groups = NAV_GROUPS.map((g) => {
+    const visible = g.items.filter((i) => !i.adminOnly || isAdmin);
+    // Users see only part of the workflow: number the steps they have from 1
+    let n = 0;
+    return { ...g, items: visible.map((i) => (i.step ? { ...i, step: ++n } : i)) };
+  }).filter((g) => g.items.length > 0);
   const items = groups.flatMap((g) => g.items);
   const status = useWorkflowStatus();
 

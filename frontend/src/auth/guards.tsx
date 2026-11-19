@@ -14,6 +14,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const { isAdmin } = useAuth();
-  if (!isAdmin) return <EmptyState title="Admins only">This page requires the admin role.</EmptyState>;
+  if (!isAdmin)
+    return (
+      <EmptyState title="Admins only">
+        This page is for administrators. Mapping, review and search are in the menu on the left.
+      </EmptyState>
+    );
   return children;
 }
