@@ -34,6 +34,11 @@ class SourceConcept(SQLModel, table=True):
     freq: int | None = 1
     # Drugs: ingredients/strengths/dose form from the CSV (see app.llm.schemas.DrugStructure)
     drug_structure: dict | None = Field(default=None, sa_column=Column(JSONB))
+    # "unmappable" or "question" (ask a colleague); flagged terms leave the default to-do list
+    flag: str | None = None
+    flag_note: str | None = None
+    flagged_by: int | None = Field(default=None, foreign_key="app_user.id")
+    flagged_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
 
 
 class SourceStandardMap(SQLModel, table=True):

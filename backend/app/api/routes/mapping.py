@@ -11,6 +11,8 @@ from app.schemas.api import (
     Calibration,
     CountResult,
     MapRequest,
+    Message,
+    SourceFlag,
     SuggestionDecision,
     SuggestionPage,
     SuggestRequest,
@@ -76,6 +78,13 @@ def automap(vocabulary_id: int, body: AutomapRequest, user: CurrentUser, session
 def _load_for_suggest(source_id: int) -> tuple[dict | None, EffectiveConfig]:
     with session_scope() as session:
         return mapping.get_source_concept(session, source_id), get_effective_config(session)
+
+
+@router.put("/source-concepts/{source_id}/flag", response_model=Message)
+def flag_source(source_id: int, body: SourceFlag, user: CurrentUser, session: SessionDep):
+    if not mapping.set_flag(session, source_id, body.flag, body.note, user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Source concept {source_id} not found")
+    return Message(message="Flag cleared" if body.flag is None else f"Flagged as {body.flag}")
 
 
 @router.post("/source-concepts/{source_id}/suggest", response_model=SuggestResponse)
@@ -153,6 +162,7 @@ def list_suggestions(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=500),
     sort: str = Query("confidence_desc"),
+    source_id: int | None = Query(None, description="Only this source term's suggestions"),
 ):
     return suggestions.list_suggestions(
         session,
@@ -162,6 +172,7 @@ def list_suggestions(
         page=page,
         per_page=per_page,
         sort=sort,
+        source_id=source_id,
     )
 
 

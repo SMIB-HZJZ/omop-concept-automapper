@@ -485,6 +485,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source-concepts/{source_id}/flag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Flag Source */
+        put: operations["flag_source_api_source_concepts__source_id__flag_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/source-concepts/{source_id}/suggest": {
         parameters: {
             query?: never;
@@ -1351,6 +1368,13 @@ export interface components {
             /** Score */
             score: number;
         };
+        /** SourceFlag */
+        SourceFlag: {
+            /** Flag */
+            flag: ("unmappable" | "question") | null;
+            /** Note */
+            note?: string | null;
+        };
         /** SourceVocabularyCreate */
         SourceVocabularyCreate: {
             /** Id */
@@ -1628,11 +1652,26 @@ export interface components {
             suggestion_concept_id?: number | null;
             /** Suggestion Confidence */
             suggestion_confidence?: number | null;
+            /** Suggestion Id */
+            suggestion_id?: number | null;
+            /** Flag */
+            flag?: ("unmappable" | "question") | null;
+            /** Flag Note */
+            flag_note?: string | null;
+            /** Flagged By */
+            flagged_by?: string | null;
+            /** Flagged At */
+            flagged_at?: string | null;
         };
         /** UnmappedPage */
         UnmappedPage: {
             /** Items */
             items: components["schemas"]["UnmappedItem"][];
+            /**
+             * Flagged
+             * @default 0
+             */
+            flagged: number;
             /** Total */
             total: number;
             /** Page */
@@ -2632,6 +2671,8 @@ export interface operations {
             query?: {
                 page?: number;
                 per_page?: number;
+                view?: string;
+                q?: string | null;
             };
             header?: never;
             path: {
@@ -2921,6 +2962,41 @@ export interface operations {
             };
         };
     };
+    flag_source_api_source_concepts__source_id__flag_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceFlag"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     suggest_api_source_concepts__source_id__suggest_post: {
         parameters: {
             query?: never;
@@ -2996,6 +3072,8 @@ export interface operations {
                 page?: number;
                 per_page?: number;
                 sort?: string;
+                /** @description Only this source term's suggestions */
+                source_id?: number | null;
             };
             header?: never;
             path: {

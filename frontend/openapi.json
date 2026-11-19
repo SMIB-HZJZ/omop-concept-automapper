@@ -950,6 +950,34 @@
               "default": 50,
               "title": "Per Page"
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(todo|suggested|flagged|all)$",
+              "default": "todo",
+              "title": "View"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
           }
         ],
         "responses": {
@@ -1413,6 +1441,63 @@
         }
       }
     },
+    "/api/source-concepts/{source_id}/flag": {
+      "put": {
+        "tags": [
+          "mapping"
+        ],
+        "summary": "Flag Source",
+        "operationId": "flag_source_api_source_concepts__source_id__flag_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceFlag"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/source-concepts/{source_id}/suggest": {
       "post": {
         "tags": [
@@ -1620,6 +1705,24 @@
               "default": "confidence_desc",
               "title": "Sort"
             }
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this source term's suggestions",
+              "title": "Source Id"
+            },
+            "description": "Only this source term's suggestions"
           }
         ],
         "responses": {
@@ -4017,6 +4120,42 @@
         ],
         "title": "SearchResult"
       },
+      "SourceFlag": {
+        "properties": {
+          "flag": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unmappable",
+                  "question"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flag"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "flag"
+        ],
+        "title": "SourceFlag"
+      },
       "SourceVocabularyCreate": {
         "properties": {
           "id": {
@@ -4944,6 +5083,66 @@
               }
             ],
             "title": "Suggestion Confidence"
+          },
+          "suggestion_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion Id"
+          },
+          "flag": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unmappable",
+                  "question"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flag"
+          },
+          "flag_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flag Note"
+          },
+          "flagged_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flagged By"
+          },
+          "flagged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flagged At"
           }
         },
         "type": "object",
@@ -4966,6 +5165,11 @@
             },
             "type": "array",
             "title": "Items"
+          },
+          "flagged": {
+            "type": "integer",
+            "title": "Flagged",
+            "default": 0
           },
           "total": {
             "type": "integer",

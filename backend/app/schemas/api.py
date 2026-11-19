@@ -192,10 +192,23 @@ class UnmappedItem(BaseModel):
     atc7_codes: list[str]
     suggestion_concept_id: int | None = None
     suggestion_confidence: int | None = None
+    suggestion_id: int | None = None
+    flag: Literal["unmappable", "question"] | None = None
+    flag_note: str | None = None
+    flagged_by: str | None = None
+    flagged_at: datetime | None = None
+
+
+class SourceFlag(BaseModel):
+    # None clears the flag
+    flag: Literal["unmappable", "question"] | None
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class UnmappedPage(BaseModel):
     items: list[UnmappedItem]
+    # Flagged terms not mapped yet (in any view), for the "Flagged" tab count
+    flagged: int = 0
     total: int
     page: int
     per_page: int

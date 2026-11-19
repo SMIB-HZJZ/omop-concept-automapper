@@ -147,9 +147,11 @@ def unmapped(
     session: SessionDep,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=500),
+    view: str = Query("todo", pattern="^(todo|suggested|flagged|all)$"),
+    q: str | None = Query(None, max_length=200),
 ):
     _get_vocab(session, vocabulary_id)
-    return mapping.get_unmapped(session, vocabulary_id, page, per_page)
+    return mapping.get_unmapped(session, vocabulary_id, page, per_page, view, q)
 
 
 @router.get("/{vocabulary_id}/mapped", response_model=MappedPage)

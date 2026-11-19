@@ -82,12 +82,42 @@ def delete_vocabulary(session: Session, vocabulary_id: int) -> int:
 # --------------------------------------------------------------------------- reads
 
 
-def get_unmapped(session: Session, vocabulary_id: int, page: int, per_page: int) -> dict:
-    total = session.execute(
+UNMAPPED_VIEWS = {
+    # Default: what is left to do (flagged terms are out of the way)
+    "todo": "sc.flag IS NULL",
+    "suggested": "sc.flag IS NULL AND ms.id IS NOT NULL",
+    "flagged": "sc.flag IS NOT NULL",
+    "all": "TRUE",
+}
+
+
+def get_unmapped(
+    session: Session,
+    vocabulary_id: int,
+    page: int,
+    per_page: int,
+    view: str = "todo",
+    q: str | None = None,
+) -> dict:
+    where = (
+        "sc.source_vocabulary_id = :v"
+        " AND NOT EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)"
+        f" AND {UNMAPPED_VIEWS.get(view, UNMAPPED_VIEWS['todo'])}"
+    )
+    params: dict = {"v": vocabulary_id}
+    if q and q.strip():
+        where += " AND (sc.source_concept_name ILIKE :q OR sc.source_value ILIKE :q)"
+        params["q"] = f"%{q.strip()}%"
+    joins = (
+        "FROM source_concepts sc"
+        " LEFT JOIN mapping_suggestion ms ON ms.source_id = sc.source_id AND ms.status = 'pending'"
+    )
+    total = session.execute(text(f"SELECT COUNT(*) {joins} WHERE {where}"), params).scalar_one()
+    flagged = session.execute(
         text(
             """
             SELECT COUNT(*) FROM source_concepts sc
-            WHERE sc.source_vocabulary_id = :v
+            WHERE sc.source_vocabulary_id = :v AND sc.flag IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
             """
         ),
@@ -97,26 +127,58 @@ def get_unmapped(session: Session, vocabulary_id: int, page: int, per_page: int)
     page = min(max(page, 1), pages)
     rows = session.execute(
         text(
-            """
+            f"""
             SELECT sc.source_id, sc.source_value, sc.source_concept_name,
                    sc.source_vocabulary_id, sc.freq, 0 AS mapped_concepts,
-                   ms.concept_id AS suggestion_concept_id, ms.confidence AS suggestion_confidence
-            FROM source_concepts sc
-            LEFT JOIN mapping_suggestion ms ON ms.source_id = sc.source_id AND ms.status = 'pending'
-            WHERE sc.source_vocabulary_id = :v
-              AND NOT EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
+                   ms.concept_id AS suggestion_concept_id, ms.confidence AS suggestion_confidence,
+                   ms.id AS suggestion_id,
+                   sc.flag, sc.flag_note, sc.flagged_at, u.username AS flagged_by
+            {joins}
+            LEFT JOIN app_user u ON u.id = sc.flagged_by
+            WHERE {where}
             ORDER BY sc.freq DESC NULLS LAST, sc.source_id
             LIMIT :limit OFFSET :offset
             """
         ),
-        {"v": vocabulary_id, "limit": per_page, "offset": (page - 1) * per_page},
+        {**params, "limit": per_page, "offset": (page - 1) * per_page},
     ).mappings()
     items = []
     for r in rows:
         item = dict(r)
         item["atc7_codes"] = extract_atc7_codes_from_source(item["source_value"])
         items.append(item)
-    return {"items": items, "total": total, "page": page, "per_page": per_page, "pages": pages}
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+        "flagged": flagged,
+    }
+
+
+def set_flag(
+    session: Session, source_id: int, flag: str | None, note: str | None, user_id: int | None
+) -> bool:
+    """Flag a source term (or clear the flag with None). False when the term does not exist."""
+    result = session.execute(
+        text(
+            """
+            UPDATE source_concepts
+            SET flag = :flag, flag_note = :note, flagged_by = :user,
+                flagged_at = CASE WHEN CAST(:flag AS text) IS NULL THEN NULL ELSE now() END
+            WHERE source_id = :id
+            """
+        ),
+        {
+            "flag": flag,
+            "note": ((note or "").strip() or None) if flag else None,
+            "user": user_id if flag else None,
+            "id": source_id,
+        },
+    )
+    session.commit()
+    return result.rowcount > 0
 
 
 def get_unmapped_concepts_for_automap(
@@ -127,7 +189,7 @@ def get_unmapped_concepts_for_automap(
             """
             SELECT sc.source_id, sc.source_value, sc.source_concept_name, sc.freq, sc.drug_structure
             FROM source_concepts sc
-            WHERE sc.source_vocabulary_id = :v
+            WHERE sc.source_vocabulary_id = :v AND sc.flag IS NULL
               AND NOT EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
               AND NOT EXISTS (
                   SELECT 1 FROM mapping_suggestion ms

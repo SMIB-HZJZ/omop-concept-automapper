@@ -27,9 +27,13 @@ def list_suggestions(
     page: int = 1,
     per_page: int = 50,
     sort: str = "confidence_desc",
+    source_id: int | None = None,
 ) -> dict:
     where = "sc.source_vocabulary_id = :v AND ms.status = :status"
     params: dict = {"v": vocabulary_id, "status": status}
+    if source_id is not None:
+        where += " AND ms.source_id = :sid"
+        params["sid"] = source_id
     if min_confidence is not None:
         where += " AND ms.confidence >= :minc"
         params["minc"] = min_confidence
