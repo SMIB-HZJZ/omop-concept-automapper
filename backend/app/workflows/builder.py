@@ -6,7 +6,7 @@ A definition names registered steps and wires them together:
     entry: extract_atc7
     nodes:
       extract_atc7: { uses: extract_atc7 }
-      retrieve:     { uses: retrieve, params: { k_default: 15 } }
+      retrieve:     { uses: retrieve, params: { k: 30 } }
       gate:         { uses: confidence_gate, routes: { accept: END, reject: END } }
     edges:
       - [extract_atc7, retrieve]

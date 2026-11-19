@@ -15,7 +15,7 @@ name: ok
 entry: a
 nodes:
   a: { uses: extract_atc7 }
-  b: { uses: retrieve, params: { k_default: 5 } }
+  b: { uses: retrieve, params: { k: 5 } }
   g: { uses: confidence_gate, routes: { accept: END, reject: END } }
 edges:
   - [a, b]
@@ -31,8 +31,8 @@ def test_valid_definition_compiles():
     "yaml_text,message",
     [
         (VALID.replace("uses: retrieve", "uses: does_not_exist"), "unknown step 'does_not_exist'"),
-        (VALID.replace("k_default: 5", "k_default: 0"), "invalid params"),
-        (VALID.replace("k_default: 5", "bogus: 1"), "invalid params"),
+        (VALID.replace("k: 5", "k: 0"), "invalid params"),
+        (VALID.replace("k: 5", "bogus: 1"), "invalid params"),
         (
             VALID.replace("{ accept: END, reject: END }", "{ accept: END }"),
             "must map exactly the routes",
@@ -75,3 +75,12 @@ edges:
 """
     with pytest.raises(PipelineError, match="no path from the entry node reaches END"):
         validate_definition(parse_definition(text))
+
+
+def test_retrieve_accepts_the_legacy_candidate_counts():
+    from app.workflows.nodes.retrieve import RetrieveParams
+
+    assert RetrieveParams().k == 30
+    assert RetrieveParams.model_validate({"k_default": 15, "k_drug": 30}).k == 15
+    assert RetrieveParams.model_validate({"k_drug": 40}).k == 40
+    assert RetrieveParams.model_validate({"k": 20, "k_default": 15}).k == 20

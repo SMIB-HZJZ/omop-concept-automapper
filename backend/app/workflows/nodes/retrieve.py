@@ -1,6 +1,6 @@
 import asyncio
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.vector.store import SearchFilters
 from app.workflows.context import NodeContext
@@ -11,8 +11,9 @@ from app.workflows.state import AutomapState
 class RetrieveParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    k_default: int = Field(default=15, ge=1, le=200)
-    k_drug: int = Field(default=30, ge=1, le=200)
+    # Candidates passed to the reranker. One value for all domains: drugs reach the search only
+    # when the structured drug_strength match fails.
+    k: int = Field(default=30, ge=1, le=200)
     use_atc7: bool = True
     # When the ATC7-filtered search finds nothing, search again without the ATC7 filter.
     # Off by default (as in the Streamlit app): a drug outside its ATC7 class is a wrong match.
@@ -23,6 +24,17 @@ class RetrieveParams(BaseModel):
     rrf_k: int = Field(default=60, ge=1)
     # domain_mode "prefer": how many candidates from other domains are added
     other_domains: int = Field(default=5, ge=0, le=50)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_k(cls, data):
+        """Pipelines written before ``k`` used k_default (and k_drug): k_default becomes k."""
+        if isinstance(data, dict) and ("k_default" in data or "k_drug" in data):
+            data = dict(data)
+            legacy = data.pop("k_default", None)
+            drug = data.pop("k_drug", None)
+            data.setdefault("k", legacy if legacy is not None else drug)
+        return data
 
 
 def _merge(result_lists: list[list[dict]], k: int) -> list[dict]:
@@ -59,7 +71,7 @@ def _fuse(result_lists: list[list[dict]], k: int, rrf_k: int) -> list[dict]:
 )
 async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams) -> dict:
     drug = bool(state.get("drug_specific"))
-    k = params.k_drug if drug else params.k_default
+    k = params.k
     atc7 = (state.get("atc7_codes") or []) if (drug and params.use_atc7) else []
     domains = state.get("domains") or []
     mode = state.get("domain_mode") or "restrict"

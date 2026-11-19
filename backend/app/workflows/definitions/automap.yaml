@@ -23,7 +23,7 @@ nodes:
     routes: { matched: gate, next: retrieve }
   retrieve:
     uses: retrieve
-    params: { k_default: 15, k_drug: 30 }
+    params: { k: 30 }
   rerank:
     uses: llm_rerank
   gate:
