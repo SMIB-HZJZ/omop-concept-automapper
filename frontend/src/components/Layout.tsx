@@ -54,6 +54,8 @@ type NavItem = {
   hint?: string;
   step?: number;
   adminOnly?: boolean;
+  /** Hint shown to users (non-admins) instead of ``hint`` */
+  userHint?: string;
 };
 
 // The mapping workflow in order, then tools and administration
@@ -69,7 +71,14 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         hint: "Vocabularies, source terms, embeddings",
         adminOnly: true,
       },
-      { to: "/map", label: "Map concepts", icon: MapIcon, step: 2, hint: "Auto-map with AI or map by hand" },
+      {
+        to: "/map",
+        label: "Map concepts",
+        icon: MapIcon,
+        step: 2,
+        hint: "Auto-map with AI or map by hand",
+        userHint: "Pick the right concept for each term",
+      },
       { to: "/review", label: "Review", icon: ListChecks, step: 3, hint: "Accept or reject AI suggestions" },
       {
         to: "/commit",
@@ -358,7 +367,14 @@ export function Layout() {
     const visible = g.items.filter((i) => !i.adminOnly || isAdmin);
     // Users see only part of the workflow: number the steps they have from 1
     let n = 0;
-    return { ...g, items: visible.map((i) => (i.step ? { ...i, step: ++n } : i)) };
+    return {
+      ...g,
+      items: visible.map((i) => ({
+        ...i,
+        ...(i.step ? { step: ++n } : {}),
+        ...(!isAdmin && i.userHint ? { hint: i.userHint } : {}),
+      })),
+    };
   }).filter((g) => g.items.length > 0);
   const items = groups.flatMap((g) => g.items);
   const status = useWorkflowStatus();
