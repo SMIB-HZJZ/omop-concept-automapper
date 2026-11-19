@@ -4,7 +4,7 @@
 # 3. match_drug      structure from the CSV columns, or parsed from the name by the LLM, matched on
 #                    drug_strength (brand, ingredients, strengths, dose form). A unique match is
 #                    accepted with confidence 10; ties go to the reranker as the first candidates.
-# 4. fallback        translate → exact name/synonym → vector+keyword search → LLM rerank → gate
+# 4. fallback        translate → exact name/synonym → vector search → LLM rerank → gate
 name: automap_drug
 description: drugs - earlier mappings → source code → structured drug_strength match (brand, ingredients, strength, form), else translated search + LLM rerank
 entry: extract_atc7

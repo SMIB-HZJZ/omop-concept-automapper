@@ -1,7 +1,7 @@
 # `automap` with a translation step: the source term is rendered in English OMOP wording; the
 # exact name match, the searches and the reranker use both the original and the English term.
 name: automap_translated
-description: earlier mappings → source code → translate → exact name/synonym → vector+keyword search (original + English) → LLM rerank → gate
+description: earlier mappings → source code → translate → exact name/synonym → vector search (original + English) → LLM rerank → gate
 entry: extract_atc7
 nodes:
   extract_atc7:

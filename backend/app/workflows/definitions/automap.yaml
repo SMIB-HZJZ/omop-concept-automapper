@@ -3,11 +3,11 @@
 # 2. match_previous  the reviewed mapping of another source concept with the same name
 # 3. match_code      the source code in the vocabulary's code systems (e.g. ICD10) -> Maps to
 # 4. match_name      exact name or synonym of a concept (case/accents ignored) -> Maps to
-# 5. retrieve        vector + keyword search, rank fusion
+# 5. retrieve        vector search (keyword fusion optional: params { keyword: true })
 # 6. rerank          the LLM picks the best candidate (similar reviewed mappings as examples)
 # 7. gate            accept if the confidence reaches the threshold
 name: automap
-description: earlier mappings → source code → exact name/synonym → vector+keyword search → LLM rerank → confidence gate
+description: earlier mappings → source code → exact name/synonym → vector search → LLM rerank → confidence gate
 entry: extract_atc7
 nodes:
   extract_atc7:

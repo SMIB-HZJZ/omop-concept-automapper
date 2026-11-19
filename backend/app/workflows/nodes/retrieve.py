@@ -18,8 +18,10 @@ class RetrieveParams(BaseModel):
     # When the ATC7-filtered search finds nothing, search again without the ATC7 filter.
     # Off by default (as in the Streamlit app): a drug outside its ATC7 class is a wrong match.
     atc7_fallback: bool = False
-    # Keyword (trigram) search on names and synonyms next to the vector search, fused by rank
-    keyword: bool = True
+    # Keyword (trigram) search on names and synonyms next to the vector search, fused by rank.
+    # Off by default: in the 2026-11 evaluation fusion lowered R@1 by ~10 points for good
+    # embedding models and did not raise R@30.
+    keyword: bool = False
     # Reciprocal rank fusion constant (larger = flatter weighting of ranks)
     rrf_k: int = Field(default=60, ge=1)
     # domain_mode "prefer": how many candidates from other domains are added
@@ -67,7 +69,7 @@ def _fuse(result_lists: list[list[dict]], k: int, rrf_k: int) -> list[dict]:
 @node(
     "retrieve",
     params=RetrieveParams,
-    description="Vector + keyword search for candidate standard concepts (rank fusion)",
+    description="Vector search for candidate standard concepts (optionally fused with keyword search)",
 )
 async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams) -> dict:
     drug = bool(state.get("drug_specific"))

@@ -202,7 +202,7 @@ Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workfl
   2. `match_previous`: the reviewed mapping of another source concept with the same name (case, accents and punctuation ignored). Confidence 10, method `auto_previous`.
   3. `match_code`: the source value looked up in the vocabulary's code systems (**Source codes are** on the vocabulary bar, e.g. `ICD10` for MKB-10), followed through `Maps to`. Confidence 10, `auto_code`.
   4. `match_name`: exact name or synonym (CONCEPT_SYNONYM) of any concept, followed through `Maps to`. Confidence 9, `auto_exact_name`.
-  5. `retrieve`: vector search plus keyword (trigram) search on names and synonyms, fused by reciprocal rank (k=15, or 30 for drugs).
+  5. `retrieve`: vector search for up to 30 candidates (`k`). Keyword (trigram) search on names and synonyms, fused by reciprocal rank, can be turned on with `keyword: true`; it is off by default because it lowered search accuracy in the evaluation ([report](docs/retrieval-evaluation-2026-11.md)).
   6. `llm_rerank`: the LLM picks a candidate, with reviewed mappings of similar source terms as examples. It also states the match type (exact / broader / narrower / related) and may map a combined term to several concepts.
   7. `confidence_gate`.
   Ambiguous deterministic hits (different targets) go to the reranker as the first candidates.
