@@ -1,9 +1,12 @@
+import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { CheckCircle2, ChevronDown, Map as MapIcon, MousePointerClick, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
-import { useAuditRecent, useAuditStats, useMappingStats, useUnmapped } from "@/api/queries";
+import { api, unwrap } from "@/api/client";
+import { keys, useAuditRecent, useAuditStats, useMappingStats, useUnmapped } from "@/api/queries";
+import { usePersistentState } from "@/hooks/usePersistentState";
 import type { AuditEntry, UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { EmptyState, ErrorAlert, PageHeader, StatCard } from "@/components/common";
@@ -18,6 +21,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Progress } from "@/components/ui/progress";
 import { useAutomapControls } from "./map/AutomapSettings";
 import { ConceptDetail } from "./map/ConceptDetail";
+import { defaultSearchRequest } from "./map/searchRequest";
 
 const UNMAPPED_COLUMNS: ColumnDef<UnmappedItem, unknown>[] = [
   {
@@ -190,6 +194,21 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
     return () => window.removeEventListener("keydown", onKey);
   }, [items, selectedSource, select]);
 
+  // Load the next term's candidates in the background, so moving on is instant
+  const qc = useQueryClient();
+  const [mapDomains] = usePersistentState<string[]>("map-domains", []);
+  useEffect(() => {
+    const idx = items.findIndex((i) => String(i.source_id) === selectedSource);
+    const next = idx >= 0 ? items[idx + 1] : undefined;
+    if (!next) return;
+    const body = defaultSearchRequest(next, isDrug, mapDomains);
+    void qc.prefetchQuery({
+      queryKey: keys.search(body),
+      queryFn: async () => ({ ...unwrap(await api.POST("/api/search", { body })), request: body }),
+      staleTime: 60_000,
+    });
+  }, [items, selectedSource, isDrug, mapDomains, qc]);
+
   const allMapped = stats.data && stats.data.unmapped === 0;
 
   return (
@@ -251,6 +270,7 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
                 vocabularyId={vocabularyId}
                 isDrug={isDrug}
                 onMapped={afterMapped}
+                onUndone={(id) => select(String(id))}
               />
             ) : (
               <div className="h-full">

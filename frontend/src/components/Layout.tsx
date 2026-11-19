@@ -1,6 +1,10 @@
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
+  Check,
   CheckSquare,
+  Monitor,
+  Moon,
+  Sun,
   ClipboardCheck,
   KeyRound,
   ListChecks,
@@ -13,12 +17,12 @@ import {
   Users,
 } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useOutlet } from "react-router";
 import { toast } from "sonner";
 
 import { api, unwrap } from "@/api/client";
-import { keys } from "@/api/queries";
+import { keys, useEmbeddingStatus, useMappingStats } from "@/api/queries";
 import { taskResult } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
@@ -37,6 +41,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { untrackTask, useTrackedTaskIds } from "@/hooks/taskTracker";
+import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
+import { useTheme } from "@/hooks/useTheme";
 import { invalidateForTask, taskLabel, useActiveTasks } from "@/hooks/useTasks";
 import { cn } from "@/lib/utils";
 import { ConceptModalProvider } from "@/components/ConceptModal";
@@ -215,7 +221,71 @@ function UserMenu() {
   );
 }
 
-function SidebarLink({ item }: { item: NavItem }) {
+/** What is done per workflow step: shown next to the sidebar links. */
+function useWorkflowStatus(): Record<string, ReactNode> {
+  const selection = useSelectedVocabulary();
+  const embedding = useEmbeddingStatus([]);
+  const stats = useMappingStats(selection.vocabularyId);
+  const imported = selection.vocabularies.length > 0 && (embedding.data?.embedded ?? 0) > 0;
+  const s = stats.data;
+  return {
+    "/import": imported ? <StatusDot title="Source terms and embeddings are in" /> : null,
+    "/map": s ? (
+      s.unmapped === 0 ? (
+        <StatusDot title="Everything in this vocabulary is mapped" />
+      ) : (
+        <StatusText title={`${s.mapped} of ${s.total} mapped`}>{Math.floor(s.percentage)}%</StatusText>
+      )
+    ) : null,
+    "/review":
+      s && s.pending_suggestions > 0 ? (
+        <StatusText title="Suggestions waiting for review" highlight>
+          {s.pending_suggestions > 999 ? "999+" : s.pending_suggestions}
+        </StatusText>
+      ) : null,
+  };
+}
+
+function StatusDot({ title }: { title: string }) {
+  return (
+    <span title={title} className="bg-success/15 text-success flex size-5 items-center justify-center rounded-full">
+      <Check className="size-3" />
+    </span>
+  );
+}
+
+function StatusText({ children, title, highlight }: { children: ReactNode; title: string; highlight?: boolean }) {
+  return (
+    <span
+      title={title}
+      className={cn(
+        "rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+        highlight ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const next = { light: "dark", dark: "system", system: "light" } as const;
+  const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      onClick={() => setTheme(next[theme])}
+      aria-label={`Theme: ${theme}. Switch to ${next[theme]}`}
+      title={`Theme: ${theme} (click for ${next[theme]})`}
+    >
+      <Icon />
+    </Button>
+  );
+}
+
+function SidebarLink({ item, status }: { item: NavItem; status?: ReactNode }) {
   const { to, label, icon: Icon, hint, step } = item;
   return (
     <NavLink
@@ -246,10 +316,11 @@ function SidebarLink({ item }: { item: NavItem }) {
           >
             {step ?? <Icon className="size-4" />}
           </span>
-          <span className="relative min-w-0">
+          <span className="relative min-w-0 flex-1">
             <span className={cn("block truncate", isActive && "font-semibold")}>{label}</span>
             {hint && <span className="text-muted-foreground block truncate text-[11px] leading-tight">{hint}</span>}
           </span>
+          {status && <span className="relative shrink-0">{status}</span>}
         </>
       )}
     </NavLink>
@@ -273,6 +344,7 @@ export function Layout() {
     (g) => g.items.length > 0,
   );
   const items = groups.flatMap((g) => g.items);
+  const status = useWorkflowStatus();
 
   return (
     <ConceptModalProvider>
@@ -295,7 +367,7 @@ export function Layout() {
                     {group.title}
                   </div>
                   {group.items.map((item) => (
-                    <SidebarLink key={item.to} item={item} />
+                    <SidebarLink key={item.to} item={item} status={status[item.to]} />
                   ))}
                 </div>
               ))}
@@ -323,6 +395,7 @@ export function Layout() {
             </nav>
             <div className="ml-auto flex items-center gap-2">
               <TaskTray />
+              <ThemeToggle />
               <UserMenu />
             </div>
           </header>

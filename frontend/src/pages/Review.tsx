@@ -1,6 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Check, ChevronLeft, ChevronRight, ListChecks, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
@@ -13,7 +13,6 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
 import { VocabularySelector } from "@/components/VocabularySelector";
 import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -32,9 +31,17 @@ const SORTS = [
 ];
 const LEVELS = Array.from({ length: 10 }, (_, i) => i + 1);
 
-function ConfidenceBadge({ value }: { value: number }) {
-  const variant = value >= 8 ? "default" : value >= 5 ? "secondary" : "outline";
-  return <Badge variant={variant}>{value}</Badge>;
+/** Confidence 1-10 as a number and a coloured bar (green ≥ 8, amber ≥ 5, red below). */
+function ConfidenceMeter({ value }: { value: number }) {
+  const tone = value >= 8 ? "bg-success" : value >= 5 ? "bg-warning" : "bg-destructive";
+  return (
+    <div className="flex items-center gap-2" title={`Confidence ${value} of 10`}>
+      <span className="w-5 text-sm font-semibold tabular-nums">{value}</span>
+      <div className="bg-muted h-1.5 w-14 overflow-hidden rounded-full">
+        <div className={`${tone} h-full rounded-full`} style={{ width: `${value * 10}%` }} />
+      </div>
+    </div>
+  );
 }
 
 export function ReviewPage() {
@@ -79,82 +86,160 @@ export function ReviewPage() {
     });
   };
 
+  // Keyboard review: J/K or ↓/↑ move the cursor row, A accepts it, R rejects it, X ticks it
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const [cursor, setCursor] = useState(0);
+  const cursorRow = items[Math.min(cursor, Math.max(0, items.length - 1))];
+  const keys = useRef({ items, cursor, cursorRow, selected, busy, pending });
+  useEffect(() => {
+    keys.current = { items, cursor, cursorRow, selected, busy, pending };
+  });
+  const decideRef = useRef(decide);
+  useEffect(() => {
+    decideRef.current = decide;
+  });
+  const setSelectedRef = useRef(setSelected);
+  useEffect(() => {
+    setSelectedRef.current = setSelected;
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('[role="dialog"]')) return;
+      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      const k = keys.current;
+      if (!k.pending || k.items.length === 0) return;
+      const move = (to: number) => {
+        const next = Math.min(k.items.length - 1, Math.max(0, to));
+        setCursor(next);
+        requestAnimationFrame(() =>
+          document.querySelector(`[data-row-id="${k.items[next].id}"]`)?.scrollIntoView({ block: "nearest" }),
+        );
+      };
+      const key = e.key.toLowerCase();
+      if (key === "j" || e.key === "ArrowDown") move(k.cursor + 1);
+      else if (key === "k" || e.key === "ArrowUp") move(k.cursor - 1);
+      else if ((key === "a" || key === "r") && k.cursorRow && !k.busy)
+        decideRef.current(key === "a" ? "accept" : "reject", { ids: [k.cursorRow.id] });
+      else if (key === "x" && k.cursorRow) {
+        const id = String(k.cursorRow.id);
+        setSelectedRef.current(k.selected.includes(id) ? k.selected.filter((x) => x !== id) : [...k.selected, id]);
+      } else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const columns = useMemo<ColumnDef<Suggestion, unknown>[]>(() => {
     const cols: ColumnDef<Suggestion, unknown>[] = [
       {
-        accessorKey: "source_value",
-        header: "Source code",
-        cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span>,
-      },
-      { accessorKey: "source_concept_name", header: "Source name" },
-      {
-        accessorKey: "freq",
-        header: "Freq",
-        cell: ({ getValue }) => (getValue() as number | null)?.toLocaleString() ?? "—",
+        id: "source",
+        header: "Source term",
+        cell: ({ row }) => (
+          <div className="min-w-40">
+            <div className="leading-snug font-medium">{row.original.source_concept_name}</div>
+            <div className="text-muted-foreground text-xs">
+              <span className="font-mono">{row.original.source_value}</span>
+              {row.original.freq != null && <> · freq {row.original.freq.toLocaleString()}</>}
+            </div>
+          </div>
+        ),
       },
       {
         id: "concept",
         accessorKey: "concept_name",
         header: "→ Suggested concept",
         cell: ({ row }) => (
-          <div>
-            <ConceptLink conceptId={row.original.concept_id} className="font-medium">
+          <div className="min-w-48">
+            <ConceptLink conceptId={row.original.concept_id} className="leading-snug font-medium">
               {row.original.concept_name}
             </ConceptLink>
             <div className="text-muted-foreground text-xs">
-              {row.original.concept_id} · {row.original.vocabulary_id} · {row.original.concept_class_id}
+              {row.original.domain_id} · {row.original.vocabulary_id} · {row.original.concept_class_id}
             </div>
             {(row.original.extra_concepts ?? []).map((c) => (
-              <div key={c.concept_id}>
+              <div key={c.concept_id} className="mt-1">
                 <div className="font-medium">
                   + <ConceptLink conceptId={c.concept_id}>{c.concept_name}</ConceptLink>
                 </div>
-                <div className="text-muted-foreground text-xs">
-                  {c.concept_id} · {c.concept_class_id} (mapped together)
-                </div>
+                <div className="text-muted-foreground text-xs">{c.concept_class_id} (mapped together)</div>
               </div>
             ))}
           </div>
         ),
       },
-      { accessorKey: "domain_id", header: "Domain" },
       {
         accessorKey: "confidence",
         header: "Confidence",
-        cell: ({ getValue }) => <ConfidenceBadge value={getValue() as number} />,
-      },
-      {
-        accessorKey: "method",
-        header: "Method",
+        size: 110,
         cell: ({ row }) => (
-          <div className="text-xs">
-            <div>{row.original.method}</div>
+          <div className="space-y-1">
+            <ConfidenceMeter value={row.original.confidence} />
             {row.original.match_type && row.original.match_type !== "exact" && (
-              <div className="text-amber-700 dark:text-amber-400">{row.original.match_type} match</div>
+              <div className="text-xs text-amber-700 dark:text-amber-400">{row.original.match_type}</div>
             )}
           </div>
         ),
       },
       {
-        accessorKey: "pipeline",
-        header: "Pipeline",
-        cell: ({ getValue }) => <span className="text-xs">{(getValue() as string | null) ?? "—"}</span>,
-      },
-      {
         accessorKey: "rationale",
-        header: "Rationale",
+        header: "Why",
         enableSorting: false,
-        cell: ({ getValue }) => {
-          const text = (getValue() as string | null) ?? "";
+        cell: ({ row }) => {
+          const text = row.original.rationale ?? "";
           return (
-            <span className="line-clamp-2 max-w-64 text-xs" title={text}>
-              {text || "—"}
-            </span>
+            <div className="max-w-80">
+              <span className="line-clamp-2 text-xs" title={text}>
+                {text || "—"}
+              </span>
+              <span className="text-muted-foreground text-[11px]">
+                {row.original.method}
+                {row.original.pipeline ? ` · ${row.original.pipeline}` : ""}
+              </span>
+            </div>
           );
         },
       },
     ];
-    if (!pending) {
+    if (pending) {
+      cols.push({
+        id: "actions",
+        header: "",
+        size: 84,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className="flex justify-end gap-1">
+            <Button
+              size="icon-sm"
+              variant="outline"
+              className="hover:bg-success/15 hover:text-success"
+              aria-label="Accept"
+              title="Accept (A)"
+              onClick={(e) => {
+                e.stopPropagation();
+                decideRef.current("accept", { ids: [row.original.id] });
+              }}
+            >
+              <Check />
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="outline"
+              className="hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Reject"
+              title="Reject (R)"
+              onClick={(e) => {
+                e.stopPropagation();
+                decideRef.current("reject", { ids: [row.original.id] });
+              }}
+            >
+              <X />
+            </Button>
+          </div>
+        ),
+      });
+    } else {
       cols.push(
         {
           accessorKey: "decided_by",
@@ -313,10 +398,17 @@ export function ReviewPage() {
             </EmptyState>
           ) : (
             <>
+              {pending && (
+                <p className="text-muted-foreground text-xs">
+                  Keyboard: <b>J</b>/<b>K</b> or ↓/↑ move · <b>A</b> accept · <b>R</b> reject · <b>X</b> tick for bulk
+                  actions
+                </p>
+              )}
               <DataTable
                 columns={columns}
-                data={data?.items ?? []}
+                data={items}
                 getRowId={(row) => String(row.id)}
+                highlightId={pending && cursorRow ? String(cursorRow.id) : null}
                 selection={pending ? "multi" : "none"}
                 selected={selected}
                 onSelectedChange={setSelected}

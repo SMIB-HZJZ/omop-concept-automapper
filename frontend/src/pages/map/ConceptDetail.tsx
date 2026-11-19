@@ -1,11 +1,11 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Filter, Hash, Loader2, Search as SearchIcon, Sparkles } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { ApiError, errorMessage } from "@/api/client";
-import { useMapConcepts, useMeta, useSearch, useSuggest } from "@/api/queries";
+import { useMapConcepts, useMeta, useSearch, useSuggest, useUnmap } from "@/api/queries";
 import type { SearchRequest, SuggestResponse, UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { ErrorAlert } from "@/components/common";
@@ -27,6 +27,7 @@ import { ManualConceptIds } from "./ManualConceptIds";
 import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 import { SelectedConcepts } from "./SelectedConcepts";
 import { SuggestionAlert } from "./SuggestionAlert";
+import { DEFAULT_LIMIT } from "./searchRequest";
 import type { ConceptLike } from "./types";
 import { ConceptLink } from "@/components/ConceptLink";
 import { useConceptModal } from "@/hooks/useConceptModal";
@@ -51,7 +52,23 @@ function ExplainButton({ conceptId }: { conceptId: number }) {
   );
 }
 
+function Kbd({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="bg-muted text-foreground mx-px rounded border px-1 py-px font-mono text-[10px] font-medium">
+      {children}
+    </kbd>
+  );
+}
+
 const RESULT_COLUMNS: ColumnDef<ConceptLike, unknown>[] = [
+  {
+    id: "key",
+    header: "#",
+    size: 28,
+    enableSorting: false,
+    cell: ({ row }) =>
+      row.index < 9 ? <span className="text-muted-foreground font-mono text-xs">{row.index + 1}</span> : null,
+  },
   {
     accessorKey: "concept_name",
     header: "Standard concept",
@@ -92,9 +109,16 @@ type Props = {
   vocabularyId: number;
   isDrug: boolean;
   onMapped: () => void;
+  /** Called after "Undo" removed the mapping just confirmed, with the source term's ID */
+  onUndone: (sourceId: number) => void;
 };
 
-export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props) {
+function isTyping(target: EventTarget | null) {
+  const el = target as HTMLElement | null;
+  return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
+}
+
+export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndone }: Props) {
   const meta = useMeta();
   const [name, setName] = useState(concept.source_concept_name);
   const [domains, setDomains] = usePersistentState<string[]>("map-domains", []);
@@ -102,7 +126,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
   const detected = concept.atc7_codes?.[0] ?? null;
   const [useAtc7, setUseAtc7] = useState(isDrug && !!detected);
   const [manualAtc7, setManualAtc7] = useState("");
-  const [limit, setLimit] = useState(100);
+  const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [pipeline, setPipeline] = useState(DEFAULT_PIPELINE);
   const [selected, setSelected] = useState<Map<number, ConceptLike>>(new Map());
   const [suggestion, setSuggestion] = useState<SuggestResponse | null>(null);
@@ -128,6 +152,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
 
   const suggest = useSuggest();
   const mapConcepts = useMapConcepts(vocabularyId);
+  const unmap = useUnmap(vocabularyId);
 
   const addConcept = (c: ConceptLike) => setSelected((prev) => new Map(prev).set(c.concept_id, c));
   const removeConcept = (id: number) =>
@@ -171,13 +196,57 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
       { source_id: concept.source_id, concept_ids: [...selected.keys()] },
       {
         onSuccess: (res) => {
-          toast.success(`Mapped to ${res.count} concept(s)`);
+          const sourceId = concept.source_id;
+          toast.success(`"${concept.source_concept_name}" mapped to ${res.count} concept(s)`, {
+            duration: 8000,
+            action: {
+              label: "Undo",
+              onClick: () =>
+                unmap.mutate([sourceId], {
+                  onSuccess: () => {
+                    toast.message("Mapping undone");
+                    onUndone(sourceId);
+                  },
+                  onError: (err) => toast.error(errorMessage(err)),
+                }),
+            },
+          });
           setSelected(new Map());
           onMapped();
         },
         onError: (err) => toast.error(errorMessage(err)),
       },
     );
+
+  // Shortcuts: 1-9 tick a candidate, Enter confirms, S asks the AI (not while typing or in a dialog)
+  const shortcuts = useRef({ results, selected, confirm, runSuggest, toggle: onTableSelection, selectedIds });
+  useEffect(() => {
+    shortcuts.current = { results, selected, confirm, runSuggest, toggle: onTableSelection, selectedIds };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || document.querySelector('[role="dialog"]')) return;
+      const k = shortcuts.current;
+      if (/^[1-9]$/.test(e.key)) {
+        const c = k.results[Number(e.key) - 1];
+        if (!c) return;
+        e.preventDefault();
+        const id = String(c.concept_id);
+        k.toggle(k.selectedIds.includes(id) ? k.selectedIds.filter((x) => x !== id) : [...k.selectedIds, id]);
+      } else if (e.key === "Enter" && k.selected.size > 0) {
+        // Enter on a focused row or button keeps its own meaning
+        const tag = (e.target as HTMLElement | null)?.tagName;
+        if (tag === "TR" || tag === "BUTTON" || tag === "A") return;
+        e.preventDefault();
+        k.confirm();
+      } else if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        k.runSuggest();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const searchError =
     search.error instanceof ApiError && search.error.status === 409
@@ -364,7 +433,14 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped }: Props
         {/* Candidates: a fixed area that keeps the previous results under a loading bar */}
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           <div className="text-muted-foreground flex items-center justify-between text-xs">
-            <span>{search.data ? `${results.length} candidates · tick to select` : "Searching…"}</span>
+            <span>
+              {search.data ? `${results.length} candidates` : "Searching…"}
+              <span className="hidden sm:inline">
+                {" "}
+                · <Kbd>1</Kbd>–<Kbd>9</Kbd> tick · <Kbd>Enter</Kbd> confirm · <Kbd>S</Kbd> AI suggest · <Kbd>↑</Kbd>
+                <Kbd>↓</Kbd> term
+              </span>
+            </span>
             {search.data && <span>{search.data.method}</span>}
           </div>
           <div className="relative min-h-0 flex-1">
