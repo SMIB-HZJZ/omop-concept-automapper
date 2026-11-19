@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useConceptModal } from "@/hooks/useConceptModal";
 import type { ConceptLike } from "./types";
 
 const OUTCOME_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -26,6 +27,7 @@ export function SuggestionAlert({
   onSelect: (concept: ConceptLike) => void;
 }) {
   const suggested = suggestion.selected ?? null;
+  const { openConcept } = useConceptModal();
   // A combined match (e.g. one concept per ingredient) is selected as a whole
   const all: ConceptLike[] = suggestion.selected_concepts?.length
     ? suggestion.selected_concepts
@@ -53,9 +55,19 @@ export function SuggestionAlert({
             <span>No concept suggested</span>
           )}
           {suggested && (
-            <Button size="sm" variant="outline" onClick={() => all.forEach(onSelect)}>
-              {all.length > 1 ? `Select all ${all.length}` : "Select suggestion"}
-            </Button>
+            <>
+              <Button size="sm" variant="cta" onClick={() => all.forEach(onSelect)}>
+                {all.length > 1 ? `Select all ${all.length}` : "Select suggestion"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => openConcept(suggested.concept_id, { explain: true })}
+              >
+                <Sparkles /> Explain
+              </Button>
+            </>
           )}
           <span className="text-muted-foreground text-xs">
             pipeline {suggestion.pipeline} · threshold {threshold}

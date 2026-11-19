@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { useDebounce } from "@/hooks/useDebounce";
 import { formatNumber } from "@/lib/format";
+import { ConceptLink } from "@/components/ConceptLink";
 
 const chartConfig = { count: { label: "Mappings", color: "var(--chart-1)" } } satisfies ChartConfig;
 
@@ -35,7 +36,11 @@ const columns: ColumnDef<MappedRow, unknown>[] = [
     cell: ({ getValue }) => <span className="font-mono text-xs">{String(getValue())}</span>,
   },
   { accessorKey: "source_concept_name", header: "Source concept name" },
-  { accessorKey: "concept_name", header: "OMOP concept name" },
+  {
+    accessorKey: "concept_name",
+    header: "OMOP concept name",
+    cell: ({ row }) => <ConceptLink conceptId={row.original.concept_id}>{row.original.concept_name}</ConceptLink>,
+  },
   { accessorKey: "concept_id", header: "Concept ID" },
   { accessorKey: "domain_id", header: "Domain" },
   {

@@ -13,21 +13,27 @@ import type { ConceptLike } from "./types";
 export function ManualConceptIds({
   isSelected,
   onAdd,
+  alwaysOpen = false,
 }: {
   isSelected: (conceptId: number) => boolean;
   onAdd: (concept: ConceptLike) => void;
+  /** Shown in its own popover: no "enter manually" checkbox */
+  alwaysOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [checked, setOpen] = useState(false);
+  const open = alwaysOpen || checked;
   const [ids, setIds] = useState("");
   const debouncedIds = useDebounce(open ? ids.trim() : "", 500);
   const lookup = useConceptLookup(debouncedIds);
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Checkbox id="manual-ids" checked={open} onCheckedChange={(v) => setOpen(!!v)} />
-        <Label htmlFor="manual-ids">Enter concept IDs manually</Label>
-      </div>
+      {!alwaysOpen && (
+        <div className="flex items-center gap-2">
+          <Checkbox id="manual-ids" checked={open} onCheckedChange={(v) => setOpen(!!v)} />
+          <Label htmlFor="manual-ids">Enter concept IDs manually</Label>
+        </div>
+      )}
       {open && (
         <div className="space-y-2">
           <Input

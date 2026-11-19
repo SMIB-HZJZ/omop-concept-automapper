@@ -1,12 +1,13 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { CheckCircle2, ChevronDown, Map as MapIcon } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle2, ChevronDown, Map as MapIcon, MousePointerClick, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { useAuditRecent, useAuditStats, useMappingStats, useUnmapped } from "@/api/queries";
 import type { AuditEntry, UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { EmptyState, ErrorAlert, PageHeader, StatCard } from "@/components/common";
+import { AnimatedNumber } from "@/components/motion";
 import { PageControls } from "@/components/Pagination";
 import { formatDate, formatNumber } from "@/lib/format";
 import { VocabularySelector } from "@/components/VocabularySelector";
@@ -20,21 +21,37 @@ import { ConceptDetail } from "./map/ConceptDetail";
 
 const UNMAPPED_COLUMNS: ColumnDef<UnmappedItem, unknown>[] = [
   {
-    accessorKey: "source_value",
-    header: "Source code",
-    cell: ({ row }) => <span className="font-mono">{row.original.source_value}</span>,
+    id: "term",
+    header: "Source term",
+    cell: ({ row }) => (
+      <div className="min-w-0">
+        <div className="leading-snug font-medium">{row.original.source_concept_name}</div>
+        <div className="text-muted-foreground truncate font-mono text-xs">{row.original.source_value}</div>
+      </div>
+    ),
   },
-  { accessorKey: "source_concept_name", header: "Source concept name" },
-  { accessorKey: "mapped_concepts", header: "# Mapped" },
-  { accessorKey: "freq", header: "Frequency" },
+  {
+    accessorKey: "freq",
+    header: () => <div className="text-right">Freq</div>,
+    size: 64,
+    cell: ({ row }) => (
+      <div className="text-muted-foreground text-right text-xs tabular-nums">
+        {row.original.freq?.toLocaleString() ?? "—"}
+      </div>
+    ),
+  },
   {
     id: "suggestion",
-    header: "Suggestion",
-    enableSorting: false,
+    header: "",
+    size: 56,
     cell: ({ row }) =>
       row.original.suggestion_concept_id ? (
-        <Badge variant="secondary" title={`Concept ${row.original.suggestion_concept_id}`}>
-          pending · {row.original.suggestion_confidence}
+        <Badge
+          variant="secondary"
+          className="gap-1"
+          title={`An AI suggestion (confidence ${row.original.suggestion_confidence}) waits in Review`}
+        >
+          <Sparkles className="size-3" /> {row.original.suggestion_confidence}
         </Badge>
       ) : null,
   },
@@ -88,6 +105,46 @@ function AuditTrail({ vocabularyId }: { vocabularyId: number }) {
   );
 }
 
+/** Mapped / total with a bar, what is left, and a link to waiting suggestions. */
+function ProgressStrip({ vocabularyId, action }: { vocabularyId: number; action: ReactNode }) {
+  const stats = useMappingStats(vocabularyId);
+  const d = stats.data;
+  return (
+    <Card className="gap-0 py-3">
+      <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4">
+        <ErrorAlert error={stats.error} />
+        <div className="min-w-56 flex-1 space-y-1.5">
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span>
+              <b className="tabular-nums">{d ? <AnimatedNumber value={d.mapped} /> : "—"}</b>
+              <span className="text-muted-foreground"> of {formatNumber(d?.total)} terms mapped</span>
+            </span>
+            <span className="text-primary font-semibold tabular-nums">
+              {d ? <AnimatedNumber value={d.percentage} decimals={1} suffix="%" /> : ""}
+            </span>
+          </div>
+          <Progress value={d?.percentage ?? 0} aria-label="Mapped terms" />
+        </div>
+        {d && d.pending_suggestions > 0 && (
+          <Link
+            to="/review"
+            className="bg-accent text-accent-foreground hover:bg-accent/70 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors"
+          >
+            <Sparkles className="size-4" />
+            <b className="tabular-nums">{formatNumber(d.pending_suggestions)}</b> suggestions to review →
+          </Link>
+        )}
+        <div className="ml-auto">{action}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function isTyping(target: EventTarget | null) {
+  const el = target as HTMLElement | null;
+  return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
+}
+
 /** Everything below the vocabulary selector; keyed by vocabulary so paging and selection reset. */
 function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isDrug: boolean }) {
   const [page, setPage] = useState(1);
@@ -102,49 +159,45 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
   const pages = unmapped.data?.pages ?? 1;
   const currentPage = unmapped.data?.page ?? page;
 
-  const items = unmapped.data?.items ?? [];
+  const items = useMemo(() => unmapped.data?.items ?? [], [unmapped.data]);
   const concept = items.find((i) => String(i.source_id) === selectedSource) ?? null;
+
+  const select = useCallback((id: string | null) => {
+    setSelectedSource(id);
+    if (id)
+      requestAnimationFrame(() =>
+        document.querySelector(`[data-row-id="${id}"]`)?.scrollIntoView({ block: "nearest" }),
+      );
+  }, []);
 
   const afterMapped = () => {
     const idx = items.findIndex((i) => String(i.source_id) === selectedSource);
     const next = items[idx + 1] ?? items[idx - 1];
-    setSelectedSource(next ? String(next.source_id) : null);
+    select(next ? String(next.source_id) : null);
   };
+
+  // ↑/↓ move through the source terms (not while typing or with a dialog open)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (isTyping(e.target) || document.querySelector('[role="dialog"]') || items.length === 0) return;
+      e.preventDefault();
+      const idx = items.findIndex((i) => String(i.source_id) === selectedSource);
+      const nextIdx = idx < 0 ? 0 : Math.min(items.length - 1, Math.max(0, idx + (e.key === "ArrowDown" ? 1 : -1)));
+      select(String(items[nextIdx].source_id));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [items, selectedSource, select]);
+
+  const allMapped = stats.data && stats.data.unmapped === 0;
 
   return (
     <>
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold">Mapping progress</h2>
-        <ErrorAlert error={stats.error} />
-        {stats.data && (
-          <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="Total concepts" value={stats.data.total} />
-              <StatCard label="Mapped" value={stats.data.mapped} tone="success" />
-              <StatCard
-                label="Still to map"
-                value={stats.data.unmapped}
-                tone={stats.data.unmapped > 0 ? "warning" : "success"}
-              />
-              <StatCard label="Progress" value={`${stats.data.percentage.toFixed(1)}%`} tone="primary" />
-            </div>
-            <Progress value={stats.data.percentage} />
-            {stats.data.pending_suggestions > 0 && (
-              <div className="bg-accent text-accent-foreground flex flex-wrap items-center justify-between gap-2 rounded-lg px-4 py-3 text-sm">
-                <span>
-                  <b>{formatNumber(stats.data.pending_suggestions)}</b> AI suggestions are waiting for your review.
-                </span>
-                <Link to="/review" className="font-medium underline-offset-4 hover:underline">
-                  Go to Review →
-                </Link>
-              </div>
-            )}
-          </>
-        )}
-        <AuditTrail vocabularyId={vocabularyId} />
-      </div>
+      <ProgressStrip vocabularyId={vocabularyId} action={!allMapped && automap.trigger} />
+      {automap.progress}
 
-      {stats.data && stats.data.unmapped === 0 ? (
+      {allMapped ? (
         <EmptyState
           title="All concepts in this vocabulary have been mapped!"
           icon={<CheckCircle2 className="text-success size-8" />}
@@ -152,29 +205,15 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
           Switch to a different vocabulary or import more concepts on the Import Data page.
         </EmptyState>
       ) : (
-        <>
-          <div className="flex flex-wrap items-end gap-4">
-            <PageControls
-              idPrefix="unmapped"
-              page={currentPage}
-              pages={pages}
-              perPage={perPage}
-              onPageChange={setPage}
-              onPerPageChange={setPerPage}
-              itemLabel="Concepts"
-            />
-            {automap.trigger}
-          </div>
-          {automap.progress}
-
-          <Card>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="font-medium">
-                  Unmapped concepts (showing {items.length} of {formatNumber(unmapped.data?.total)})
-                </span>
+        /* Source terms on the left, their candidate standard concepts on the right; both columns
+           have a fixed height on wide screens, so switching terms never moves the page */
+        <div className="grid gap-5 xl:h-[max(36rem,calc(100vh-19rem))] xl:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]">
+          <Card className="min-h-0 gap-0 py-0">
+            <CardContent className="flex h-full min-h-0 flex-col gap-3 p-4">
+              <div className="flex items-baseline justify-between gap-2">
+                <h2 className="font-semibold">To map</h2>
                 <span className="text-muted-foreground text-xs">
-                  Click a row (or focus it and press Enter) to start mapping · sorted by frequency
+                  {formatNumber(unmapped.data?.total)} terms · most frequent first · ↑↓ to move
                 </span>
               </div>
               <ErrorAlert error={unmapped.error} />
@@ -184,32 +223,48 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
                 getRowId={(r) => String(r.source_id)}
                 selection="single"
                 selected={selectedSource ? [selectedSource] : []}
-                onSelectedChange={(ids) => setSelectedSource(ids[0] ?? null)}
+                // Clicking the selected row again keeps it selected
+                onSelectedChange={(ids) => ids[0] && select(ids[0])}
                 sortable={false}
                 isLoading={unmapped.isLoading}
                 emptyText="No unmapped concepts on this page."
-                maxHeight="24rem"
+                maxHeight="none"
+                className="max-h-[32rem] min-h-0 flex-1 xl:max-h-none"
+              />
+              <PageControls
+                idPrefix="unmapped"
+                page={currentPage}
+                pages={pages}
+                perPage={perPage}
+                onPageChange={setPage}
+                onPerPageChange={setPerPage}
+                itemLabel="Terms"
               />
             </CardContent>
           </Card>
 
-          {concept ? (
-            <ConceptDetail
-              key={concept.source_id}
-              concept={concept}
-              vocabularyId={vocabularyId}
-              isDrug={isDrug}
-              onMapped={afterMapped}
-            />
-          ) : (
-            items.length > 0 && (
-              <p className="text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-center text-sm">
-                Select a term in the table above to map it by hand.
-              </p>
-            )
-          )}
-        </>
+          <div className="min-h-0">
+            {concept ? (
+              <ConceptDetail
+                key={concept.source_id}
+                concept={concept}
+                vocabularyId={vocabularyId}
+                isDrug={isDrug}
+                onMapped={afterMapped}
+              />
+            ) : (
+              <div className="h-full">
+                <EmptyState title="Pick a source term" icon={<MousePointerClick className="text-primary size-7" />}>
+                  Click a term on the left, or press ↓. Its matching standard concepts appear here, ready to select and
+                  confirm.
+                </EmptyState>
+              </div>
+            )}
+          </div>
+        </div>
       )}
+
+      <AuditTrail vocabularyId={vocabularyId} />
     </>
   );
 }

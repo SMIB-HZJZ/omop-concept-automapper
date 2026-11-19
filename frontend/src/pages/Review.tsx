@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalibrationPanel } from "./review/CalibrationPanel";
+import { ConceptLink } from "@/components/ConceptLink";
 
 type Status = SuggestionFilters["status"];
 
@@ -97,13 +98,17 @@ export function ReviewPage() {
         header: "→ Suggested concept",
         cell: ({ row }) => (
           <div>
-            <div className="font-medium">{row.original.concept_name}</div>
+            <ConceptLink conceptId={row.original.concept_id} className="font-medium">
+              {row.original.concept_name}
+            </ConceptLink>
             <div className="text-muted-foreground text-xs">
               {row.original.concept_id} · {row.original.vocabulary_id} · {row.original.concept_class_id}
             </div>
             {(row.original.extra_concepts ?? []).map((c) => (
               <div key={c.concept_id}>
-                <div className="font-medium">+ {c.concept_name}</div>
+                <div className="font-medium">
+                  + <ConceptLink conceptId={c.concept_id}>{c.concept_name}</ConceptLink>
+                </div>
                 <div className="text-muted-foreground text-xs">
                   {c.concept_id} · {c.concept_class_id} (mapped together)
                 </div>

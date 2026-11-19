@@ -9,14 +9,12 @@ import type { Task } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorAlert, StatCard } from "@/components/common";
+import { MultiSelect } from "@/components/MultiSelect";
 import { TaskProgress } from "@/components/TaskProgress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { usePersistentState } from "@/hooks/usePersistentState";
 import { useStartTask } from "@/hooks/useStartTask";
 import { useLatestTask } from "@/hooks/useTasks";
 import { formatNumber } from "@/lib/format";
@@ -112,9 +110,9 @@ export function EmbeddingsTab() {
   const { isAdmin } = useAuth();
   const config = useConfig();
   const meta = useMeta();
-  const [domain, setDomain] = useState<string | null>(null);
-  const status = useEmbeddingStatus(domain);
-  const [batchSize, setBatchSize] = usePersistentState("embed-batch-size", 1000);
+  // Several domains embed in one run, so the search index is rebuilt once
+  const [domains, setDomains] = useState<string[]>([]);
+  const status = useEmbeddingStatus(domains);
   const { run, busy } = useStartTask();
 
   const embed = useLatestTask("embeddings.embed");
@@ -144,20 +142,15 @@ export function EmbeddingsTab() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <h3 className="font-medium">Standard concepts</h3>
           <div className="grid gap-1.5">
-            <Label htmlFor="embed-domain">Filter by domain (optional)</Label>
-            <Select value={domain ?? "__all"} onValueChange={(v) => setDomain(v === "__all" ? null : v)}>
-              <SelectTrigger id="embed-domain" className="w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all">All</SelectItem>
-                {meta.data?.domains.map((d) => (
-                  <SelectItem key={d} value={d}>
-                    {d}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="embed-domains">Domains (counts and embedding)</Label>
+            <MultiSelect
+              id="embed-domains"
+              className="w-72"
+              options={meta.data?.domains ?? []}
+              value={domains}
+              onChange={setDomains}
+              placeholder="All domains"
+            />
           </div>
         </div>
         <ErrorAlert error={status.error} />
@@ -170,7 +163,7 @@ export function EmbeddingsTab() {
           <StatCard
             label="Total standard concepts"
             value={formatNumber(s?.total)}
-            hint={domain ? `Domain: ${domain}` : "All domains"}
+            hint={domains.length ? domains.join(", ") : "All domains"}
           />
           <StatCard
             label="Embedded"
@@ -191,18 +184,6 @@ export function EmbeddingsTab() {
       </section>
 
       <section className="space-y-3">
-        <div className="grid max-w-md gap-2">
-          <Label>Batch size: {batchSize}</Label>
-          <Slider
-            thumbLabel="Batch size"
-            min={100}
-            max={2000}
-            step={10}
-            value={[batchSize]}
-            onValueChange={(v) => setBatchSize(v[0] ?? 1000)}
-          />
-          <p className="text-muted-foreground text-xs">Number of concepts sent to the embedding model per request.</p>
-        </div>
         {isAdmin ? (
           <div className="flex flex-wrap gap-2">
             <Button
@@ -210,13 +191,14 @@ export function EmbeddingsTab() {
               disabled={disabled}
               onClick={() =>
                 void run(
-                  async () =>
-                    unwrap(await api.POST("/api/embeddings/embed", { body: { domain, batch_size: batchSize } })),
+                  async () => unwrap(await api.POST("/api/embeddings/embed", { body: { domains, batch_size: 4000 } })),
                   "Embedding",
                 )
               }
             >
-              Embed standard concepts
+              {domains.length
+                ? `Embed ${domains.length === 1 ? domains[0] : `${domains.length} domains`}`
+                : "Embed all standard concepts"}
             </Button>
             <Button
               variant="outline"

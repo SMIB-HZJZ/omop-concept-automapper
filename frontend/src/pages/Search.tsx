@@ -1,4 +1,5 @@
-import { Info, Search as SearchIcon, SlidersHorizontal } from "lucide-react";
+import { Info, Loader2, PanelRightOpen, Search as SearchIcon, SlidersHorizontal } from "lucide-react";
+import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
 import { ApiError } from "@/api/client";
@@ -13,20 +14,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useConceptModal } from "@/hooks/useConceptModal";
 import { useDebounce } from "@/hooks/useDebounce";
+import { Skeleton } from "@/components/motion";
 import { isValidAtc7, normalizeAtc7 } from "@/lib/atc7";
 
 function ResultItem({ result }: { result: SearchResult }) {
   const atc7 = result.atc7_codes ?? [];
+  const { openConcept } = useConceptModal();
   return (
     <AccordionItem value={String(result.concept_id)}>
       <AccordionTrigger>
-        <span>
-          Rank {result.rank}: {result.concept_name}{" "}
-          <span className="text-muted-foreground font-normal">(Score: {result.score.toFixed(3)})</span>
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="bg-muted text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums">
+            {result.rank}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate">{result.concept_name}</span>
+            <span className="text-muted-foreground block text-xs font-normal">
+              {result.domain_id} · {result.vocabulary_id} · {result.concept_class_id}
+            </span>
+          </span>
+          <span className="text-muted-foreground ml-auto shrink-0 pl-2 text-xs font-normal tabular-nums">
+            {result.score.toFixed(3)}
+          </span>
         </span>
       </AccordionTrigger>
       <AccordionContent>
+        <Button variant="outline" size="sm" className="mb-3 gap-1.5" onClick={() => openConcept(result.concept_id)}>
+          <PanelRightOpen /> Details, hierarchy & AI explanation
+        </Button>
         <div className="grid gap-4 text-sm sm:grid-cols-2">
           <div>
             <div className="mb-1 font-medium">Concept details</div>
@@ -105,6 +122,9 @@ export function SearchPage() {
   }, [debouncedQuery, debouncedK, domains, debouncedVocabulary, debouncedAtc7]);
 
   const search = useSearch(request);
+  // Typing ahead of the debounce counts as busy too, so the spinner shows right away
+  const typing = query.trim() !== debouncedQuery;
+  const busy = typing || search.isFetching;
   const results = search.data?.results ?? [];
   const advancedCount = (vocabulary.trim() ? 1 : 0) + (atc7Code ? 1 : 0);
 
@@ -119,13 +139,23 @@ export function SearchPage() {
       <div className="grid items-end gap-3 md:grid-cols-[minmax(0,4fr)_minmax(0,2fr)_8rem_auto]">
         <div className="grid gap-1.5">
           <Label htmlFor="search-query">Concept name</Label>
-          <Input
-            id="search-query"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Enter concept name to search..."
-            autoFocus
-          />
+          <div className="relative">
+            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+            <Input
+              id="search-query"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="e.g. šećerna bolest tip 2, metformin 500 mg"
+              className="pr-9 pl-9"
+              autoFocus
+            />
+            {query.trim() && busy && (
+              <Loader2
+                aria-label="Searching"
+                className="text-primary absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin"
+              />
+            )}
+          </div>
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="search-domains">Domains</Label>
@@ -210,8 +240,22 @@ export function SearchPage() {
             search.error instanceof ApiError && search.error.status === 409 ? "No embeddings yet" : "Search failed"
           }
         />
-      ) : search.isLoading ? (
-        <div className="text-muted-foreground text-sm">Searching for similar concepts…</div>
+      ) : search.isLoading || (typing && !search.data) ? (
+        <div className="space-y-2" role="status" aria-label="Searching">
+          <Skeleton className="h-4 w-72" />
+          <div className="space-y-3 rounded-md border p-4">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-center gap-3" style={{ opacity: 1 - i * 0.13 }}>
+                <Skeleton className="size-7" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
+                <Skeleton className="h-3 w-10" />
+              </div>
+            ))}
+          </div>
+        </div>
       ) : results.length === 0 ? (
         <Alert>
           <Info />
@@ -224,13 +268,38 @@ export function SearchPage() {
               Found {results.length} similar concepts for '{search.data?.request.query ?? request.query}'
             </span>
             <span className="text-muted-foreground"> · {search.data?.method}</span>
-            {search.isFetching && <span className="text-muted-foreground"> · updating…</span>}
           </div>
-          <Accordion type="multiple" className="rounded-md border px-4">
-            {results.map((result) => (
-              <ResultItem key={result.concept_id} result={result} />
-            ))}
-          </Accordion>
+          <div className="relative">
+            {/* Refreshing: a thin moving bar and slightly dimmed results */}
+            {busy && (
+              <div className="bg-primary/15 absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden rounded-full">
+                <motion.div
+                  className="bg-brand h-full w-1/3 rounded-full"
+                  initial={{ x: "-100%" }}
+                  animate={{ x: "300%" }}
+                  transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                />
+              </div>
+            )}
+            <motion.div
+              key={search.data?.request.query}
+              animate={{ opacity: busy ? 0.55 : 1 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Accordion type="multiple" className="bg-card rounded-xl border px-4 shadow-[var(--shadow-soft)]">
+                {results.map((result, i) => (
+                  <motion.div
+                    key={result.concept_id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: Math.min(i, 12) * 0.03 }}
+                  >
+                    <ResultItem result={result} />
+                  </motion.div>
+                ))}
+              </Accordion>
+            </motion.div>
+          </div>
         </div>
       )}
     </div>

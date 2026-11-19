@@ -1,9 +1,13 @@
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 
+import { ConceptLink } from "@/components/ConceptLink";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { ConceptLike } from "./types";
 
-/** The concepts chosen for the current source concept, with "Confirm mapping". */
+/** The concepts chosen for the current source term, with "Confirm mapping" (kept at the top of the
+ * panel, so confirming never needs scrolling). */
 export function SelectedConcepts({
   concepts,
   onRemove,
@@ -15,39 +19,49 @@ export function SelectedConcepts({
   onConfirm: () => void;
   confirming: boolean;
 }) {
+  const empty = concepts.length === 0;
   return (
-    <div className="space-y-3">
-      <div className="text-sm font-medium">Selected concepts for mapping</div>
-      {concepts.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          Select concepts from the table to map them to this source concept.
-        </p>
-      ) : (
-        <>
-          {concepts.map((c, i) => (
-            <div key={c.concept_id} className="relative rounded-md border p-3 text-sm">
-              <button
-                type="button"
-                aria-label={`Remove ${c.concept_name}`}
-                className="text-muted-foreground hover:text-foreground absolute top-2 right-2"
-                onClick={() => onRemove(c.concept_id)}
-              >
-                <X className="size-4" />
-              </button>
-              <div className="pr-5 font-medium">
-                {i + 1}. {c.concept_name}
-              </div>
-              <div className="text-muted-foreground text-xs">
-                ID: {c.concept_id} | Domain: {c.domain_id}
-              </div>
-              <div className="text-muted-foreground text-xs">Vocabulary: {c.vocabulary_id}</div>
-            </div>
-          ))}
-          <Button variant="cta" className="w-full" onClick={onConfirm} disabled={confirming}>
-            {confirming ? "Saving…" : "Confirm mapping"}
-          </Button>
-        </>
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-2 rounded-xl border p-3 transition-colors",
+        empty ? "bg-muted/40 border-dashed" : "border-primary/30 bg-accent/50",
       )}
+    >
+      <div className="text-sm font-medium">{empty ? "Nothing selected yet" : `Map to (${concepts.length})`}</div>
+      {empty && (
+        <span className="text-muted-foreground text-sm">
+          Tick concepts in the table below, or use the AI suggestion.
+        </span>
+      )}
+      <AnimatePresence initial={false}>
+        {concepts.map((c) => (
+          <motion.span
+            key={c.concept_id}
+            layout
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.15 }}
+            className="bg-background inline-flex max-w-full items-center gap-1.5 rounded-full border py-1 pr-1 pl-3 text-sm shadow-xs"
+          >
+            <ConceptLink conceptId={c.concept_id} className="max-w-72 truncate">
+              {c.concept_name}
+            </ConceptLink>
+            <span className="text-muted-foreground text-xs tabular-nums">{c.concept_id}</span>
+            <button
+              type="button"
+              aria-label={`Remove ${c.concept_name}`}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer rounded-full p-0.5"
+              onClick={() => onRemove(c.concept_id)}
+            >
+              <X className="size-3.5" />
+            </button>
+          </motion.span>
+        ))}
+      </AnimatePresence>
+      <Button variant="cta" className="ml-auto gap-1.5" onClick={onConfirm} disabled={empty || confirming}>
+        <Check /> {confirming ? "Saving…" : "Confirm mapping"}
+      </Button>
     </div>
   );
 }

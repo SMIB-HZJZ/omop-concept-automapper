@@ -154,6 +154,7 @@ export function DataTable<T>({
             table.getRowModel().rows.map((row) => (
               <TableRow
                 key={row.id}
+                data-row-id={row.id}
                 data-state={row.getIsSelected() ? "selected" : undefined}
                 aria-selected={selection === "none" ? undefined : row.getIsSelected()}
                 // Single-select rows are the only way to pick an item, so they must work from the keyboard

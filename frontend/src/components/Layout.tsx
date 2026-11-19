@@ -39,6 +39,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { untrackTask, useTrackedTaskIds } from "@/hooks/taskTracker";
 import { invalidateForTask, taskLabel, useActiveTasks } from "@/hooks/useTasks";
 import { cn } from "@/lib/utils";
+import { ConceptModalProvider } from "@/components/ConceptModal";
 
 type NavItem = {
   to: string;
@@ -274,60 +275,62 @@ export function Layout() {
   const items = groups.flatMap((g) => g.items);
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="bg-sidebar border-sidebar-border sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r md:flex">
-        <div className="flex h-16 items-center gap-2.5 border-b px-5">
-          <div className="bg-brand flex size-8 items-center justify-center rounded-lg text-white shadow-[var(--shadow-glow)]">
-            <MapIcon className="size-4" />
+    <ConceptModalProvider>
+      <div className="flex min-h-screen">
+        <aside className="bg-sidebar border-sidebar-border sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r md:flex">
+          <div className="flex h-16 items-center gap-2.5 border-b px-5">
+            <div className="bg-brand flex size-8 items-center justify-center rounded-lg text-white shadow-[var(--shadow-glow)]">
+              <MapIcon className="size-4" />
+            </div>
+            <div className="leading-tight">
+              <div className="font-semibold">Auto OMOP Mapper</div>
+              <div className="text-muted-foreground text-[11px]">Source terms → OMOP concepts</div>
+            </div>
           </div>
-          <div className="leading-tight">
-            <div className="font-semibold">Auto OMOP Mapper</div>
-            <div className="text-muted-foreground text-[11px]">Source terms → OMOP concepts</div>
-          </div>
-        </div>
-        <LayoutGroup>
-          <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3">
-            {groups.map((group) => (
-              <div key={group.title} className="space-y-1">
-                <div className="text-muted-foreground px-3 pb-1 text-[11px] font-semibold tracking-wider uppercase">
-                  {group.title}
+          <LayoutGroup>
+            <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3">
+              {groups.map((group) => (
+                <div key={group.title} className="space-y-1">
+                  <div className="text-muted-foreground px-3 pb-1 text-[11px] font-semibold tracking-wider uppercase">
+                    {group.title}
+                  </div>
+                  {group.items.map((item) => (
+                    <SidebarLink key={item.to} item={item} />
+                  ))}
                 </div>
-                {group.items.map((item) => (
-                  <SidebarLink key={item.to} item={item} />
-                ))}
-              </div>
-            ))}
-          </nav>
-        </LayoutGroup>
-      </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="bg-background/80 sticky top-0 z-20 flex h-16 items-center gap-2 border-b px-4 backdrop-blur-md">
-          <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto md:hidden">
-            {items.map(({ to, label, step }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  cn(
-                    "rounded-md px-2 py-1 text-sm whitespace-nowrap transition-colors",
-                    isActive && "bg-accent text-accent-foreground font-medium",
-                  )
-                }
-              >
-                {step ? `${step}. ` : ""}
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-2">
-            <TaskTray />
-            <UserMenu />
-          </div>
-        </header>
-        <main className="mx-auto w-full max-w-[1600px] flex-1 p-4 md:p-8">
-          <AnimatedOutlet />
-        </main>
+              ))}
+            </nav>
+          </LayoutGroup>
+        </aside>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="bg-background/80 sticky top-0 z-20 flex h-16 items-center gap-2 border-b px-4 backdrop-blur-md">
+            <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto md:hidden">
+              {items.map(({ to, label, step }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    cn(
+                      "rounded-md px-2 py-1 text-sm whitespace-nowrap transition-colors",
+                      isActive && "bg-accent text-accent-foreground font-medium",
+                    )
+                  }
+                >
+                  {step ? `${step}. ` : ""}
+                  {label}
+                </NavLink>
+              ))}
+            </nav>
+            <div className="ml-auto flex items-center gap-2">
+              <TaskTray />
+              <UserMenu />
+            </div>
+          </header>
+          <main className="mx-auto w-full max-w-[1600px] flex-1 p-4 md:p-8">
+            <AnimatedOutlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </ConceptModalProvider>
   );
 }

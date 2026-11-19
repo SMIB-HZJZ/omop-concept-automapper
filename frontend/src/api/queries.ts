@@ -20,13 +20,15 @@ export const keys = {
   auditStats: (id: number) => ["vocab", id, "audit-stats"] as const,
   auditRecent: (id: number) => ["vocab", id, "audit-recent"] as const,
   suggestions: (id: number, params: object) => ["vocab", id, "suggestions", params] as const,
-  embeddingStatus: (domain: string | null) => ["embedding-status", domain] as const,
+  embeddingStatus: (domains: string[]) => ["embedding-status", [...domains].sort()] as const,
   tasks: (params: object) => ["tasks", params] as const,
   task: (id: string) => ["task", id] as const,
   workflows: ["workflows"] as const,
   users: ["users"] as const,
   search: (body: object) => ["search", body] as const,
   concepts: (ids: string) => ["concepts", ids] as const,
+  conceptDetails: (id: number) => ["concept-details", id] as const,
+  conceptExplanation: (id: number) => ["concept-explanation", id] as const,
 };
 
 export function invalidateVocabulary(qc: QueryClient, id?: number) {
@@ -100,11 +102,15 @@ export const useVocabularyStatus = () =>
 export const useAtc7Stats = () =>
   useQuery({ queryKey: keys.atc7Stats, queryFn: async () => unwrap(await api.GET("/api/atc7/stats")) });
 
-export const useEmbeddingStatus = (domain: string | null) =>
+export const useEmbeddingStatus = (domains: string[]) =>
   useQuery({
-    queryKey: keys.embeddingStatus(domain),
+    queryKey: keys.embeddingStatus(domains),
     queryFn: async () =>
-      unwrap(await api.GET("/api/embeddings/status", { params: { query: { domain: domain ?? undefined } } })),
+      unwrap(
+        await api.GET("/api/embeddings/status", {
+          params: { query: { domain: domains.length ? domains : undefined } },
+        }),
+      ),
   });
 
 // ----------------------------------------------------------------------------- source vocabularies / mapping
@@ -295,3 +301,26 @@ export const useConceptLookup = (ids: string) =>
 
 export const useUsers = (enabled = true) =>
   useQuery({ queryKey: keys.users, queryFn: async () => unwrap(await api.GET("/api/users")), enabled });
+
+// ----------------------------------------------------------------------------- concept details
+
+export const useConceptDetails = (conceptId: number | null) =>
+  useQuery({
+    queryKey: keys.conceptDetails(conceptId ?? 0),
+    queryFn: async () =>
+      unwrap(await api.GET("/api/concepts/{concept_id}/details", { params: { path: { concept_id: conceptId! } } })),
+    enabled: conceptId !== null,
+    // Vocabulary data changes only with a vocabulary import
+    staleTime: 30 * 60_000,
+  });
+
+/** The AI explanation is generated on request (it costs an LLM call) and kept for the session. */
+export const useConceptExplanation = (conceptId: number, requested: boolean) =>
+  useQuery({
+    queryKey: keys.conceptExplanation(conceptId),
+    queryFn: async () =>
+      unwrap(await api.POST("/api/concepts/{concept_id}/explain", { params: { path: { concept_id: conceptId } } })),
+    enabled: requested,
+    staleTime: Infinity,
+    retry: false,
+  });
