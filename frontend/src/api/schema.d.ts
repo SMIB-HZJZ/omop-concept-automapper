@@ -829,6 +829,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source-concepts/{source_id}/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Open Term
+         * @description Called every ~20 s while a user has the term open; returns everyone in the vocabulary.
+         */
+        put: operations["open_term_api_source_concepts__source_id__presence_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/source-vocabularies/{vocabulary_id}/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Presence */
+        get: operations["presence_api_source_vocabularies__vocabulary_id__presence_get"];
+        put?: never;
+        post?: never;
+        /** Close Term */
+        delete: operations["close_term_api_source_vocabularies__vocabulary_id__presence_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/source-vocabularies/{vocabulary_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Team Activity */
+        get: operations["team_activity_api_source_vocabularies__vocabulary_id__activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/source-vocabularies/{vocabulary_id}/source_to_concept_map.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Source To Concept Map */
+        get: operations["source_to_concept_map_api_source_vocabularies__vocabulary_id__source_to_concept_map_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1289,6 +1361,15 @@ export interface components {
             /** Gateway Models Available */
             gateway_models_available: boolean;
         };
+        /** Presence */
+        Presence: {
+            /** Source Id */
+            source_id: number;
+            /** User Id */
+            user_id: number;
+            /** Username */
+            username: string;
+        };
         /** RelatedConcept */
         RelatedConcept: {
             /** Concept Id */
@@ -1617,6 +1698,23 @@ export interface components {
             task_id: string;
             /** Kind */
             kind: string;
+        };
+        /** TeamActivity */
+        TeamActivity: {
+            /** User Id */
+            user_id: number;
+            /** Username */
+            username: string;
+            /** Mapped Today */
+            mapped_today: number;
+            /** Mapped Total */
+            mapped_total: number;
+            /** Reviewed Today */
+            reviewed_today: number;
+            /** Reviewed Total */
+            reviewed_total: number;
+            /** Flags Open */
+            flags_open: number;
         };
         /** TraceStep */
         TraceStep: {
@@ -3575,6 +3673,162 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkflowCatalog"];
+                };
+            };
+        };
+    };
+    open_term_api_source_concepts__source_id__presence_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Presence"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    presence_api_source_vocabularies__vocabulary_id__presence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vocabulary_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Presence"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_term_api_source_vocabularies__vocabulary_id__presence_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vocabulary_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    team_activity_api_source_vocabularies__vocabulary_id__activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vocabulary_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamActivity"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    source_to_concept_map_api_source_vocabularies__vocabulary_id__source_to_concept_map_csv_get: {
+        parameters: {
+            query?: {
+                /** @description SOURCE_VOCABULARY_ID to write (default: from the name) */
+                source_vocabulary_id?: string | null;
+            };
+            header?: never;
+            path: {
+                vocabulary_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

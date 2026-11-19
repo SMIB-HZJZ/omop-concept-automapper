@@ -423,7 +423,7 @@ async def test_no_deterministic_match_falls_back_with_context(drug_vocabulary):
 
 
 def test_csv_structure_drives_automap(
-    client, user_headers, embedded, fake_reranker, drug_vocabulary
+    client, user_headers, embedded, fake_reranker, drug_vocabulary, admin_headers
 ):
     from tests.conftest import import_source_csv
 
@@ -431,14 +431,14 @@ def test_csv_structure_drives_automap(
         b"source_value,source_concept_name,ingredient,amount_value,amount_unit,dose_form\n"
         b"J01CR02-1,Amoksiklav 875/125 film tbl,amoxicillin;clavulanate,875;125,mg,Oral Tablet\n"
     )
-    task = import_source_csv(client, user_headers, 50, csv, is_drug="true")
+    task = import_source_csv(client, admin_headers, 50, csv, is_drug="true")
     assert task["result"]["with_drug_structure"] == 1
     resp = client.post(
         "/api/source-vocabularies/50/automap",
         json={"domains": ["Drug"], "drug_specific": True},
-        headers=user_headers,
+        headers=admin_headers,
     )
-    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=user_headers).json()
+    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
     assert task["params"]["pipeline"] == "automap_drug" and task["result"]["queued"] == 1
     suggestions = client.get("/api/source-vocabularies/50/suggestions", headers=user_headers).json()
     item = suggestions["items"][0]
@@ -494,7 +494,7 @@ def test_ingredients_only_without_a_form_map_to_every_ingredient(drug_vocabulary
 
 
 def test_combined_match_goes_through_review(
-    client, user_headers, embedded, fake_reranker, drug_vocabulary
+    client, user_headers, embedded, fake_reranker, drug_vocabulary, admin_headers
 ):
     from tests.conftest import import_source_csv
 
@@ -502,18 +502,18 @@ def test_combined_match_goes_through_review(
         b"source_value,source_concept_name,ingredient\n"
         b"X-COMBI,Paracetamol + amoksicilin,acetaminophen;amoxicillin\n"
     )
-    import_source_csv(client, user_headers, 51, csv, is_drug="true")
+    import_source_csv(client, admin_headers, 51, csv, is_drug="true")
     resp = client.post(
         "/api/source-vocabularies/51/automap",
         json={"domains": ["Drug"], "drug_specific": True},
-        headers=user_headers,
+        headers=admin_headers,
     )
-    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=user_headers).json()
+    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
     assert task["result"]["queued"] == 1
     items = client.get("/api/source-vocabularies/51/suggestions", headers=user_headers).json()
     item = items["items"][0]
     assert item["concept_id"] == 9001
     assert [c["concept_id"] for c in item["extra_concepts"]] == [9002]
     client.post("/api/suggestions/accept", json={"ids": [item["id"]]}, headers=user_headers)
-    mapped = client.get("/api/source-vocabularies/51/mapped", headers=user_headers).json()
+    mapped = client.get("/api/source-vocabularies/51/mapped", headers=admin_headers).json()
     assert sorted(r["concept_id"] for r in mapped["items"]) == [9001, 9002]

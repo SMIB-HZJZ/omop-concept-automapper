@@ -2,7 +2,7 @@ import re
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import AdminUser, CurrentUser, SessionDep
+from app.api.deps import AdminUser, SessionDep
 from app.core.cache import cached
 from app.core.config import get_settings
 from app.llm.gateway import list_gateway_models
@@ -35,7 +35,7 @@ def _out(cfg: settings_store.EffectiveConfig) -> ConfigOut:
 
 
 @router.get("", response_model=ConfigOut)
-def get_config(_: CurrentUser, session: SessionDep):
+def get_config(_: AdminUser, session: SessionDep):
     return _out(settings_store.get_effective_config(session))
 
 
@@ -114,7 +114,7 @@ def _model_options() -> dict:
 
 
 @router.get("/models", response_model=ModelOptions)
-def model_options(_: CurrentUser):
+def model_options(_: AdminUser):
     data = _model_options()
     return ModelOptions(
         llm_models=data["llm_models"],
@@ -126,7 +126,7 @@ def model_options(_: CurrentUser):
 
 @router.get("/collection-preview", response_model=CollectionPreview)
 def collection_preview(
-    _: CurrentUser,
+    _: AdminUser,
     session: SessionDep,
     model: str = Query(...),
     dims: int | None = Query(None),

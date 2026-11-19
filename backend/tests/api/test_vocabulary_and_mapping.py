@@ -51,18 +51,18 @@ def test_concept_lookup(client, user_headers, loaded_vocabulary):
     assert client.get("/api/concepts/999999", headers=user_headers).status_code == 404
 
 
-def test_source_import_validates_columns(client, user_headers):
+def test_source_import_validates_columns(client, admin_headers, user_headers):
     resp = client.post(
         "/api/source-vocabularies/7/concepts/import",
         files={"file": ("bad.csv", b"code,name\n1,x\n", "text/csv")},
-        headers=user_headers,
+        headers=admin_headers,
     )
     assert resp.status_code == 400
     assert "source_value" in resp.json()["detail"]
 
 
 def test_source_import_and_mapping_flow(client, user_headers, admin_headers, loaded_vocabulary):
-    task = import_source_csv(client, user_headers, 3, name="Hospital drugs", is_drug="true")
+    task = import_source_csv(client, admin_headers, 3, name="Hospital drugs", is_drug="true")
     assert task["status"] == "SUCCESS", task
     result = task["result"]
     assert result["inserted"] == 6
@@ -70,7 +70,7 @@ def test_source_import_and_mapping_flow(client, user_headers, admin_headers, loa
     assert result["invalid_concept_ids"] == [999999]
 
     vocabs = {
-        v["id"]: v for v in client.get("/api/source-vocabularies", headers=user_headers).json()
+        v["id"]: v for v in client.get("/api/source-vocabularies", headers=admin_headers).json()
     }
     assert vocabs[3]["name"] == "Hospital drugs" and vocabs[3]["is_drug"] is True
     assert vocabs[3]["concept_count"] == 6 and vocabs[3]["mapped_count"] == 2
@@ -107,11 +107,11 @@ def test_source_import_and_mapping_flow(client, user_headers, admin_headers, loa
     resp = client.post(
         "/api/mappings", json={"source_id": source_id, "concept_ids": [1]}, headers=user_headers
     )
-    page = client.get("/api/source-vocabularies/3/mapped", headers=user_headers).json()
+    page = client.get("/api/source-vocabularies/3/mapped", headers=admin_headers).json()
     assert page["total"] == len(page["items"]) and page["pages"] == 1
     mapped = page["items"]
     filtered = client.get(
-        "/api/source-vocabularies/3/mapped", params={"q": "paracetamol"}, headers=user_headers
+        "/api/source-vocabularies/3/mapped", params={"q": "paracetamol"}, headers=admin_headers
     ).json()
     assert filtered["total"] >= 1
     assert all(
@@ -133,7 +133,7 @@ def test_source_import_and_mapping_flow(client, user_headers, admin_headers, loa
     recent = client.get("/api/source-vocabularies/3/audit/recent", headers=user_headers).json()
     assert recent[0]["created_by"] == "mapper"
 
-    csv_resp = client.get("/api/source-vocabularies/3/mapped.csv", headers=user_headers)
+    csv_resp = client.get("/api/source-vocabularies/3/mapped.csv", headers=admin_headers)
     assert csv_resp.headers["content-disposition"].endswith('filename="vocabulary_3_mappings.csv"')
     lines = csv_resp.text.strip().splitlines()
     assert (
@@ -152,27 +152,27 @@ def test_source_import_and_mapping_flow(client, user_headers, admin_headers, loa
 
 
 def test_delete_vocabulary(client, user_headers, admin_headers, loaded_vocabulary):
-    import_source_csv(client, user_headers, 9)
+    import_source_csv(client, admin_headers, 9)
     resp = client.delete("/api/source-vocabularies/9", headers=admin_headers)
     assert resp.json()["count"] == 6
-    ids = [v["id"] for v in client.get("/api/source-vocabularies", headers=user_headers).json()]
+    ids = [v["id"] for v in client.get("/api/source-vocabularies", headers=admin_headers).json()]
     assert 9 not in ids
     assert client.get("/api/source-vocabularies/9/stats", headers=user_headers).status_code == 404
 
 
-def test_vocabulary_crud(client, user_headers):
+def test_vocabulary_crud(client, admin_headers, user_headers):
     resp = client.post(
-        "/api/source-vocabularies", json={"id": 42, "name": "Labs"}, headers=user_headers
+        "/api/source-vocabularies", json={"id": 42, "name": "Labs"}, headers=admin_headers
     )
     assert resp.status_code == 201
     assert (
-        client.post("/api/source-vocabularies", json={"id": 42}, headers=user_headers).status_code
+        client.post("/api/source-vocabularies", json={"id": 42}, headers=admin_headers).status_code
         == 409
     )
     resp = client.patch(
         "/api/source-vocabularies/42",
         json={"is_drug": True, "description": "lab codes"},
-        headers=user_headers,
+        headers=admin_headers,
     )
     assert resp.json()["is_drug"] is True and resp.json()["description"] == "lab codes"
 
@@ -182,7 +182,7 @@ def test_non_standard_mappings_are_replaced_or_removed_after_reimport(
 ):
     import_source_csv(
         client,
-        user_headers,
+        admin_headers,
         11,
         content=(
             b"source_value,source_concept_name,concept_id\n"

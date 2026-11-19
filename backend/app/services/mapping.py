@@ -526,6 +526,19 @@ def map_concepts(
     return True
 
 
+def all_mapped_by(session: Session, source_ids: Sequence[int], user_id: int | None) -> bool:
+    """Whether every current mapping of these source concepts was made by this user."""
+    if not source_ids:
+        return True
+    return not session.execute(
+        text(
+            "SELECT EXISTS (SELECT 1 FROM source_standard_map WHERE source_id = ANY(:ids) "
+            "AND created_by IS DISTINCT FROM :u)"
+        ),
+        {"ids": list(source_ids), "u": user_id},
+    ).scalar_one()
+
+
 def unmap(session: Session, source_ids: Sequence[int]) -> int:
     if not source_ids:
         return 0

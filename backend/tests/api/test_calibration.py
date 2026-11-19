@@ -26,8 +26,8 @@ def _suggest(rows):
             )
 
 
-def test_calibration_recommends_a_threshold(client, user_headers, loaded_vocabulary):
-    import_source_csv(client, user_headers, 70, CSV)
+def test_calibration_recommends_a_threshold(client, admin_headers, user_headers, loaded_vocabulary):
+    import_source_csv(client, admin_headers, 70, CSV)
     _suggest(
         [
             ("cal one", 10, "accepted", "auto_code"),
@@ -45,8 +45,10 @@ def test_calibration_recommends_a_threshold(client, user_headers, loaded_vocabul
     assert methods == {"auto_code": 1.0, "auto_standard": 1 / 3}
 
 
-def test_priority_sort_puts_frequent_uncertain_terms_first(client, user_headers, loaded_vocabulary):
-    import_source_csv(client, user_headers, 71, CSV.replace(b"cal", b"pri"))
+def test_priority_sort_puts_frequent_uncertain_terms_first(
+    client, admin_headers, user_headers, loaded_vocabulary
+):
+    import_source_csv(client, admin_headers, 71, CSV.replace(b"cal", b"pri"))
     with get_engine().begin() as conn:
         for name, confidence in (
             ("pri one", 9),

@@ -199,6 +199,22 @@ class UnmappedItem(BaseModel):
     flagged_at: datetime | None = None
 
 
+class Presence(BaseModel):
+    source_id: int
+    user_id: int
+    username: str
+
+
+class TeamActivity(BaseModel):
+    user_id: int
+    username: str
+    mapped_today: int
+    mapped_total: int
+    reviewed_today: int
+    reviewed_total: int
+    flags_open: int
+
+
 class SourceFlag(BaseModel):
     # None clears the flag
     flag: Literal["unmappable", "question"] | None

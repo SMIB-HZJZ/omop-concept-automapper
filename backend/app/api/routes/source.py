@@ -58,7 +58,7 @@ def list_vocabularies(_: CurrentUser, session: SessionDep):
 
 
 @router.post("", response_model=SourceVocabularyOut, status_code=status.HTTP_201_CREATED)
-def create_vocabulary(body: SourceVocabularyCreate, _: CurrentUser, session: SessionDep):
+def create_vocabulary(body: SourceVocabularyCreate, _: AdminUser, session: SessionDep):
     if session.get(SourceVocabulary, body.id):
         raise HTTPException(status.HTTP_409_CONFLICT, f"Source vocabulary {body.id} already exists")
     vocab = SourceVocabulary(
@@ -76,7 +76,7 @@ def create_vocabulary(body: SourceVocabularyCreate, _: CurrentUser, session: Ses
 
 @router.patch("/{vocabulary_id}", response_model=SourceVocabularyOut)
 def update_vocabulary(
-    vocabulary_id: int, body: SourceVocabularyUpdate, _: CurrentUser, session: SessionDep
+    vocabulary_id: int, body: SourceVocabularyUpdate, _: AdminUser, session: SessionDep
 ):
     vocab = _get_vocab(session, vocabulary_id)
     for field, value in body.model_dump(exclude_unset=True).items():
@@ -100,7 +100,7 @@ def delete_vocabulary(vocabulary_id: int, _: AdminUser, session: SessionDep):
 )
 def import_concepts(
     vocabulary_id: int,
-    user: CurrentUser,
+    user: AdminUser,
     session: SessionDep,
     file: UploadFile = File(...),
     name: str | None = Form(None),
@@ -157,7 +157,7 @@ def unmapped(
 @router.get("/{vocabulary_id}/mapped", response_model=MappedPage)
 def mapped(
     vocabulary_id: int,
-    _: CurrentUser,
+    _: AdminUser,
     session: SessionDep,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=500),
@@ -168,7 +168,7 @@ def mapped(
 
 
 @router.get("/{vocabulary_id}/mapped.csv", response_class=StreamingResponse)
-def mapped_csv(vocabulary_id: int, _: CurrentUser, session: SessionDep):
+def mapped_csv(vocabulary_id: int, _: AdminUser, session: SessionDep):
     _get_vocab(session, vocabulary_id)
     return StreamingResponse(
         mapping.iter_mapped_csv(vocabulary_id),

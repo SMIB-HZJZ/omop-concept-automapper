@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.api.routes._tasks import start_task
 from app.core.db import session_scope
 from app.models import SourceVocabulary
@@ -48,7 +48,12 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
 
 
 @router.post("/mappings/unmap", response_model=CountResult)
-def unmap(body: UnmapRequest, _: CurrentUser, session: SessionDep):
+def unmap(body: UnmapRequest, user: CurrentUser, session: SessionDep):
+    # Users may undo their own mappings (e.g. "Undo" after Confirm); bulk unmapping is for admins
+    if user.role != "admin" and not mapping.all_mapped_by(session, body.source_ids, user.id):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Only admins can remove mappings made by someone else"
+        )
     vocabularies = mapping.vocabulary_of_sources(session, body.source_ids)
     deleted = mapping.unmap(session, body.source_ids)
     for vocabulary_id in vocabularies:
@@ -61,7 +66,7 @@ def unmap(body: UnmapRequest, _: CurrentUser, session: SessionDep):
     response_model=TaskRef,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def automap(vocabulary_id: int, body: AutomapRequest, user: CurrentUser, session: SessionDep):
+def automap(vocabulary_id: int, body: AutomapRequest, user: AdminUser, session: SessionDep):
     if session.get(SourceVocabulary, vocabulary_id) is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, f"Source vocabulary {vocabulary_id} not found"

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.api.routes import (
     auth,
+    collaboration,
     concepts,
     config,
     embeddings,
@@ -98,6 +99,7 @@ def create_app() -> FastAPI:
         embeddings,
         tasks,
         workflows,
+        collaboration,
     ):
         api.include_router(module.router)
     app.include_router(api)

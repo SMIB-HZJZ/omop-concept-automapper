@@ -85,12 +85,14 @@ def test_broker_failure_marks_task_failed(client, admin_headers, monkeypatch):
     assert client.post("/api/embeddings/sync-atc7", headers=admin_headers).status_code == 202
 
 
-def test_cooperative_cancel(client, user_headers, embedded, fake_reranker, monkeypatch):
+def test_cooperative_cancel(
+    client, admin_headers, user_headers, embedded, fake_reranker, monkeypatch
+):
     """Cancelling a running auto-map stops it between concepts and keeps what was saved."""
     from app.worker.progress import ProgressReporter
     from tests.conftest import import_source_csv
 
-    import_source_csv(client, user_headers, 30)
+    import_source_csv(client, admin_headers, 30)
     calls = {"n": 0}
 
     def cancelled_after_two(self):
@@ -104,9 +106,9 @@ def test_cooperative_cancel(client, user_headers, embedded, fake_reranker, monke
     resp = client.post(
         "/api/source-vocabularies/30/automap",
         json={"domains": ["Drug", "Condition"], "mode": "commit"},
-        headers=user_headers,
+        headers=admin_headers,
     )
-    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=user_headers).json()
+    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
     assert task["status"] == "CANCELLED"
     assert "Cancelled after" in task["message"]
     stats = client.get("/api/source-vocabularies/30/stats", headers=user_headers).json()

@@ -1,5 +1,5 @@
-def test_effective_config_defaults_to_env(client, user_headers):
-    cfg = client.get("/api/config", headers=user_headers).json()
+def test_effective_config_defaults_to_env(client, user_headers, admin_headers):
+    cfg = client.get("/api/config", headers=admin_headers).json()
     assert cfg["llm_model"] == "test/chat"
     assert cfg["embedding_dims"] == 64
     assert cfg["collection_name"] == "test_embedder_64"
@@ -32,18 +32,18 @@ def test_setting_env_value_removes_override(client, admin_headers):
     assert next(v for v in cfg["values"] if v["key"] == "embedding.dims")["source"] == "env"
 
 
-def test_collection_preview_and_models(client, user_headers):
+def test_collection_preview_and_models(client, admin_headers, user_headers):
     preview = client.get(
         "/api/config/collection-preview",
         params={"model": "openai/text-embedding-3-small", "dims": 512},
-        headers=user_headers,
+        headers=admin_headers,
     ).json()
     assert preview == {
         "name": "openai_text_embedding_3_small_512",
         "exists": False,
         "embedded_count": None,
     }
-    models = client.get("/api/config/models", headers=user_headers).json()
+    models = client.get("/api/config/models", headers=admin_headers).json()
     assert "test/chat" in models["llm_models"]
     assert models["gateway_models_available"] is False
 

@@ -2488,6 +2488,264 @@
           }
         ]
       }
+    },
+    "/api/source-concepts/{source_id}/presence": {
+      "put": {
+        "tags": [
+          "collaboration"
+        ],
+        "summary": "Open Term",
+        "description": "Called every ~20 s while a user has the term open; returns everyone in the vocabulary.",
+        "operationId": "open_term_api_source_concepts__source_id__presence_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Presence"
+                  },
+                  "title": "Response Open Term Api Source Concepts  Source Id  Presence Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/source-vocabularies/{vocabulary_id}/presence": {
+      "delete": {
+        "tags": [
+          "collaboration"
+        ],
+        "summary": "Close Term",
+        "operationId": "close_term_api_source_vocabularies__vocabulary_id__presence_delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vocabulary_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vocabulary Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "collaboration"
+        ],
+        "summary": "Presence",
+        "operationId": "presence_api_source_vocabularies__vocabulary_id__presence_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vocabulary_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vocabulary Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Presence"
+                  },
+                  "title": "Response Presence Api Source Vocabularies  Vocabulary Id  Presence Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/source-vocabularies/{vocabulary_id}/activity": {
+      "get": {
+        "tags": [
+          "collaboration"
+        ],
+        "summary": "Team Activity",
+        "operationId": "team_activity_api_source_vocabularies__vocabulary_id__activity_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vocabulary_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vocabulary Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TeamActivity"
+                  },
+                  "title": "Response Team Activity Api Source Vocabularies  Vocabulary Id  Activity Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/source-vocabularies/{vocabulary_id}/source_to_concept_map.csv": {
+      "get": {
+        "tags": [
+          "collaboration"
+        ],
+        "summary": "Source To Concept Map",
+        "operationId": "source_to_concept_map_api_source_vocabularies__vocabulary_id__source_to_concept_map_csv_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vocabulary_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vocabulary Id"
+            }
+          },
+          {
+            "name": "source_vocabulary_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 20
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "SOURCE_VOCABULARY_ID to write (default: from the name)",
+              "title": "Source Vocabulary Id"
+            },
+            "description": "SOURCE_VOCABULARY_ID to write (default: from the name)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3883,6 +4141,29 @@
         ],
         "title": "ModelOptions"
       },
+      "Presence": {
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "user_id",
+          "username"
+        ],
+        "title": "Presence"
+      },
       "RelatedConcept": {
         "properties": {
           "concept_id": {
@@ -4981,6 +5262,49 @@
           "kind"
         ],
         "title": "TaskRef"
+      },
+      "TeamActivity": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "mapped_today": {
+            "type": "integer",
+            "title": "Mapped Today"
+          },
+          "mapped_total": {
+            "type": "integer",
+            "title": "Mapped Total"
+          },
+          "reviewed_today": {
+            "type": "integer",
+            "title": "Reviewed Today"
+          },
+          "reviewed_total": {
+            "type": "integer",
+            "title": "Reviewed Total"
+          },
+          "flags_open": {
+            "type": "integer",
+            "title": "Flags Open"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "username",
+          "mapped_today",
+          "mapped_total",
+          "reviewed_today",
+          "reviewed_total",
+          "flags_open"
+        ],
+        "title": "TeamActivity"
       },
       "TraceStep": {
         "properties": {

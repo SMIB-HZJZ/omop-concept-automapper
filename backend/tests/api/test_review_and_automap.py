@@ -10,11 +10,11 @@ def _run(client, headers, vocabulary_id, **body):
     return client.get(f"/api/tasks/{resp.json()['task_id']}", headers=headers).json()
 
 
-def test_automap_validation(client, user_headers, embedded):
-    import_source_csv(client, user_headers, 20)
+def test_automap_validation(client, admin_headers, user_headers, embedded):
+    import_source_csv(client, admin_headers, 20)
     assert (
         client.post(
-            "/api/source-vocabularies/20/automap", json={"domains": []}, headers=user_headers
+            "/api/source-vocabularies/20/automap", json={"domains": []}, headers=admin_headers
         ).status_code
         == 422
     )
@@ -22,24 +22,26 @@ def test_automap_validation(client, user_headers, embedded):
         client.post(
             "/api/source-vocabularies/20/automap",
             json={"domains": ["Drug"], "pipeline": "nope"},
-            headers=user_headers,
+            headers=admin_headers,
         ).status_code
         == 400
     )
     assert (
         client.post(
-            "/api/source-vocabularies/999/automap", json={"domains": ["Drug"]}, headers=user_headers
+            "/api/source-vocabularies/999/automap",
+            json={"domains": ["Drug"]},
+            headers=admin_headers,
         ).status_code
         == 404
     )
 
 
 def test_automap_review_mode_then_accept_and_reject(
-    client, user_headers, embedded, fake_reranker, no_name_match
+    client, user_headers, embedded, fake_reranker, no_name_match, admin_headers
 ):
-    import_source_csv(client, user_headers, 21)
+    import_source_csv(client, admin_headers, 21)
     fake_reranker.overrides = {"headache": 5, "essential hypertension": None}
-    task = _run(client, user_headers, 21, drug_specific=True)
+    task = _run(client, admin_headers, 21, drug_specific=True)
     assert task["status"] == "SUCCESS", task
     result = task["result"]
     # 4 unmapped concepts (2 were pre-mapped): metformin, type 2 diabetes queued; headache below threshold
@@ -57,7 +59,7 @@ def test_automap_review_mode_then_accept_and_reject(
     # Pending suggestions are shown on the unmapped list and skipped by a second run
     unmapped = client.get("/api/source-vocabularies/21/unmapped", headers=user_headers).json()
     assert any(i["suggestion_concept_id"] == 1 for i in unmapped["items"])
-    again = _run(client, user_headers, 21, drug_specific=True)
+    again = _run(client, admin_headers, 21, drug_specific=True)
     assert again["result"]["processed"] == 2
 
     accepted = client.post(
@@ -88,9 +90,11 @@ def test_automap_review_mode_then_accept_and_reject(
     assert history["items"][0]["decided_by"] == "mapper"
 
 
-def test_automap_commit_mode(client, user_headers, embedded, fake_reranker, no_name_match):
-    import_source_csv(client, user_headers, 22)
-    task = _run(client, user_headers, 22, mode="commit", threshold=8)
+def test_automap_commit_mode(
+    client, admin_headers, user_headers, embedded, fake_reranker, no_name_match
+):
+    import_source_csv(client, admin_headers, 22)
+    task = _run(client, admin_headers, 22, mode="commit", threshold=8)
     assert task["result"]["mapped"] == 4
     stats = client.get("/api/source-vocabularies/22/stats", headers=user_headers).json()
     assert stats["unmapped"] == 0
@@ -99,8 +103,10 @@ def test_automap_commit_mode(client, user_headers, embedded, fake_reranker, no_n
     assert all(r["pipeline"] == "automap" for r in recent)
 
 
-def test_ai_suggest_single_concept(client, user_headers, embedded, fake_reranker, no_name_match):
-    import_source_csv(client, user_headers, 23)
+def test_ai_suggest_single_concept(
+    client, admin_headers, user_headers, embedded, fake_reranker, no_name_match
+):
+    import_source_csv(client, admin_headers, 23)
     item = client.get("/api/source-vocabularies/23/unmapped", headers=user_headers).json()["items"][
         0
     ]

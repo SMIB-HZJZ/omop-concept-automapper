@@ -49,18 +49,18 @@ def test_keyword_search_finds_partial_words_and_synonyms(loaded_vocabulary):
     assert lexical.keyword_search("hypertensio", 5, SearchFilters(domains=["Drug"])) == []
 
 
-def test_pipeline_uses_code_then_name(client, user_headers, embedded, fake_reranker):
+def test_pipeline_uses_code_then_name(client, admin_headers, user_headers, embedded, fake_reranker):
     csv = (
         "source_value,source_concept_name\n"
         "E11,nešto posve drugo\n"  # code match: ICD10 E11 -> Type 2 diabetes mellitus
         "X1,Cefalalgija\n"  # neither code nor name: search + LLM
         "X2,cephalalgia\n"  # synonym of Headache
     ).encode()
-    import_source_csv(client, user_headers, 60, csv)
+    import_source_csv(client, admin_headers, 60, csv)
     client.patch(
-        "/api/source-vocabularies/60", json={"code_vocabularies": ["ICD10"]}, headers=user_headers
+        "/api/source-vocabularies/60", json={"code_vocabularies": ["ICD10"]}, headers=admin_headers
     )
-    task = _automap(client, user_headers, 60)
+    task = _automap(client, admin_headers, 60)
     assert task["status"] == "SUCCESS", task
     found = _suggestions(client, user_headers, 60)
     assert found["nešto posve drugo"]["method"] == "auto_code"
@@ -71,36 +71,38 @@ def test_pipeline_uses_code_then_name(client, user_headers, embedded, fake_reran
 
 
 def test_restricted_domains_reject_text_matches_elsewhere(
-    client, user_headers, embedded, fake_reranker
+    client, user_headers, embedded, fake_reranker, admin_headers
 ):
-    import_source_csv(client, user_headers, 61, b"source_value,source_concept_name\nX,Headache\n")
-    _automap(client, user_headers, 61, domains=["Drug"], domain_mode="restrict")
+    import_source_csv(client, admin_headers, 61, b"source_value,source_concept_name\nX,Headache\n")
+    _automap(client, admin_headers, 61, domains=["Drug"], domain_mode="restrict")
     assert (
         _suggestions(client, user_headers, 61).get("Headache", {}).get("method")
         != "auto_exact_name"
     )
 
 
-def test_earlier_reviewed_mapping_is_reused(client, user_headers, embedded, fake_reranker):
+def test_earlier_reviewed_mapping_is_reused(
+    client, admin_headers, user_headers, embedded, fake_reranker
+):
     # Vocabulary 62 maps "Glavobolja" by hand (pre-mapping in the CSV counts as reviewed)
     import_source_csv(
         client,
-        user_headers,
+        admin_headers,
         62,
         b"source_value,source_concept_name,concept_id\nG1,Glavobolja,203\n",
     )
     import_source_csv(
-        client, user_headers, 63, b"source_value,source_concept_name\nG9,glavobolja\n"
+        client, admin_headers, 63, b"source_value,source_concept_name\nG9,glavobolja\n"
     )
-    _automap(client, user_headers, 63)
+    _automap(client, admin_headers, 63)
     found = _suggestions(client, user_headers, 63)["glavobolja"]
     assert (found["method"], found["concept_id"], found["confidence"]) == ("auto_previous", 203, 10)
 
 
-def test_similar_examples(client, user_headers, embedded):
+def test_similar_examples(client, user_headers, embedded, admin_headers):
     import_source_csv(
         client,
-        user_headers,
+        admin_headers,
         64,
         b"source_value,source_concept_name,concept_id\nB1,akutni bronhitis,204\n",
     )
