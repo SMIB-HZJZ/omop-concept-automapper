@@ -25,7 +25,7 @@ function ResultItem({ result }: { result: SearchResult }) {
   return (
     <AccordionItem value={String(result.concept_id)}>
       <AccordionTrigger>
-        <span className="flex min-w-0 items-center gap-3">
+        <span className="flex min-w-0 flex-1 items-center gap-3">
           <span className="bg-muted text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold tabular-nums">
             {result.rank}
           </span>

@@ -14,7 +14,8 @@ export const keys = {
   atc7Stats: ["atc7-stats"] as const,
   sourceVocabularies: ["source-vocabularies"] as const,
   vocab: (id: number) => ["vocab", id] as const,
-  unmapped: (id: number, page: number, perPage: number) => ["vocab", id, "unmapped", page, perPage] as const,
+  unmapped: (id: number, page: number, perPage: number, view: UnmappedView, q: string) =>
+    ["vocab", id, "unmapped", page, perPage, view, q] as const,
   mapped: (id: number, page: number, perPage: number, q: string) => ["vocab", id, "mapped", page, perPage, q] as const,
   stats: (id: number) => ["vocab", id, "stats"] as const,
   auditStats: (id: number) => ["vocab", id, "audit-stats"] as const,
@@ -121,13 +122,16 @@ export const useSourceVocabularies = () =>
     queryFn: async () => unwrap(await api.GET("/api/source-vocabularies")),
   });
 
-export const useUnmapped = (id: number | null, page: number, perPage: number) =>
+/** todo: not flagged; suggested: with a waiting AI suggestion; flagged; all */
+export type UnmappedView = "todo" | "suggested" | "flagged" | "all";
+
+export const useUnmapped = (id: number | null, page: number, perPage: number, view: UnmappedView = "todo", q = "") =>
   useQuery({
-    queryKey: keys.unmapped(id ?? 0, page, perPage),
+    queryKey: keys.unmapped(id ?? 0, page, perPage, view, q),
     queryFn: async () =>
       unwrap(
         await api.GET("/api/source-vocabularies/{vocabulary_id}/unmapped", {
-          params: { path: { vocabulary_id: id! }, query: { page, per_page: perPage } },
+          params: { path: { vocabulary_id: id! }, query: { page, per_page: perPage, view, q: q || undefined } },
         }),
       ),
     enabled: id !== null,
@@ -183,6 +187,7 @@ export const useAuditRecent = (id: number | null, limit = 10) =>
 
 export type SuggestionFilters = {
   status: "pending" | "accepted" | "rejected";
+  source_id?: number;
   min_confidence?: number;
   page: number;
   per_page: number;
@@ -324,3 +329,27 @@ export const useConceptExplanation = (conceptId: number, requested: boolean) =>
     staleTime: Infinity,
     retry: false,
   });
+
+// ----------------------------------------------------------------------------- flags
+
+export function useFlagSource(vocabularyId: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      sourceId,
+      flag,
+      note,
+    }: {
+      sourceId: number;
+      flag: "unmappable" | "question" | null;
+      note?: string | null;
+    }) =>
+      unwrap(
+        await api.PUT("/api/source-concepts/{source_id}/flag", {
+          params: { path: { source_id: sourceId } },
+          body: { flag, note: note ?? null },
+        }),
+      ),
+    onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
+  });
+}

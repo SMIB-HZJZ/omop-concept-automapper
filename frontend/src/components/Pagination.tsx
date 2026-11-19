@@ -1,3 +1,6 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -61,5 +64,31 @@ export function PageControls({
         Page <b>{page}</b> of <b>{pages}</b>
       </div>
     </>
+  );
+}
+
+/** One-line pager for narrow panels: previous / "page x of y" / next. */
+export function CompactPager({
+  page,
+  pages,
+  onPageChange,
+}: {
+  page: number;
+  pages: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <Button variant="outline" size="xs" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+        <ChevronLeft /> Previous
+      </Button>
+      <span className="text-muted-foreground">
+        Page <b className="text-foreground">{page}</b> of <b className="text-foreground">{pages}</b>
+      </span>
+      <Button variant="outline" size="xs" disabled={page >= pages} onClick={() => onPageChange(page + 1)}>
+        Next <ChevronRight />
+      </Button>
+    </div>
   );
 }

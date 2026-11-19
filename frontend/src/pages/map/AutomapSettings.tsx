@@ -23,6 +23,14 @@ import { useLatestTask } from "@/hooks/useTasks";
 import { AutomapResult } from "./AutomapResult";
 import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 
+const RECENT_MS = 30 * 60_000;
+
+function isRecent(task: Task) {
+  if (!task.is_terminal) return true;
+  const finished = task.finished_at ? Date.parse(task.finished_at) : NaN;
+  return Number.isFinite(finished) && Date.now() - finished < RECENT_MS;
+}
+
 export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: number; isDrug: boolean }) {
   const meta = useMeta();
   const { run, busy } = useStartTask();
@@ -163,6 +171,10 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
         </PopoverContent>
       </Popover>
     ),
-    progress: latest.data ? <TaskProgress task={latest.data} renderResult={(t) => <AutomapResult task={t} />} /> : null,
+    // A running run, or one that finished in the last 30 minutes (older results are in the audit trail)
+    progress:
+      latest.data && isRecent(latest.data) ? (
+        <TaskProgress task={latest.data} renderResult={(t) => <AutomapResult task={t} />} />
+      ) : null,
   };
 }

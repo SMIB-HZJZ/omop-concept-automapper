@@ -5,7 +5,15 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { ApiError, errorMessage } from "@/api/client";
-import { useMapConcepts, useMeta, useSearch, useSuggest, useUnmap } from "@/api/queries";
+import {
+  useDecideSuggestions,
+  useMapConcepts,
+  useMeta,
+  useSearch,
+  useSuggest,
+  useSuggestions,
+  useUnmap,
+} from "@/api/queries";
 import type { SearchRequest, SuggestResponse, UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { ErrorAlert } from "@/components/common";
@@ -27,6 +35,7 @@ import { ManualConceptIds } from "./ManualConceptIds";
 import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 import { SelectedConcepts } from "./SelectedConcepts";
 import { SuggestionAlert } from "./SuggestionAlert";
+import { FlagBanner, FlagButton, WaitingSuggestion } from "./TermExtras";
 import { DEFAULT_LIMIT } from "./searchRequest";
 import type { ConceptLike } from "./types";
 import { ConceptLink } from "@/components/ConceptLink";
@@ -153,6 +162,45 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const suggest = useSuggest();
   const mapConcepts = useMapConcepts(vocabularyId);
   const unmap = useUnmap(vocabularyId);
+  const acceptSuggestion = useDecideSuggestions(vocabularyId, "accept");
+  const rejectSuggestion = useDecideSuggestions(vocabularyId, "reject");
+
+  // An AI suggestion already waiting for this term (auto-mapping in review mode): shown here and
+  // pre-ticked, so accepting it takes one key
+  const waitingQuery = useSuggestions(concept.suggestion_id ? vocabularyId : null, {
+    status: "pending",
+    source_id: concept.source_id,
+    page: 1,
+    per_page: 1,
+    sort: "newest",
+  });
+  const waiting = concept.suggestion_id ? (waitingQuery.data?.items[0] ?? null) : null;
+  const waitingIds = useMemo(
+    () => (waiting ? [waiting.concept_id, ...(waiting.extra_concepts ?? []).map((c) => c.concept_id)] : []),
+    [waiting],
+  );
+  const preticked = useRef(false);
+  useEffect(() => {
+    if (!waiting || preticked.current) return;
+    preticked.current = true;
+    const picks: ConceptLike[] = [
+      {
+        concept_id: waiting.concept_id,
+        concept_name: waiting.concept_name,
+        domain_id: waiting.domain_id,
+        vocabulary_id: waiting.vocabulary_id,
+        concept_class_id: waiting.concept_class_id,
+      },
+      ...(waiting.extra_concepts ?? []).map((c) => ({
+        concept_id: c.concept_id,
+        concept_name: c.concept_name,
+        domain_id: waiting.domain_id,
+        vocabulary_id: waiting.vocabulary_id,
+        concept_class_id: c.concept_class_id,
+      })),
+    ];
+    setSelected((prev) => (prev.size ? prev : new Map(picks.map((c) => [c.concept_id, c]))));
+  }, [waiting]);
 
   const addConcept = (c: ConceptLike) => setSelected((prev) => new Map(prev).set(c.concept_id, c));
   const removeConcept = (id: number) =>
@@ -191,7 +239,32 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
       { onSuccess: setSuggestion, onError: (err) => toast.error(errorMessage(err)) },
     );
 
-  const confirm = () =>
+  const decideWaiting = (kind: "accept" | "reject") => {
+    if (!waiting) return;
+    (kind === "accept" ? acceptSuggestion : rejectSuggestion).mutate(
+      { ids: [waiting.id] },
+      {
+        onSuccess: () => {
+          if (kind === "accept") {
+            toast.success(`"${concept.source_concept_name}" mapped (AI suggestion accepted)`);
+            onMapped();
+          } else {
+            toast.message("Suggestion rejected: pick the right concept below");
+            setSelected(new Map());
+          }
+        },
+        onError: (err) => toast.error(errorMessage(err)),
+      },
+    );
+  };
+
+  const confirm = () => {
+    // Confirming exactly the waiting suggestion records it as accepted (keeps the calibration)
+    const ids = [...selected.keys()].sort();
+    if (waiting && ids.length === waitingIds.length && [...waitingIds].sort().every((id, i) => id === ids[i])) {
+      decideWaiting("accept");
+      return;
+    }
     mapConcepts.mutate(
       { source_id: concept.source_id, concept_ids: [...selected.keys()] },
       {
@@ -217,6 +290,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
         onError: (err) => toast.error(errorMessage(err)),
       },
     );
+  };
 
   // Shortcuts: 1-9 tick a candidate, Enter confirms, S asks the AI (not while typing or in a dialog)
   const shortcuts = useRef({ results, selected, confirm, runSuggest, toggle: onTableSelection, selectedIds });
@@ -406,7 +480,18 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
             {suggest.isPending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {suggest.isPending ? "Thinking…" : "AI suggest"}
           </Button>
+          {!concept.flag && <FlagButton concept={concept} vocabularyId={vocabularyId} onFlagged={onMapped} />}
         </div>
+
+        <FlagBanner concept={concept} vocabularyId={vocabularyId} />
+        {waiting && !suggestion && (
+          <WaitingSuggestion
+            suggestion={waiting}
+            busy={acceptSuggestion.isPending || rejectSuggestion.isPending}
+            onAccept={() => decideWaiting("accept")}
+            onReject={() => decideWaiting("reject")}
+          />
+        )}
 
         <AnimatePresence initial={false}>
           {suggestion && (
@@ -425,7 +510,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
           concepts={[...selected.values()]}
           onRemove={removeConcept}
           onConfirm={confirm}
-          confirming={mapConcepts.isPending}
+          confirming={mapConcepts.isPending || acceptSuggestion.isPending}
         />
 
         <ErrorAlert error={searchError} title="Search failed" />

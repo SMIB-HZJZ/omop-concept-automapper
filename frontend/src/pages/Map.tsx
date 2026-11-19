@@ -1,17 +1,29 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CheckCircle2, ChevronDown, Map as MapIcon, MousePointerClick, Sparkles } from "lucide-react";
+import {
+  Ban,
+  CheckCircle2,
+  ChevronDown,
+  Map as MapIcon,
+  MessageCircleQuestion,
+  MousePointerClick,
+  Search as SearchIcon,
+  Sparkles,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { api, unwrap } from "@/api/client";
-import { keys, useAuditRecent, useAuditStats, useMappingStats, useUnmapped } from "@/api/queries";
+import { keys, useAuditRecent, useAuditStats, useMappingStats, useUnmapped, type UnmappedView } from "@/api/queries";
+import { Input } from "@/components/ui/input";
+import { useDebounce } from "@/hooks/useDebounce";
+import { cn } from "@/lib/utils";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import type { AuditEntry, UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { EmptyState, ErrorAlert, PageHeader, StatCard } from "@/components/common";
 import { AnimatedNumber } from "@/components/motion";
-import { PageControls } from "@/components/Pagination";
+import { CompactPager } from "@/components/Pagination";
 import { formatDate, formatNumber } from "@/lib/format";
 import { VocabularySelector } from "@/components/VocabularySelector";
 import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
@@ -49,11 +61,23 @@ const UNMAPPED_COLUMNS: ColumnDef<UnmappedItem, unknown>[] = [
     header: "",
     size: 56,
     cell: ({ row }) =>
-      row.original.suggestion_concept_id ? (
+      row.original.flag ? (
+        <Badge
+          variant="outline"
+          className={
+            row.original.flag === "question"
+              ? "border-warning/40 bg-warning/10 text-warning"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
+          }
+          title={row.original.flag_note ?? undefined}
+        >
+          {row.original.flag === "question" ? <MessageCircleQuestion className="size-3" /> : <Ban className="size-3" />}
+        </Badge>
+      ) : row.original.suggestion_concept_id ? (
         <Badge
           variant="secondary"
           className="gap-1"
-          title={`An AI suggestion (confidence ${row.original.suggestion_confidence}) waits in Review`}
+          title={`An AI suggestion (confidence ${row.original.suggestion_confidence}) is waiting`}
         >
           <Sparkles className="size-3" /> {row.original.suggestion_confidence}
         </Badge>
@@ -109,6 +133,49 @@ function AuditTrail({ vocabularyId }: { vocabularyId: number }) {
   );
 }
 
+const VIEWS: { value: UnmappedView; label: string }[] = [
+  { value: "todo", label: "To do" },
+  { value: "suggested", label: "AI suggested" },
+  { value: "flagged", label: "Flagged" },
+  { value: "all", label: "All" },
+];
+
+function ListTabs({
+  value,
+  onChange,
+  flagged,
+  pending,
+}: {
+  value: UnmappedView;
+  onChange: (v: UnmappedView) => void;
+  flagged: number;
+  pending: number;
+}) {
+  const counts: Partial<Record<UnmappedView, number>> = { flagged, suggested: pending };
+  return (
+    <div role="tablist" aria-label="Which terms to show" className="bg-muted inline-flex rounded-lg p-0.5">
+      {VIEWS.map((v) => (
+        <button
+          key={v.value}
+          type="button"
+          role="tab"
+          aria-selected={value === v.value}
+          onClick={() => onChange(v.value)}
+          className={cn(
+            "flex h-7 cursor-pointer items-center gap-1 rounded-md px-2.5 text-xs transition-colors",
+            value === v.value
+              ? "bg-background text-foreground font-medium shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {v.label}
+          {counts[v.value] ? <span className="text-muted-foreground tabular-nums">{counts[v.value]}</span> : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Mapped / total with a bar, what is left, and a link to waiting suggestions. */
 function ProgressStrip({ vocabularyId, action }: { vocabularyId: number; action: ReactNode }) {
   const stats = useMappingStats(vocabularyId);
@@ -151,12 +218,20 @@ function isTyping(target: EventTarget | null) {
 
 /** Everything below the vocabulary selector; keyed by vocabulary so paging and selection reset. */
 function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isDrug: boolean }) {
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(50);
+  // A fixed page size: the compact pager has no size control
+  const perPage = 50;
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
+  const [view, setView] = useState<UnmappedView>("todo");
+  const [query, setQuery] = useState("");
+  const q = useDebounce(query.trim(), 300);
+  // Paging starts over when the list changes (stored with the list it belongs to, not reset by effects)
+  const listKey = `${view}|${q}|${perPage}`;
+  const [paging, setPaging] = useState({ listKey, page: 1 });
+  const page = paging.listKey === listKey ? paging.page : 1;
+  const setPage = (next: number) => setPaging({ listKey, page: next });
 
   const stats = useMappingStats(vocabularyId);
-  const unmapped = useUnmapped(vocabularyId, page, perPage);
+  const unmapped = useUnmapped(vocabularyId, page, perPage, view, q);
   const automap = useAutomapControls({ vocabularyId, isDrug });
 
   // The API clamps an out-of-range page (e.g. after mapping the last rows of the last page)
@@ -229,11 +304,26 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
         <div className="grid gap-5 xl:h-[max(36rem,calc(100vh-19rem))] xl:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]">
           <Card className="min-h-0 gap-0 py-0">
             <CardContent className="flex h-full min-h-0 flex-col gap-3 p-4">
-              <div className="flex items-baseline justify-between gap-2">
-                <h2 className="font-semibold">To map</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <ListTabs
+                  value={view}
+                  onChange={setView}
+                  flagged={unmapped.data?.flagged ?? 0}
+                  pending={stats.data?.pending_suggestions ?? 0}
+                />
                 <span className="text-muted-foreground text-xs">
-                  {formatNumber(unmapped.data?.total)} terms · most frequent first · ↑↓ to move
+                  {formatNumber(unmapped.data?.total)} · most frequent first · ↑↓
                 </span>
+              </div>
+              <div className="relative">
+                <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+                <Input
+                  aria-label="Find a source term"
+                  placeholder="Find a term or code…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="h-8 pl-8 text-sm"
+                />
               </div>
               <ErrorAlert error={unmapped.error} />
               <DataTable
@@ -250,15 +340,7 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
                 maxHeight="none"
                 className="max-h-[32rem] min-h-0 flex-1 xl:max-h-none"
               />
-              <PageControls
-                idPrefix="unmapped"
-                page={currentPage}
-                pages={pages}
-                perPage={perPage}
-                onPageChange={setPage}
-                onPerPageChange={setPerPage}
-                itemLabel="Terms"
-              />
+              <CompactPager page={currentPage} pages={pages} onPageChange={setPage} />
             </CardContent>
           </Card>
 
