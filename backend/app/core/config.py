@@ -114,9 +114,9 @@ class Settings(BaseSettings):
     # Empty or a threshold of 0 = no escalation.
     rerank_escalate_model: str = "anthropic/claude-opus-5-5"
     rerank_escalate_below: int = Field(default=8, ge=0, le=10)
-    # Reasoning effort of the escalation model (empty = its default). With the same model as
-    # the reranker and a higher effort, escalation means "think again, harder".
-    rerank_escalate_effort: Literal["", "low", "medium", "high", "xhigh", "max"] = ""
+    # Reasoning effort of the escalation model (empty = its default). Opus 5.5 at xhigh was the
+    # best of the escalation options tested (Opus at medium/high, Fable 5.2, Sonnet at xhigh).
+    rerank_escalate_effort: Literal["", "low", "medium", "high", "xhigh", "max"] = "xhigh"
     workflow_plugins: str = ""
     workflow_definitions_dir: str = ""
 
