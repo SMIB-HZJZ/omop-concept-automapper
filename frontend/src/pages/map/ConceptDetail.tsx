@@ -62,6 +62,21 @@ function ExplainButton({ conceptId }: { conceptId: number }) {
   );
 }
 
+/** Seconds since mount, for long waits such as AI suggest (which may ask a stronger model). */
+function Elapsed({ prefix }: { prefix: string }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <span className="tabular-nums">
+      {prefix}
+      {seconds}s
+    </span>
+  );
+}
+
 function Kbd({ children }: { children: ReactNode }) {
   return (
     <kbd className="bg-muted text-foreground mx-px rounded border px-1 py-px font-mono text-[10px] font-medium">
@@ -481,7 +496,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
           </Popover>
           <Button variant="secondary" className="gap-2" onClick={runSuggest} disabled={suggest.isPending}>
             {suggest.isPending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            {suggest.isPending ? "Thinking…" : "AI suggest"}
+            {suggest.isPending ? <Elapsed prefix="Thinking… " /> : "AI suggest"}
           </Button>
           {!concept.flag && <FlagButton concept={concept} vocabularyId={vocabularyId} onFlagged={onMapped} />}
         </div>

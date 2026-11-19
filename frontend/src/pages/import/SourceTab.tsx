@@ -169,9 +169,11 @@ export function SourceTab() {
         <Info />
         <AlertTitle>Drug vocabularies</AlertTitle>
         <AlertDescription>
-          Set <b>Vocabulary type</b> to <b>Drugs</b> for medicine lists. Mapping then uses drug rules: an ATC7 code at
-          the start of <code>source_value</code> (e.g. 'A10BA02XYZ') narrows the search, and drugs are matched on
-          ingredient, strength and dose form. You can change the type later on the Map page.
+          <p>
+            Set <b>Vocabulary type</b> to <b>Drugs</b> for medicine lists. Mapping then uses drug rules: an ATC7 code at
+            the start of <code>source_value</code> (e.g. 'A10BA02XYZ') narrows the search, and drugs are matched on
+            ingredient, strength and dose form. You can change the type later on the Map page.
+          </p>
         </AlertDescription>
       </Alert>
 

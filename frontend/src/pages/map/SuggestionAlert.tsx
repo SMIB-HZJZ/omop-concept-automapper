@@ -2,19 +2,12 @@ import { ChevronDown, Sparkles } from "lucide-react";
 
 import type { SuggestResponse } from "@/api/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useConceptModal } from "@/hooks/useConceptModal";
+import { Rationale } from "@/components/Rationale";
+import { outcomeLabel } from "@/lib/outcome";
 import type { ConceptLike } from "./types";
-
-const OUTCOME_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  accepted: "default",
-  rejected: "secondary",
-  no_match: "outline",
-  no_candidates: "outline",
-  error: "destructive",
-};
 
 /** Result of "AI suggest": the pick, its confidence and rationale, and the workflow trace. */
 export function SuggestionAlert({
@@ -39,7 +32,11 @@ export function SuggestionAlert({
       <Sparkles />
       <AlertDescription>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={OUTCOME_VARIANT[suggestion.outcome] ?? "outline"}>{suggestion.outcome}</Badge>
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${outcomeLabel(suggestion.outcome, threshold).tone}`}
+          >
+            {outcomeLabel(suggestion.outcome, threshold).text}
+          </span>
           {suggested ? (
             <span>
               {all.map((c, i) => (
@@ -73,7 +70,7 @@ export function SuggestionAlert({
             pipeline {suggestion.pipeline} · threshold {threshold}
           </span>
         </div>
-        {suggestion.rationale && <div className="mt-1 text-sm">{suggestion.rationale}</div>}
+        <Rationale text={suggestion.rationale} className="mt-1 text-sm" />
         <Collapsible className="mt-1">
           <CollapsibleTrigger className="text-muted-foreground flex items-center gap-1 text-xs hover:underline">
             <ChevronDown className="size-3" /> Trace ({suggestion.trace.length} steps)

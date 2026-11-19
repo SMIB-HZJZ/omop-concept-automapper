@@ -347,7 +347,7 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
         /* Source terms on the left, their candidate standard concepts on the right; both columns
            have a fixed height on wide screens, so switching terms never moves the page */
         <div className="grid gap-5 xl:h-[max(36rem,calc(100vh-19rem))] xl:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]">
-          <Card className="min-h-0 gap-0 py-0">
+          <Card className="min-h-0 min-w-0 gap-0 py-0">
             <CardContent className="flex h-full min-h-0 flex-col gap-3 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <ListTabs
@@ -389,7 +389,7 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
             </CardContent>
           </Card>
 
-          <div className="min-h-0">
+          <div className="min-h-0 min-w-0">
             {concept ? (
               <ConceptDetail
                 key={concept.source_id}
@@ -422,8 +422,9 @@ export function MapPage() {
   const vocabularyId = selection.vocabularyId;
   const { isAdmin } = useAuth();
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
+        compact
         icon={MapIcon}
         step={2}
         title="Map concepts"

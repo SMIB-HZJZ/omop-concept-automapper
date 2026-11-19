@@ -6,6 +6,7 @@ import { errorMessage } from "@/api/client";
 import { useFlagSource } from "@/api/queries";
 import type { Suggestion, UnmappedItem } from "@/api/types";
 import { ConceptLink } from "@/components/ConceptLink";
+import { Rationale } from "@/components/Rationale";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,9 +52,7 @@ export function WaitingSuggestion({
               {suggestion.match_type && suggestion.match_type !== "exact" ? ` · ${suggestion.match_type} match` : ""}
             </span>
           </div>
-          {suggestion.rationale && (
-            <p className="text-muted-foreground text-xs leading-relaxed">{suggestion.rationale}</p>
-          )}
+          <Rationale text={suggestion.rationale} className="text-muted-foreground text-xs leading-relaxed" />
         </div>
         <div className="flex shrink-0 gap-1.5">
           <Button size="sm" variant="cta" className="gap-1" disabled={busy} onClick={onAccept}>

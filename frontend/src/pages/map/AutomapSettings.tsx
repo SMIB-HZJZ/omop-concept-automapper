@@ -20,7 +20,7 @@ import { DOMAIN_MODES, type DomainMode, useDomainMode } from "@/hooks/useDomainM
 import { usePersistentState } from "@/hooks/usePersistentState";
 import { useStartTask } from "@/hooks/useStartTask";
 import { useLatestTask } from "@/hooks/useTasks";
-import { AutomapResult } from "./AutomapResult";
+import { AutomapDoneLine, AutomapResult } from "./AutomapResult";
 import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 
 const RECENT_MS = 30 * 60_000;
@@ -43,6 +43,8 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
   const [pipeline, setPipeline] = useState(DEFAULT_PIPELINE);
   const [limit, setLimit] = useState("");
   const [open, setOpen] = useState(false);
+  // The last finished run the user closed (its result line stays hidden)
+  const [dismissed, setDismissed] = usePersistentState<string | null>("automap-dismissed", null);
 
   const latest = useLatestTask("automap.run", (t: Task) => taskVocabularyId(t) === vocabularyId);
 
@@ -173,8 +175,12 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
     ),
     // A running run, or one that finished in the last 30 minutes (older results are in the audit trail)
     progress:
-      latest.data && isRecent(latest.data) ? (
-        <TaskProgress task={latest.data} renderResult={(t) => <AutomapResult task={t} />} />
+      latest.data && isRecent(latest.data) && dismissed !== latest.data.id ? (
+        latest.data.status === "SUCCESS" ? (
+          <AutomapDoneLine task={latest.data} onDismiss={() => setDismissed(latest.data!.id)} />
+        ) : (
+          <TaskProgress task={latest.data} renderResult={(t) => <AutomapResult task={t} />} />
+        )
       ) : null,
   };
 }

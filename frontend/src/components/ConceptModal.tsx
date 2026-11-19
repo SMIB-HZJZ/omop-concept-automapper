@@ -228,7 +228,11 @@ function Overview({ details, onOpen }: { details: ConceptDetails; onOpen: (id: n
         {details.synonyms.length ? (
           <div className="flex flex-wrap gap-1.5">
             {details.synonyms.map((s) => (
-              <Badge key={s} variant="outline" className="font-normal">
+              <Badge
+                key={s}
+                variant="outline"
+                className="h-auto max-w-full rounded-md text-left font-normal break-words whitespace-normal"
+              >
                 {s}
               </Badge>
             ))}

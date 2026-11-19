@@ -41,16 +41,13 @@ export function VocabularySelector({ selection, showDrug = true }: { selection: 
           value={vocabulary ? String(vocabulary.id) : undefined}
           onValueChange={(v) => selection.select(Number(v))}
         >
-          <SelectTrigger id="vocabulary-select" className="w-72">
+          <SelectTrigger id="vocabulary-select" className="w-80 max-w-full">
             <SelectValue placeholder={isLoading ? "Loading…" : "Select a vocabulary"} />
           </SelectTrigger>
           <SelectContent>
             {sorted.map((v) => (
               <SelectItem key={v.id} value={String(v.id)}>
-                {v.name}{" "}
-                <span className="text-muted-foreground">
-                  (id {v.id} · {v.concept_count.toLocaleString()} concepts)
-                </span>
+                {v.name} <span className="text-muted-foreground">· {v.concept_count.toLocaleString()} terms</span>
               </SelectItem>
             ))}
           </SelectContent>

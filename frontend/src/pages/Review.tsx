@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalibrationPanel } from "./review/CalibrationPanel";
 import { ConceptLink } from "@/components/ConceptLink";
+import { Rationale } from "@/components/Rationale";
 
 type Status = SuggestionFilters["status"];
 
@@ -190,9 +191,7 @@ export function ReviewPage() {
           const text = row.original.rationale ?? "";
           return (
             <div className="max-w-80">
-              <span className="line-clamp-2 text-xs" title={text}>
-                {text || "—"}
-              </span>
+              {text ? <Rationale text={text} clamp className="text-xs" /> : "—"}
               <span className="text-muted-foreground text-[11px]">
                 {row.original.method}
                 {row.original.pipeline ? ` · ${row.original.pipeline}` : ""}

@@ -18,6 +18,7 @@ export function PageHeader({
   actions,
   icon: Icon,
   step,
+  compact,
 }: {
   title: string;
   description?: ReactNode;
@@ -25,6 +26,8 @@ export function PageHeader({
   icon?: LucideIcon;
   /** Position in the Import → Map → Review → Commit workflow */
   step?: number;
+  /** Smaller, single-block header for work pages where vertical space matters */
+  compact?: boolean;
 }) {
   // The four-step workflow is the admin's view; users only have mapping and review
   const { isAdmin } = useAuth();
@@ -34,10 +37,10 @@ export function PageHeader({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-      className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
+      className={cn("flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", compact ? "mb-2" : "mb-6")}
     >
       <div className="flex items-start gap-4">
-        {Icon && (
+        {Icon && !compact && (
           <div className="bg-brand hidden size-11 shrink-0 items-center justify-center rounded-xl text-white shadow-[var(--shadow-glow)] sm:flex">
             <Icon className="size-5" />
           </div>
@@ -48,8 +51,12 @@ export function PageHeader({
               Step {step} of {WORKFLOW_STEPS}
             </div>
           )}
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          {description && <p className="text-muted-foreground mt-1 max-w-3xl text-sm leading-relaxed">{description}</p>}
+          <h1 className={cn("font-semibold tracking-tight", compact ? "text-xl" : "text-2xl")}>{title}</h1>
+          {description && (
+            <p className={cn("text-muted-foreground max-w-3xl leading-relaxed", compact ? "text-xs" : "mt-1 text-sm")}>
+              {description}
+            </p>
+          )}
         </div>
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
