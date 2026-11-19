@@ -124,8 +124,10 @@ class Settings(BaseSettings):
     # After a vocabulary import, re-embed concepts whose embedded text changed and embed new
     # concepts in domains the active collection already covers (costs embedding calls)
     auto_embed_after_vocabulary_import: bool = True
-    diskann_query_rescore: int = 100
-    diskann_query_search_list_size: int = 200
+    # Query-time DiskANN settings. 400/400 finds 99.3% of the exact top 30 (200/100: 96%) at
+    # ~20 ms per query (200/100: ~8 ms), negligible next to the LLM call (2026-11 evaluation)
+    diskann_query_rescore: int = 400
+    diskann_query_search_list_size: int = 400
     diskann_rebuild_threshold: int = 10_000
     # maintenance_work_mem for DiskANN index builds (more = faster builds of large collections)
     diskann_maintenance_work_mem: str = Field(default="1GB", pattern=r"^\d+\s*(kB|MB|GB|TB)?$")
