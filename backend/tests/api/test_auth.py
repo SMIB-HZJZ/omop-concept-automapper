@@ -235,6 +235,8 @@ def test_prod_refuses_weak_secrets(monkeypatch):
     }
     for key, value in strong.items():
         monkeypatch.setenv(key, value)
+    # The dev stack sets COOKIE_SECURE=false in the container; prod derives it from APP_ENV
+    monkeypatch.delenv("COOKIE_SECURE", raising=False)
     settings = Settings(_env_file=None)
     assert settings.secure_cookies is True
     for key, weak, reported in (
