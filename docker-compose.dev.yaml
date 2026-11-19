@@ -26,7 +26,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-auto_mapper}
     command: ["postgres", "-c", "maintenance_work_mem=512MB", "-c", "shared_buffers=512MB"]
-    shm_size: 512m
+    # Above maintenance_work_mem and DISKANN_MAINTENANCE_WORK_MEM (1GB), or DiskANN builds fail
+    shm_size: 2g
     ports:
       - "127.0.0.1:5455:5432"
     volumes:

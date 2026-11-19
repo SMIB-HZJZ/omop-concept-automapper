@@ -38,7 +38,9 @@ services:
       - max_wal_size=${PG_MAX_WAL_SIZE:-4GB}
       - -c
       - max_connections=${PG_MAX_CONNECTIONS:-200}
-    shm_size: ${PG_SHM_SIZE:-1g}
+    # Parallel index builds use /dev/shm: keep it above maintenance_work_mem and
+    # DISKANN_MAINTENANCE_WORK_MEM, or DiskANN builds fail
+    shm_size: ${PG_SHM_SIZE:-2g}
     volumes:
       - pgdata18:/home/postgres/pgdata
     healthcheck:
