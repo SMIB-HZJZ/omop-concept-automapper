@@ -16,9 +16,12 @@ class NodeContext:
     searcher: VectorSearcher
     reranker: Reranker | CascadeReranker | EscalatingReranker
     get_concepts: Callable[[list[int]], list[dict]]
-    get_ancestors: Callable[[int, int], list[dict]]
     settings: Settings
     llm_model: str
+    # Parents, defining attributes and synonyms of concepts (AI steps for unsure terms)
+    get_concept_context: Callable[[list[int]], dict[int, dict]] | None = None
+    # Full details of one concept (the agent's get_concept_details tool)
+    get_details: Callable[[int], dict | None] | None = None
     # Used by the `translate` step; built from llm_model when not injected
     translator: Translator | None = None
     # Used by the `rewrite_search` step; built from llm_model when not injected

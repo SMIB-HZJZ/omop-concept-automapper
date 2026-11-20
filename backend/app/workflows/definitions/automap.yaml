@@ -11,13 +11,17 @@
 # 8. gate            accept if the confidence reaches the threshold; otherwise
 # 9. rewrite         the LLM writes up to 3 other searches (abbreviations spelled out, synonyms,
 #                    OMOP wording); new candidates go to
-# 10. rerank_again   a second LLM pick, kept only when more confident than the first; gate_again
-# 11. refine         still not confident: an agent searches with its own wording and walks the
-#                    hierarchy (limited by AGENT_REQUEST_LIMIT); kept only when more confident
+# 10. rerank_again   a second LLM pick (the first model only, no escalation), the 10 best
+#                    candidates shown with their parents, attributes and synonyms; kept only when
+#                    more confident than the first; gate_again
+# 11. refine         still not confident: an agent searches with its own wording and checks
+#                    concept details (parents, children, attributes, synonyms); at most
+#                    AGENT_REQUEST_LIMIT requests; kept only when more confident
 # 12. final_gate     the same threshold; still not confident:
-# 13. decide         the stronger model gets every candidate found (first search, rewritten
-#                    searches, the agent's finds) and every earlier verdict, and makes one final
-#                    choice (method auto_final); then
+# 13. decide         the stronger model gets every candidate found (the 10 first with their
+#                    context) and every earlier verdict, and makes one final choice (method
+#                    auto_final): the one stronger-model call for a hard term after the first
+#                    re-check; then
 # 14. last_gate      the same threshold decides
 # Searching original + English was the largest gain in the retrieval evaluation (noisy Croatian:
 # R@1 0.42 -> 0.66, R@30 0.90 -> 0.97); see docs/retrieval-evaluation-2026-11.md.
@@ -51,7 +55,7 @@ nodes:
     routes: { rerank: rerank_again, skip: refine }
   rerank_again:
     uses: llm_rerank
-    params: { keep_better: true }
+    params: { keep_better: true, escalate: false, context_top: 10 }
   gate_again:
     uses: confidence_gate
     routes: { accept: END, reject: refine }

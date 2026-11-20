@@ -1,5 +1,6 @@
 """OMOP concept lookups."""
 
+import re
 from collections.abc import Sequence
 
 from sqlalchemy import text
@@ -29,27 +30,6 @@ def get_concepts(session: Session, concept_ids: Sequence[int]) -> list[dict]:
     ).mappings()
     by_id = {r["concept_id"]: dict(r) for r in rows}
     return [by_id[i] for i in concept_ids if i in by_id]
-
-
-def get_ancestors(
-    session: Session, concept_id: int, max_levels: int = 2, limit: int = 25
-) -> list[dict]:
-    rows = session.execute(
-        text(
-            f"""
-            SELECT {CONCEPT_COLUMNS}, a.min_levels_of_separation AS levels
-            FROM concept_ancestor a
-            JOIN concept c ON c.concept_id = a.ancestor_concept_id
-            LEFT JOIN concept_atc7 ca ON ca.concept_id = c.concept_id
-            WHERE a.descendant_concept_id = :id
-              AND a.min_levels_of_separation BETWEEN 1 AND :levels
-            ORDER BY a.min_levels_of_separation, c.concept_name
-            LIMIT :limit
-            """
-        ),
-        {"id": concept_id, "levels": max_levels, "limit": limit},
-    ).mappings()
-    return [dict(r) for r in rows]
 
 
 # Hierarchy links are shown as parents/children, not again under "related"
@@ -133,6 +113,96 @@ def get_details(session: Session, concept_id: int) -> dict | None:
         "children": children,
         "child_count": child_count,
         "related": [dict(r) for r in related],
+    }
+
+
+# Relationships that describe what a concept is (SNOMED "Has finding site", LOINC "Has component",
+# RxNorm "RxNorm has ing", ...) contain "has"; the rest (Maps to, Mapped from, Concept replaced
+# by, ...) is vocabulary bookkeeping
+_DESCRIBES = re.compile(r"(?i)(^|\s)has\s")
+
+
+# ... except SNOMED's own bookkeeping
+_NOT_DESCRIBING = ("Has Module", "Has status")
+# English synonyms only (OMOP language concept for English)
+ENGLISH = 4180186
+
+
+def _describes(relationship_id: str) -> bool:
+    return bool(_DESCRIBES.search(relationship_id)) and relationship_id not in _NOT_DESCRIBING
+
+
+def candidate_context(session: Session, concept_ids: Sequence[int]) -> dict[int, dict]:
+    """For each concept: up to 3 direct parents, 8 defining attributes and 3 synonyms, in one
+    query each, for the AI steps that decide on unsure terms."""
+    ids = list(dict.fromkeys(concept_ids))
+    if not ids:
+        return {}
+    context: dict[int, dict] = {i: {"parents": [], "attributes": [], "synonyms": []} for i in ids}
+    parents = session.execute(
+        text(
+            """
+            SELECT x.descendant_concept_id AS id, c.concept_name AS name
+            FROM concept_ancestor x JOIN concept c ON c.concept_id = x.ancestor_concept_id
+            WHERE x.descendant_concept_id = ANY(:ids) AND x.min_levels_of_separation = 1
+            ORDER BY x.descendant_concept_id, c.concept_name
+            """
+        ),
+        {"ids": ids},
+    ).mappings()
+    for r in parents:
+        if len(context[r["id"]]["parents"]) < 3:
+            context[r["id"]]["parents"].append(r["name"])
+    attributes = session.execute(
+        text(
+            """
+            SELECT r.concept_id_1 AS id, r.relationship_id, c.concept_name AS name
+            FROM concept_relationship r JOIN concept c ON c.concept_id = r.concept_id_2
+            WHERE r.concept_id_1 = ANY(:ids) AND r.invalid_reason IS NULL
+              AND r.relationship_id ~* '(^|\\s)has\\s'
+              AND r.relationship_id <> ALL(:not_describing)
+              AND r.concept_id_2 <> r.concept_id_1
+            ORDER BY r.concept_id_1, r.relationship_id, c.concept_name
+            """
+        ),
+        {"ids": ids, "not_describing": list(_NOT_DESCRIBING)},
+    ).mappings()
+    for r in attributes:
+        if len(context[r["id"]]["attributes"]) < 8:
+            context[r["id"]]["attributes"].append((r["relationship_id"], r["name"]))
+    synonyms = session.execute(
+        text(
+            """
+            SELECT DISTINCT s.concept_id AS id, s.concept_synonym_name AS name
+            FROM concept_synonym s JOIN concept c ON c.concept_id = s.concept_id
+            WHERE s.concept_id = ANY(:ids) AND s.language_concept_id = :english
+              AND lower(s.concept_synonym_name) <> lower(c.concept_name)
+              -- not the fully specified name, e.g. "Osteonecrosis (disorder)"
+              AND lower(s.concept_synonym_name) NOT LIKE lower(c.concept_name) || ' (%)'
+            ORDER BY 1, 2
+            """
+        ),
+        {"ids": ids, "english": ENGLISH},
+    ).mappings()
+    for r in synonyms:
+        if len(context[r["id"]]["synonyms"]) < 3:
+            context[r["id"]]["synonyms"].append(r["name"])
+    return context
+
+
+def agent_details(session: Session, concept_id: int) -> dict | None:
+    """get_details trimmed for the mapping agent: what the concept is and where it sits."""
+    details = get_details(session, concept_id)
+    if details is None:
+        return None
+    attributes = [r for r in details["related"] if _describes(r["relationship_id"])]
+    return {
+        "concept": details["concept"],
+        "synonyms": details["synonyms"][:10],
+        "parents": details["parents"][:10],
+        "children": details["children"][:15],
+        "child_count": details["child_count"],
+        "attributes": attributes[:25],
     }
 
 

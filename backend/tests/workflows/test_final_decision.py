@@ -100,3 +100,41 @@ def test_evidence_helpers():
     assert any("'acetaminophen tablet'" in n for n in notes)
     assert [c["concept_id"] for c in all_candidates(state, 10)] == [1, 2, 3]
     assert len(all_candidates(state, 2)) == 2
+
+
+async def test_second_pick_has_context_and_no_escalation_final_decision_has_context():
+    from app.llm.structured import EscalatingReranker
+
+    class Recorder:
+        def __init__(self, confidence):
+            self.confidence = confidence
+            self.seen = []
+            self.model = self.label = "test/recorder"
+
+        async def rerank(self, term, candidates, drug_specific, **kwargs):
+            self.seen.append([bool(c.get("context")) for c in candidates])
+            return RerankResult(0, self.confidence)
+
+    class Rewriter:
+        async def rewrite(self, term, **kwargs):
+            return ["acetaminophen"]
+
+    class BySearch(FakeSearcher):
+        def search(self, query, k, filters):
+            self.calls.append(query)
+            wanted = 3 if "acetaminophen" in query else 1
+            return [{**CONCEPTS[wanted], "score": 0.5, "rank": 1}]
+
+    first, stronger, judge = Recorder(4), Recorder(5), Judge(pick=3, confidence=6)
+    ctx = make_context(
+        EscalatingReranker(first, stronger, 8),
+        searcher=BySearch(),
+        rewriter=Rewriter(),
+        get_concept_context=lambda ids: {i: {"parents": ["p"]} for i in ids},
+        extras={"final_reranker": judge},
+    )
+    await run_pipeline(_state(), ctx, "automap")
+    # First pick: names only, escalated; second pick: first model only, with context
+    assert first.seen == [[False], [True, True]]
+    assert stronger.seen == [[False]]
+    assert judge.candidates and judge.notes

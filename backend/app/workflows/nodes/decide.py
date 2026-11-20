@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.llm.structured import Reranker
 from app.workflows.context import NodeContext
+from app.workflows.enrich import with_context
 from app.workflows.registry import node
 from app.workflows.state import AutomapState
 
@@ -18,6 +19,8 @@ class DecideParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     max_candidates: int = Field(default=45, ge=5, le=80)
+    # Candidates shown with their parents, attributes and synonyms (earlier picks come first)
+    context_top: int = Field(default=10, ge=0, le=30)
 
 
 def _verdict(attempt: dict) -> str:
@@ -88,7 +91,7 @@ async def decide_with_evidence(state: AutomapState, ctx: NodeContext, params: De
     try:
         result = await judge.rerank(
             term,
-            candidates,
+            await with_context(ctx, candidates, params.context_top),
             bool(state.get("drug_specific")),
             translation=state.get("translated_query"),
             notes=[*(state.get("notes") or []), *evidence_notes(state)],

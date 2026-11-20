@@ -41,7 +41,7 @@ nodes:
     routes: { rerank: rerank_again, skip: refine }
   rerank_again:
     uses: llm_rerank
-    params: { keep_better: true }
+    params: { keep_better: true, escalate: false, context_top: 10 }
   gate_again:
     uses: confidence_gate
     routes: { accept: END, reject: refine }

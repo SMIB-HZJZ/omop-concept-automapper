@@ -5,6 +5,7 @@ import dataclasses
 import hashlib
 import json
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -64,13 +65,39 @@ class RerankResult:
     votes: list[dict] = field(default_factory=list)
 
 
+# Short forms in relationship ids (SNOMED, RxNorm)
+_ATTRIBUTE_WORDS = {
+    "ing": "ingredient",
+    "asso": "associated",
+    "morph": "morphology",
+    "dir": "direct",
+}
+
+
+def attribute_name(relationship_id: str) -> str:
+    """'Has finding site' -> 'finding site', 'RxNorm has ing' -> 'ingredient'."""
+    words = re.sub(r"(?i)^.*?\bhas\s+", "", relationship_id).lower().split()
+    return " ".join(_ATTRIBUTE_WORDS.get(w, w) for w in words)
+
+
 def format_candidates(candidates: list[dict]) -> str:
-    """One line per candidate: ``<id>: <name> [<class> | <domain> | <vocabulary>]``."""
+    """One line per candidate: ``<id>: <name> [<class> | <domain> | <vocabulary>]``, followed by
+    indented lines with its parents, attributes and synonyms when it carries a ``context``."""
     lines = []
     for i, c in enumerate(candidates):
         details = [c.get("concept_class_id"), c.get("domain_id"), c.get("vocabulary_id")]
         suffix = " | ".join(d for d in details if d)
         lines.append(f"{i}: {c['concept_name']}" + (f" [{suffix}]" if suffix else ""))
+        context = c.get("context") or {}
+        if context.get("parents"):
+            lines.append("   is a: " + "; ".join(context["parents"]))
+        if context.get("attributes"):
+            lines.append(
+                "   "
+                + "; ".join(f"{attribute_name(rel)}: {name}" for rel, name in context["attributes"])
+            )
+        if context.get("synonyms"):
+            lines.append("   also: " + "; ".join(context["synonyms"]))
     return "\n".join(lines)
 
 

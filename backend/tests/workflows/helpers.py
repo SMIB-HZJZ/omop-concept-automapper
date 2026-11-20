@@ -112,7 +112,6 @@ def make_context(reranker, **kwargs) -> NodeContext:
         searcher=kwargs.pop("searcher", FakeSearcher()),
         reranker=reranker,
         get_concepts=lambda ids: [CONCEPTS[i] for i in ids if i in CONCEPTS],
-        get_ancestors=lambda cid, levels: [],
         settings=get_settings(),
         llm_model="test/chat",
         logger=logging.getLogger("test"),

@@ -156,11 +156,16 @@ Rules:
 AGENT_INSTRUCTIONS = """\
 You map a source medical term to exactly one standard OMOP concept.
 
-A first vector search plus reranking did not produce a confident match. Investigate with the tools:
+A first search, rewritten searches and reranking did not produce a confident match. Investigate
+with the tools:
 - `search_concepts` runs a semantic search over standard OMOP concepts. Reformulate the query when
-  the first results are poor: translate non-English terms to English, expand abbreviations, use
-  synonyms, or search the active ingredient(s) separately for drugs.
-- `get_concept` and `get_ancestors` let you inspect a candidate and its hierarchy.
+  the results are poor: expand abbreviations, use synonyms, or search the active ingredient(s)
+  separately for drugs.
+- `get_concept_details` shows what a concept is and where it sits: synonyms, parents (broader),
+  children (narrower) and defining attributes (finding site, morphology, LOINC component and
+  system, ...). Check the best candidates with it: a child may match the term exactly, and the
+  attributes tell a test from its result or one site from another.
+- `get_concept` looks up a concept by id.
 
 Pick a concept only if it satisfies the matching rules below; otherwise return no concept.
 Only return a concept_id you have seen in tool results or in the initial candidates.

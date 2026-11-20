@@ -25,7 +25,7 @@ async def agentic_refine(state: AutomapState, ctx: NodeContext, params: AgenticP
     deps = AgentDeps(
         searcher=ctx.searcher,
         get_concepts=ctx.get_concepts,
-        get_ancestors=ctx.get_ancestors,
+        get_details=ctx.get_details or (lambda concept_id: None),
         domains=state.get("domains") or [],
         drug_specific=bool(state.get("drug_specific")),
         atc7_codes=state.get("atc7_codes") or [],

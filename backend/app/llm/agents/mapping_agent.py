@@ -18,7 +18,8 @@ from app.vector.store import SearchFilters, VectorSearcher
 class AgentDeps:
     searcher: VectorSearcher
     get_concepts: Callable[[list[int]], list[dict]]
-    get_ancestors: Callable[[int, int], list[dict]]
+    # Full details of one concept: parents, children, defining attributes, synonyms
+    get_details: Callable[[int], dict | None]
     domains: list[str]
     drug_specific: bool
     atc7_codes: list[str] = field(default_factory=list)
@@ -104,13 +105,27 @@ async def get_concept(ctx: RunContext[AgentDeps], concept_id: int) -> dict | Non
 
 
 @mapping_agent.tool
-async def get_ancestors(ctx: RunContext[AgentDeps], concept_id: int, levels: int = 2) -> list[dict]:
-    """Ancestors of a concept up to `levels` steps up the hierarchy (useful to find a less specific concept)."""
-    ctx.deps.tell("Agent retry: checking broader concepts")
-    ancestors = await asyncio.to_thread(ctx.deps.get_ancestors, concept_id, min(levels, 4))
-    for a in ancestors:
-        ctx.deps.seen.setdefault(a["concept_id"], a)
-    return [{**_brief(a), "levels": a.get("levels")} for a in ancestors]
+async def get_concept_details(ctx: RunContext[AgentDeps], concept_id: int) -> dict | None:
+    """What a concept is and where it sits: synonyms, direct parents (broader concepts), direct
+    children (narrower concepts) and defining attributes (e.g. finding site, morphology, LOINC
+    component and system). Use it to tell an exact match from a broader or narrower one."""
+    ctx.deps.tell("Agent retry: checking a concept's details")
+    details = await asyncio.to_thread(ctx.deps.get_details, concept_id)
+    if details is None:
+        return None
+    for c in [details["concept"], *details["parents"], *details["children"]]:
+        ctx.deps.seen.setdefault(c["concept_id"], c)
+    return {
+        **_brief(details["concept"]),
+        "synonyms": details["synonyms"],
+        "parents": [_brief(c) for c in details["parents"]],
+        "children": [_brief(c) for c in details["children"]],
+        "child_count": details["child_count"],
+        "attributes": [
+            {"relationship": r["relationship_id"], "concept_name": r["concept_name"]}
+            for r in details["attributes"]
+        ],
+    }
 
 
 @mapping_agent.output_validator

@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.llm.structured import EscalatingReranker
 from app.workflows.context import NodeContext
+from app.workflows.enrich import with_context
 from app.workflows.registry import node
 from app.workflows.state import AutomapState
 
@@ -16,6 +17,10 @@ class RerankParams(BaseModel):
     # A second rerank (after rewrite_search): its pick replaces the first only when it is more
     # confident; if it finds nothing or fails, the first result stands
     keep_better: bool = False
+    # Show the first N candidates with their parents, attributes and synonyms (0 = names only)
+    context_top: int = Field(default=0, ge=0, le=30)
+    # False: the first model only, even when the context's reranker escalates unsure answers
+    escalate: bool = True
 
 
 @node(
@@ -44,13 +49,16 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
             )
             if examples:
                 extra["examples"] = examples
-        if isinstance(ctx.reranker, EscalatingReranker):
-            extra["on_escalate"] = lambda: ctx.report(
-                state, None, "llm_rerank", "Re-check by a stronger model"
-            )
-        result = await ctx.reranker.rerank(
-            term, candidates, bool(state.get("drug_specific")), **extra
-        )
+        reranker = ctx.reranker
+        if isinstance(reranker, EscalatingReranker):
+            if params.escalate:
+                extra["on_escalate"] = lambda: ctx.report(
+                    state, None, "llm_rerank", "Re-check by a stronger model"
+                )
+            else:
+                reranker = reranker.first
+        shown = await with_context(ctx, candidates, params.context_top)
+        result = await reranker.rerank(term, shown, bool(state.get("drug_specific")), **extra)
     except Exception as exc:
         ctx.logger.warning("Reranker failed for %r: %s", term, exc)
         if first:

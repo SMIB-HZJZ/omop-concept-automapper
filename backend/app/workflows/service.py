@@ -43,9 +43,14 @@ def _get_concepts(ids: list[int]) -> list[dict]:
         return concept_service.get_concepts(session, ids)
 
 
-def _get_ancestors(concept_id: int, levels: int) -> list[dict]:
+def _concept_context(concept_ids: list[int]) -> dict[int, dict]:
     with Session(get_engine()) as session:
-        return concept_service.get_ancestors(session, concept_id, levels)
+        return concept_service.candidate_context(session, concept_ids)
+
+
+def _agent_details(concept_id: int) -> dict | None:
+    with Session(get_engine()) as session:
+        return concept_service.agent_details(session, concept_id)
 
 
 def _match_drug(structure):
@@ -125,7 +130,8 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
         drug_matcher=_match_drug if drug_parser is not None else None,
         lexical=lexical,
         get_concepts=_get_concepts,
-        get_ancestors=_get_ancestors,
+        get_concept_context=_concept_context,
+        get_details=_agent_details,
         settings=get_settings(),
         llm_model=cfg.llm_model,
     )
