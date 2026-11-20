@@ -120,6 +120,11 @@ class Settings(BaseSettings):
     # Reasoning effort of the escalation model (empty = its default). Opus 5.5 at xhigh was the
     # best of the escalation options tested (Opus at medium/high, Fable 5.2, Sonnet at xhigh).
     rerank_escalate_effort: Literal["", "low", "medium", "high", "xhigh", "max"] = "xhigh"
+    # Agent retry (last step of every pipeline, only for terms that did not pass the gate): at
+    # most this many model requests per term (each tool use is one), and this many retries when
+    # its answer is invalid (e.g. a concept it never saw). Reaching a limit keeps the first result.
+    agent_request_limit: int = Field(default=6, ge=1, le=50)
+    agent_output_retries: int = Field(default=1, ge=0, le=5)
     workflow_plugins: str = ""
     workflow_definitions_dir: str = ""
 

@@ -86,8 +86,16 @@ async def no_match_agent(model, term, deps, candidates, translation=None):
     return MappingDecision(concept_id=None, rationale="test agent: no match")
 
 
+class NoRewrites:
+    """Unsure terms get rewritten searches; by default there are none (no real LLM call)."""
+
+    async def rewrite(self, term, **kwargs):
+        return []
+
+
 def make_context(reranker, **kwargs) -> NodeContext:
     kwargs.setdefault("translator", IdentityTranslator())
+    kwargs.setdefault("rewriter", NoRewrites())
     if "agent_model" not in kwargs:
         kwargs.setdefault("run_agent", no_match_agent)
     return NodeContext(

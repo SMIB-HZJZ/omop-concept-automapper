@@ -199,6 +199,7 @@ def catalog() -> dict:
     load_plugins()
     definitions, errors = load_definitions()
     default = get_settings().automap_pipeline
+    drug_default = get_settings().automap_drug_pipeline
     pipelines = [
         {
             "name": d.name,
@@ -210,6 +211,7 @@ def catalog() -> dict:
             if Path(path).parent.name == "definitions" and "app/workflows" in path
             else path,
             "is_default": d.name == default,
+            "is_drug_default": d.name == drug_default,
         }
         for d, path in definitions.values()
     ]
@@ -224,7 +226,9 @@ def catalog() -> dict:
         for s in all_steps()
     ]
     return {
-        "pipelines": sorted(pipelines, key=lambda p: (not p["is_default"], p["name"])),
+        "pipelines": sorted(
+            pipelines, key=lambda p: (not p["is_default"], not p["is_drug_default"], p["name"])
+        ),
         "nodes": nodes,
         "errors": {**load_errors, **errors},
     }

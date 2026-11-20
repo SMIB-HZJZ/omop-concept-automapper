@@ -133,6 +133,26 @@ Rules:
 - Report the detected language as an ISO 639-1 code."""
 
 
+REWRITE_SYSTEM_PROMPT = """\
+A vector search over standard OMOP concepts (SNOMED CT, LOINC, RxNorm, ...) found no convincing
+match for a source medical term. Write up to three DIFFERENT search queries that are more likely
+to find the right standard concept.
+
+Ways to rewrite:
+- Spell out clinical abbreviations (e.g. "S-" = serum, "dU-" = 24-hour urine, "KKS" = complete
+  blood count).
+- Use the standard English clinical term or a common synonym.
+- Name what is measured or done the way OMOP names it (e.g. LOINC: analyte + specimen).
+- If the term combines several things, search for the main one.
+- A slightly broader term, if the exact one may not exist.
+
+Rules:
+- English, in OMOP wording; each query short (a few words).
+- Do not repeat the original term, its English rendering or the candidates already shown.
+- Never add information the term does not contain (site, laterality, cause, strength).
+- Return no queries if you cannot improve on the search."""
+
+
 AGENT_INSTRUCTIONS = """\
 You map a source medical term to exactly one standard OMOP concept.
 

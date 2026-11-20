@@ -5992,6 +5992,11 @@
           "is_default": {
             "type": "boolean",
             "title": "Is Default"
+          },
+          "is_drug_default": {
+            "type": "boolean",
+            "title": "Is Drug Default",
+            "default": false
           }
         },
         "type": "object",

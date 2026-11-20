@@ -1940,6 +1940,11 @@ export interface components {
             source: string;
             /** Is Default */
             is_default: boolean;
+            /**
+             * Is Drug Default
+             * @default false
+             */
+            is_drug_default: boolean;
         };
         /** WorkflowNodeInfo */
         WorkflowNodeInfo: {

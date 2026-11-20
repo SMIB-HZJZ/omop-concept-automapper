@@ -39,6 +39,8 @@ class AutomapState(TypedDict, total=False):
     rationale: str | None
     # exact | broader | narrower | related (how the pick relates to the source term)
     match_type: str | None
+    # Queries written by the rewrite_search step
+    rewritten_queries: list[str]
     method: str
     outcome: str  # accepted | rejected | no_candidates | no_match | error
     route: str

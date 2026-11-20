@@ -204,9 +204,11 @@ Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workfl
   6. `retrieve`: vector search for up to 30 candidates (`k`), for the original and the English term. Keyword (trigram) search on names and synonyms, fused by reciprocal rank, can be turned on with `keyword: true`; it is off by default because it lowered search accuracy in the evaluation ([report](docs/retrieval-evaluation-2026-11.md)).
   7. `llm_rerank`: the LLM picks a candidate, seeing the original and the English term, with reviewed mappings of similar source terms as examples. It also states the match type (exact / broader / narrower / related) and may map a combined term to several concepts.
   8. `confidence_gate`: accepted at or above the threshold; otherwise
-  9. `agentic_refine`: a Pydantic AI agent gets the term, its English rendering and the first candidates, and searches again with its own wording (synonyms, other domains, ingredient splits; the ATC7 filter for drugs) and the concept hierarchy. Its pick (method `auto_agentic`) replaces the first one only when it is more confident; if it finds nothing or fails, the first result stands.
-  10. a second `confidence_gate` with the same threshold.
-  Ambiguous deterministic hits (different targets) go to the reranker as the first candidates. The agent runs only for terms that do not pass the first gate, but it makes several LLM calls each.
+  9. `rewrite_search`: the LLM writes up to three other searches (abbreviations spelled out, synonyms, OMOP wording; cached), and their new candidates go to
+  10. a second `llm_rerank`, whose pick replaces the first only when it is more confident, and a second gate; still not confident:
+  11. `agentic_refine`: a Pydantic AI agent gets the term, its English rendering and the candidates, and searches again with its own wording (synonyms, other domains, ingredient splits; the ATC7 filter for drugs) and the concept hierarchy. At most `AGENT_REQUEST_LIMIT` model requests (default 6; each tool use is one) and `AGENT_OUTPUT_RETRIES` retries of an invalid answer (default 1). Its pick (method `auto_agentic`) replaces the first one only when it is more confident; if it finds nothing, fails or reaches a limit, the earlier result stands.
+  12. a last `confidence_gate` with the same threshold.
+  Ambiguous deterministic hits (different targets) go to the reranker as the first candidates. Steps 9–12 run only for terms that do not pass the first gate, but they add several LLM calls each.
 - **`automap_drug`** (default for drug vocabularies): the same, with the structured drug match (see [Drug mapping](#drug-mapping)) before translation.
 
 **Domains** (Auto map settings, also used by AI suggest): *only these domains*, *prefer these domains* (default: a few candidates from other domains are added and the reranker is told the preference) or *all domains*.

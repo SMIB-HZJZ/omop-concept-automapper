@@ -17,11 +17,12 @@ from app.llm.prompts import (
     DRUG_SYSTEM_PROMPT,
     EXAMPLES_BLOCK,
     INPUT_PROMPT,
+    REWRITE_SYSTEM_PROMPT,
     TRANSLATE_SYSTEM_PROMPT,
     TRANSLATION_LINE,
     VOCABULARY_LINE,
 )
-from app.llm.schemas import RerankerResponse, TranslationResponse
+from app.llm.schemas import QueryRewriteResponse, RerankerResponse, TranslationResponse
 
 logger = logging.getLogger(__name__)
 
@@ -381,3 +382,69 @@ class Translator:
         except Exception:
             logger.debug("Translation cache write failed", exc_info=True)
         return result
+
+
+class QueryRewriter:
+    """Alternative search queries for a term the first search could not map confidently. Cached
+    in Redis per model, term and first candidates."""
+
+    CACHE_TTL = 90 * 24 * 3600
+
+    def __init__(
+        self,
+        model: str,
+        client: instructor.AsyncInstructor | None = None,
+        effort: str | None = None,
+    ):
+        self.model = model
+        self.effort = effort or None
+        self._client = client
+
+    async def rewrite(
+        self,
+        term: str,
+        *,
+        translation: str | None = None,
+        context: str | None = None,
+        shown: list[str] | None = None,
+    ) -> list[str]:
+        """``shown``: names of the candidates the first search found (not to be repeated)."""
+        lines = [VOCABULARY_LINE.format(context=context)] if context else []
+        lines.append(f"Source term: {term}\n")
+        if translation:
+            lines.append(TRANSLATION_LINE.format(translation=translation))
+        if shown:
+            lines.append("Candidates the first search found:\n")
+            lines.extend(f"- {name}\n" for name in shown[:15])
+        message = "".join(lines)
+        digest = hashlib.sha1(message.encode()).hexdigest()
+        key = f"rewrite:{model_label(self.model, self.effort)}:{digest}"
+        try:
+            hit = await asyncio.to_thread(get_redis().get, key)
+            if hit:
+                return json.loads(hit)
+        except Exception:
+            logger.debug("Rewrite cache read failed", exc_info=True)
+        client = self._client or get_instructor(self.model)
+        response: QueryRewriteResponse = await client.chat.completions.create(
+            model=self.model,
+            response_model=QueryRewriteResponse,
+            messages=[
+                {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
+                {"role": "user", "content": message},
+            ],
+            max_retries=get_settings().llm_max_retries,
+            **chat_model_settings(self.model, self.effort),
+        )
+        seen = {term.strip().lower(), (translation or "").strip().lower()}
+        queries = []
+        for q in response.queries:
+            q = " ".join(q.split())
+            if q and q.lower() not in seen:
+                seen.add(q.lower())
+                queries.append(q)
+        try:
+            await asyncio.to_thread(get_redis().set, key, json.dumps(queries), ex=self.CACHE_TTL)
+        except Exception:
+            logger.debug("Rewrite cache write failed", exc_info=True)
+        return queries

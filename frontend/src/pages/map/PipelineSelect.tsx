@@ -11,11 +11,11 @@ export function PipelineSelect({ value, onChange, id }: { value: string; onChang
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={DEFAULT_PIPELINE}>Default pipeline</SelectItem>
+        <SelectItem value={DEFAULT_PIPELINE}>Default (by vocabulary type)</SelectItem>
         {(workflows.data?.pipelines ?? []).map((p) => (
           <SelectItem key={p.name} value={p.name}>
             {p.name}
-            {p.is_default ? " (default)" : ""}
+            {p.is_default ? " (general)" : p.is_drug_default ? " (drugs)" : ""}
           </SelectItem>
         ))}
       </SelectContent>

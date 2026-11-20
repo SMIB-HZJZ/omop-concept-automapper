@@ -622,6 +622,8 @@ class WorkflowInfo(BaseModel):
     edges: list[list[str]]
     source: str
     is_default: bool
+    # The default for drug vocabularies (AUTOMAP_DRUG_PIPELINE)
+    is_drug_default: bool = False
 
 
 class WorkflowCatalog(BaseModel):

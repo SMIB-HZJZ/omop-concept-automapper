@@ -375,7 +375,8 @@ function Pipelines({ catalog }: { catalog: WorkflowCatalog }) {
         <CardDescription>
           Pipelines are declarative YAML files that wire registered steps together. Extra steps and pipelines are loaded
           from plugins configured with <code>WORKFLOW_PLUGINS</code> and <code>WORKFLOW_DEFINITIONS_DIR</code> (env);
-          the default is <code>AUTOMAP_PIPELINE</code>.
+          the defaults are <code>AUTOMAP_PIPELINE</code> (general vocabularies) and <code>AUTOMAP_DRUG_PIPELINE</code>{" "}
+          (drugs).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -400,6 +401,7 @@ function Pipelines({ catalog }: { catalog: WorkflowCatalog }) {
               <div className="flex items-center gap-2">
                 <span className="font-medium">{p.name}</span>
                 {p.is_default && <Badge>default</Badge>}
+                {p.is_drug_default && <Badge variant="secondary">default for drugs</Badge>}
                 {p.source !== "builtin" && <Badge variant="outline">custom</Badge>}
               </div>
               {p.description && <p className="text-muted-foreground mt-1 text-sm">{p.description}</p>}

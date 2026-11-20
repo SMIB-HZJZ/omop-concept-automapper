@@ -21,6 +21,8 @@ class NodeContext:
     llm_model: str
     # Used by the `translate` step; built from llm_model when not injected
     translator: Translator | None = None
+    # Used by the `rewrite_search` step; built from llm_model when not injected
+    rewriter: Any = None
     # Drug steps: LLM structure extraction and the deterministic drug_strength matcher
     drug_parser: Any = None
     drug_matcher: Callable[[Any], Any] | None = None

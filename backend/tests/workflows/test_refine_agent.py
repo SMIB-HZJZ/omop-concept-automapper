@@ -70,6 +70,7 @@ async def test_agent_refines_rejected_mapping():
         "retrieve",
         "rerank",
         "gate",
+        "rewrite",
         "refine",
         "final_gate",
     ]
@@ -163,3 +164,83 @@ async def test_agent_no_match():
 def test_text_part_import_kept():
     # TextPart is part of the public message API used by custom FunctionModels
     assert TextPart("x").content == "x"
+
+
+async def test_agent_stops_at_the_request_limit(monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "agent_request_limit", 3)
+    calls = []
+
+    def endless(messages, info):
+        calls.append(1)
+        return ModelResponse(
+            parts=[ToolCallPart("search_concepts", {"query": f"try {len(calls)}"})]
+        )
+
+    ctx = make_context(LowConfidenceReranker(), agent_model=FunctionModel(endless))
+    result = await run_pipeline(_state(), ctx, "automap")
+    assert len(calls) == 3
+    # The first pick stands
+    assert result["confidence"] == 3 and result.get("method") != "auto_agentic"
+    refine = next(t for t in result["trace"] if t["node"] == "refine")
+    assert "UsageLimitExceeded" in refine["summary"]
+
+
+async def test_rewritten_search_gives_the_reranker_new_candidates():
+    class Rewriter:
+        async def rewrite(self, term, **kwargs):
+            self.shown = kwargs.get("shown")
+            return ["acetaminophen 500 mg tablet"]
+
+    class SecondTimeSure:
+        """Unsure about the first candidates; sure once the rewritten search added concept 3."""
+
+        def __init__(self):
+            self.calls = 0
+
+        async def rerank(self, term, candidates, drug_specific, **kwargs):
+            self.calls += 1
+            ids = [c["concept_id"] for c in candidates]
+            if 3 in ids and self.calls == 2:
+                return RerankResult(ids.index(3), 9)
+            return RerankResult(0, 3)
+
+    class BySearch(FakeSearcher):
+        """The original term finds only metformin; the rewritten one finds acetaminophen."""
+
+        def search(self, query, k, filters):
+            from tests.workflows.helpers import CONCEPTS
+
+            self.calls.append((query, k, tuple(filters.domains), tuple(filters.atc7_codes)))
+            wanted = 3 if "acetaminophen" in query else 1
+            return [{**CONCEPTS[wanted], "score": 0.5, "rank": 1}]
+
+    searcher = BySearch()
+    rewriter = Rewriter()
+    reranker = SecondTimeSure()
+    ctx = make_context(reranker, searcher=searcher, rewriter=rewriter)
+    result = await run_pipeline(_state(), ctx, "automap")
+    assert result["outcome"] == "accepted" and result["selected"]["concept_id"] == 3
+    assert result["rewritten_queries"] == ["acetaminophen 500 mg tablet"]
+    assert reranker.calls == 2 and rewriter.shown
+    nodes = [t["node"] for t in result["trace"]]
+    assert nodes[-4:] == ["gate", "rewrite", "rerank_again", "gate_again"]
+
+
+async def test_a_less_sure_second_pick_keeps_the_first():
+    class Rewriter:
+        async def rewrite(self, term, **kwargs):
+            return ["acetaminophen 500 mg tablet"]
+
+    class LessSure:
+        def __init__(self):
+            self.calls = 0
+
+        async def rerank(self, term, candidates, drug_specific, **kwargs):
+            self.calls += 1
+            return RerankResult(0, 5) if self.calls == 1 else RerankResult(len(candidates) - 1, 2)
+
+    ctx = make_context(LessSure(), rewriter=Rewriter())
+    result = await run_pipeline(_state(), ctx, "automap")
+    assert result["confidence"] == 5 and result["outcome"] == "rejected"

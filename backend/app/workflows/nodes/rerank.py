@@ -12,6 +12,9 @@ class RerankParams(BaseModel):
 
     # Reviewed mappings of similar source terms shown to the LLM as examples (0 = none)
     examples: int = Field(default=5, ge=0, le=20)
+    # A second rerank (after rewrite_search): its pick replaces the first only when it is more
+    # confident; if it finds nothing or fails, the first result stands
+    keep_better: bool = False
 
 
 @node(
@@ -24,6 +27,9 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
     if not candidates:
         return {"selected": None, "confidence": None, "_summary": "no candidates to rerank"}
     term = state.get("source_name") or state.get("query", "")
+    first = state.get("selected") if params.keep_better else None
+    first_confidence = state.get("confidence") or 0
+    keep = f"kept the first pick '{first['concept_name']}' ({first_confidence})" if first else ""
     try:
         translation = state.get("translated_query")
         extra: dict = {"translation": translation} if translation else {}
@@ -42,6 +48,8 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
         )
     except Exception as exc:
         ctx.logger.warning("Reranker failed for %r: %s", term, exc)
+        if first:
+            return {"_summary": f"reranker error ({type(exc).__name__}); {keep}"}
         return {
             "selected": None,
             "confidence": None,
@@ -62,6 +70,9 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
         if tag:
             rationale = f"[{tag}] {rationale or ''}".strip()
         meta = {"rerank_route": route, "rerank_votes": result.votes}
+    if first and (result.index is None or (result.confidence or 0) <= first_confidence):
+        found = "no match" if result.index is None else f"confidence {result.confidence}"
+        return {"_summary": f"{found}, no surer; {keep}"}
     if result.index is None:
         return {
             **({"meta": meta} if meta else {}),

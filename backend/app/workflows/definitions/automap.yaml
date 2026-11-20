@@ -9,14 +9,16 @@
 # 7. rerank          the LLM picks the best candidate, seeing both terms (similar reviewed
 #                    mappings as examples)
 # 8. gate            accept if the confidence reaches the threshold; otherwise
-# 9. refine          an agent searches again with its own wording (English, synonyms, other
-#                    domains) and walks the hierarchy; its pick replaces the first one only when
-#                    it is more confident, then
-# 10. final_gate     the same threshold decides
+# 9. rewrite         the LLM writes up to 3 other searches (abbreviations spelled out, synonyms,
+#                    OMOP wording); new candidates go to
+# 10. rerank_again   a second LLM pick, kept only when more confident than the first; gate_again
+# 11. refine         still not confident: an agent searches with its own wording and walks the
+#                    hierarchy (limited by AGENT_REQUEST_LIMIT); kept only when more confident
+# 12. final_gate     the same threshold decides
 # Searching original + English was the largest gain in the retrieval evaluation (noisy Croatian:
 # R@1 0.42 -> 0.66, R@30 0.90 -> 0.97); see docs/retrieval-evaluation-2026-11.md.
 name: automap
-description: earlier mappings → source code → translate → exact name/synonym → vector search (original + English) → LLM rerank → confidence gate → agent retry when not confident
+description: earlier mappings → source code → translate → exact name/synonym → vector search (original + English) → LLM rerank → confidence gate; when not confident, rewritten searches + second LLM pick, then agent retry
 entry: extract_atc7
 nodes:
   extract_atc7:
@@ -39,6 +41,15 @@ nodes:
     uses: llm_rerank
   gate:
     uses: confidence_gate
+    routes: { accept: END, reject: rewrite }
+  rewrite:
+    uses: rewrite_search
+    routes: { rerank: rerank_again, skip: refine }
+  rerank_again:
+    uses: llm_rerank
+    params: { keep_better: true }
+  gate_again:
+    uses: confidence_gate
     routes: { accept: END, reject: refine }
   refine:
     uses: agentic_refine
@@ -50,4 +61,5 @@ edges:
   - [translate, match_name]
   - [retrieve, rerank]
   - [rerank, gate]
+  - [rerank_again, gate_again]
   - [refine, final_gate]

@@ -81,6 +81,16 @@ class TranslationResponse(BaseModel):
     )
 
 
+class QueryRewriteResponse(BaseModel):
+    """Alternative searches for a source term whose first search found no convincing concept."""
+
+    queries: list[str] = Field(
+        default_factory=list,
+        max_length=3,
+        description="1-3 different English search queries in OMOP wording",
+    )
+
+
 class DrugComponent(BaseModel):
     """One active ingredient with its strength, in the shape of OMOP ``drug_strength``.
 

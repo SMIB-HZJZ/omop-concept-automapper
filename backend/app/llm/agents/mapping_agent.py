@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models import Model
+from pydantic_ai.usage import UsageLimits
 
+from app.core.config import get_settings
 from app.llm.prompts import AGENT_INSTRUCTIONS, agent_criteria
 from app.llm.schemas import MappingDecision
 from app.vector.store import SearchFilters, VectorSearcher
@@ -41,7 +43,7 @@ def _brief(c: dict) -> dict:
 mapping_agent = Agent(
     output_type=MappingDecision,
     deps_type=AgentDeps,
-    retries=2,
+    retries=1,  # per run: AGENT_OUTPUT_RETRIES for its answer, one for tool argument errors
     name="mapping_agent",
 )
 
@@ -137,5 +139,13 @@ async def run_mapping_agent(
         f"{vocabulary}Source term: {term}\n{english}\n"
         f"Initial candidates from vector search:\n{listing or '(none)'}"
     )
-    result = await mapping_agent.run(prompt, deps=deps, model=model)
+    settings = get_settings()
+    # Raises UsageLimitExceeded at the limit; the refine step then keeps the first result
+    result = await mapping_agent.run(
+        prompt,
+        deps=deps,
+        model=model,
+        usage_limits=UsageLimits(request_limit=settings.agent_request_limit),
+        retries={"tools": 1, "output": settings.agent_output_retries},
+    )
     return result.output

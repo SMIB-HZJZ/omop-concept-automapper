@@ -116,6 +116,11 @@ class FakeReranker:
         return RerankResult(best, self.overrides.get(term, self.confidence))
 
 
+class _NoRewrites:
+    async def rewrite(self, term, **kwargs):
+        return []
+
+
 class FakeTranslator:
     async def translate(self, term, context=None):
         from app.llm.structured import TranslationResult
@@ -136,6 +141,9 @@ def fake_reranker(monkeypatch):
     from tests.workflows.helpers import no_match_agent
 
     monkeypatch.setattr(agentic, "run_mapping_agent", no_match_agent)
+    from app.workflows.nodes import rewrite
+
+    monkeypatch.setattr(rewrite, "QueryRewriter", lambda model, effort=None: _NoRewrites())
     # One fake answers every term; escalation to a second model would only call it twice
     monkeypatch.setattr(service.get_settings(), "rerank_escalate_model", "")
     return reranker
