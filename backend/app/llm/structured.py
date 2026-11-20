@@ -5,6 +5,7 @@ import dataclasses
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import instructor
@@ -211,6 +212,7 @@ class EscalatingReranker:
         notes: list[str] | None = None,
         examples: list[dict] | None = None,
         context: str | None = None,
+        on_escalate: Callable[[], None] | None = None,
     ) -> RerankResult:
         if not candidates:
             return RerankResult(None, None)
@@ -233,6 +235,8 @@ class EscalatingReranker:
             "confidence": first.confidence if first else None,
             **({} if first else {"error": "failed"}),
         }
+        if on_escalate is not None:
+            on_escalate()
         try:
             result = await self.stronger.rerank(term, candidates, drug_specific, **kwargs)
         except Exception:
@@ -276,6 +280,7 @@ class CascadeReranker:
         notes: list[str] | None = None,
         examples: list[dict] | None = None,
         context: str | None = None,
+        on_escalate: Callable[[], None] | None = None,
     ) -> RerankResult:
         if not candidates:
             return RerankResult(None, None)

@@ -1,10 +1,11 @@
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.api.routes._tasks import start_task
 from app.core.db import session_scope
+from app.core.redis import get_redis
 from app.llm.prompts import vocabulary_context
 from app.models import SourceVocabulary
 from app.schemas.api import (
@@ -16,6 +17,7 @@ from app.schemas.api import (
     SourceFlag,
     SuggestionDecision,
     SuggestionPage,
+    SuggestProgress,
     SuggestRequest,
     SuggestResponse,
     TaskRef,
@@ -28,6 +30,7 @@ from app.vector.store import CollectionMissing
 from app.worker.tasks.automap import run_automap
 from app.workflows.builder import PipelineError, get_pipeline
 from app.workflows.service import build_context, default_pipeline, initial_state, run_pipeline
+from app.workflows.steps import step_label
 
 router = APIRouter(tags=["mapping"])
 
@@ -93,8 +96,32 @@ def flag_source(source_id: int, body: SourceFlag, user: CurrentUser, session: Se
     return Message(message="Flag cleared" if body.flag is None else f"Flagged as {body.flag}")
 
 
+_PROGRESS_ID = "^[0-9a-f-]{8,64}$"
+_PROGRESS_TTL = 300
+
+
+def _progress_key(progress_id: str) -> str:
+    return f"suggest-step:{progress_id}"
+
+
+@router.get("/suggest-progress/{progress_id}", response_model=SuggestProgress)
+def suggest_progress(_: CurrentUser, progress_id: str = Path(pattern=_PROGRESS_ID)):
+    """The step an AI suggest run (started with this ``progress`` id) is at, while it runs."""
+    try:
+        return SuggestProgress(step=get_redis().get(_progress_key(progress_id)))
+    except Exception:
+        return SuggestProgress(step=None)
+
+
 @router.post("/source-concepts/{source_id}/suggest", response_model=SuggestResponse)
-async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser):
+async def suggest(
+    source_id: int,
+    body: SuggestRequest,
+    _: CurrentUser,
+    progress: str | None = Query(
+        None, pattern=_PROGRESS_ID, description="Id under which the current step can be polled"
+    ),
+):
     atc7 = [c.strip().upper() for c in (body.atc7_codes or []) if c.strip()]
     if any(not is_valid_atc7(c) for c in atc7):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid ATC7 code")
@@ -126,7 +153,17 @@ async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser):
             default_pipeline, bool(state["drug_specific"])
         )
         compiled = await asyncio.to_thread(get_pipeline, pipeline)
-        result = await run_pipeline(state, build_context(cfg), compiled=compiled)
+        ctx = build_context(cfg)
+        if progress:
+            key = _progress_key(progress)
+
+            def on_step(_state, node_id, uses, detail):
+                label = step_label(node_id, uses, detail)
+                if label:
+                    get_redis().set(key, label, ex=_PROGRESS_TTL)  # a local Redis: ~1 ms
+
+            ctx.on_step = on_step
+        result = await run_pipeline(state, ctx, compiled=compiled)
     except PipelineError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except CollectionMissing as exc:

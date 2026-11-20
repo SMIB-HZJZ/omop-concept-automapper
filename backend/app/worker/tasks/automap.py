@@ -8,6 +8,7 @@ persists accepted results either as pending suggestions (review mode) or directl
 import asyncio
 import json
 import logging
+from collections import Counter
 
 from sqlalchemy import text
 
@@ -25,6 +26,7 @@ from app.workflows.builder import get_pipeline
 from app.workflows.context import NodeContext
 from app.workflows.service import build_context, default_pipeline, initial_state, run_pipeline
 from app.workflows.state import DEFAULT_CONFIDENCE_THRESHOLD
+from app.workflows.steps import step_label
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +198,15 @@ async def automap_concepts(
         )
 
     outcomes: dict[str, int] = {}
+    # Live view: the step each term in progress is at
+    current: dict[int, str] = {}
+
+    def on_step(state, node_id, uses, detail):
+        label = step_label(node_id, uses, None)  # details (agent queries) are too long here
+        if label and state.get("source_id") is not None:
+            current[state["source_id"]] = label
+
+    ctx.on_step = on_step
     semaphore = asyncio.Semaphore(max(1, concurrency))
     cancelled = asyncio.Event()
     total = len(concepts)
@@ -231,18 +242,39 @@ async def automap_concepts(
                 logger.exception("Auto-mapping failed for source concept %s", concept["source_id"])
                 counts["errors"] += 1
             finally:
+                current.pop(concept["source_id"], None)
                 counts["processed"] += 1
                 if progress:
-                    message = (
-                        f"{counts['processed']:,}/{total:,} processed · "
-                        f"{counts['mapped'] + counts['queued']:,} "
-                        f"{'mapped' if mode == 'commit' else 'queued for review'}"
-                    )
+                    message = status_line()
                     # DB and Redis I/O: keep it off the event loop
                     if await asyncio.to_thread(_report, progress, counts["processed"], message):
                         cancelled.set()
 
-    await asyncio.gather(*(handle(c) for c in concepts))
+    def status_line() -> str:
+        line = (
+            f"{counts['processed']:,}/{total:,} processed · "
+            f"{counts['mapped'] + counts['queued']:,} "
+            f"{'mapped' if mode == 'commit' else 'queued for review'}"
+        )
+        steps = Counter(current.values())
+        if steps:
+            line += " · now: " + ", ".join(f"{n} {label}" for label, n in steps.most_common())
+        return line
+
+    async def tick() -> None:
+        # Long steps (agent retries) finish no term for a while; keep the line current
+        while True:
+            await asyncio.sleep(2)
+            if progress and current:
+                await asyncio.to_thread(
+                    progress.update, current=counts["processed"], message=status_line()
+                )
+
+    ticker = asyncio.create_task(tick())
+    try:
+        await asyncio.gather(*(handle(c) for c in concepts))
+    finally:
+        ticker.cancel()
     return {**counts, "outcomes": outcomes, "cancelled": cancelled.is_set()}
 
 

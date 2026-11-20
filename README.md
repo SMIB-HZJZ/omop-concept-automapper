@@ -84,8 +84,8 @@ This version starts from an empty database: import the vocabulary and embed conc
 4. **Search**. Semantic search with domain, vocabulary and ATC7 filters.
 5. **Map Concepts**. Work through unmapped source concepts:
    - Pick a concept, edit the search term and filters, select one or more results (or enter concept IDs), then confirm.
-   - **AI suggest** runs the mapping pipeline for the selected concept and shows its pick, confidence and step-by-step trace.
-   - **Auto map** runs the pipeline over the whole vocabulary as a background task.
+   - **AI suggest** runs the mapping pipeline for the selected concept and shows its pick, confidence and step-by-step trace. While it runs, the step it is at is shown (translating, AI pick, re-check by a stronger model, rewriting the search, the agent's searches).
+   - **Auto map** runs the pipeline over the whole vocabulary as a background task; its progress line shows how many terms are at each step.
      - In **review** mode (default), results above the confidence threshold become suggestions.
      - In **commit** mode, they are mapped directly, as the old app did.
 6. **Review**. Accept or reject suggestions one at a time, as a selection, or all at once above a confidence level.

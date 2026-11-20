@@ -205,6 +205,7 @@ async def _call(fn, *args):
 def _wrap_node(node_id: str, spec: StepSpec, params: BaseModel):
     async def run(state: AutomapState, runtime: Runtime[NodeContext]) -> dict:
         started = time.perf_counter()
+        runtime.context.report(state, node_id, spec.name)
         update = dict(await _call(spec.fn, state, runtime.context, params) or {})
         summary = str(update.pop("_summary", ""))
         update["trace"] = [
@@ -223,6 +224,7 @@ def _wrap_node(node_id: str, spec: StepSpec, params: BaseModel):
 def _wrap_router(node_id: str, spec: StepSpec, params: BaseModel):
     async def run(state: AutomapState, runtime: Runtime[NodeContext]) -> dict:
         started = time.perf_counter()
+        runtime.context.report(state, node_id, spec.name)
         result = await _call(spec.fn, state, runtime.context, params)
         label, update = (result, {}) if isinstance(result, str) else result
         if label not in spec.routes:

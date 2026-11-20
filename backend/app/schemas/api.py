@@ -575,6 +575,11 @@ class AutomapRequest(BaseModel):
         return self
 
 
+class SuggestProgress(BaseModel):
+    # The current step's label, or None before the first step / after the run
+    step: str | None = None
+
+
 class SuggestRequest(BaseModel):
     query: str | None = None
     domains: list[str] = []

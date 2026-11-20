@@ -244,3 +244,38 @@ async def test_a_less_sure_second_pick_keeps_the_first():
     ctx = make_context(LessSure(), rewriter=Rewriter())
     result = await run_pipeline(_state(), ctx, "automap")
     assert result["confidence"] == 5 and result["outcome"] == "rejected"
+
+
+async def test_steps_are_reported_as_they_start():
+    from app.workflows.steps import step_label
+
+    seen = []
+
+    class Rewriter:
+        async def rewrite(self, term, **kwargs):
+            return []
+
+    ctx = make_context(
+        LowConfidenceReranker(),
+        rewriter=Rewriter(),
+        agent_model=scripted_agent({"concept_id": 3, "confidence": 9, "rationale": "x"}),
+    )
+    ctx.on_step = lambda state, node_id, uses, detail: seen.append(
+        step_label(node_id, uses, detail)
+    )
+    await run_pipeline(_state(), ctx, "automap")
+    shown = [s for s in seen if s]
+    assert shown[:4] == [
+        "Checking earlier mappings",
+        "Looking up the source code",
+        "Translating",
+        "Exact name match",
+    ]
+    assert "AI pick" in shown and "Rewriting the search" in shown
+    assert "Agent retry: searching 'acetaminophen 500 mg tablet'" in shown
+
+    def broken(*args):
+        raise RuntimeError("listener down")
+
+    ctx.on_step = broken  # a failing listener never breaks the mapping
+    assert (await run_pipeline(_state(), ctx, "automap"))["outcome"] == "accepted"

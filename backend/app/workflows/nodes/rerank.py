@@ -2,6 +2,7 @@ import asyncio
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.llm.structured import EscalatingReranker
 from app.workflows.context import NodeContext
 from app.workflows.registry import node
 from app.workflows.state import AutomapState
@@ -43,6 +44,10 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
             )
             if examples:
                 extra["examples"] = examples
+        if isinstance(ctx.reranker, EscalatingReranker):
+            extra["on_escalate"] = lambda: ctx.report(
+                state, None, "llm_rerank", "Re-check by a stronger model"
+            )
         result = await ctx.reranker.rerank(
             term, candidates, bool(state.get("drug_specific")), **extra
         )

@@ -1563,6 +1563,55 @@
         }
       }
     },
+    "/api/suggest-progress/{progress_id}": {
+      "get": {
+        "tags": [
+          "mapping"
+        ],
+        "summary": "Suggest Progress",
+        "description": "The step an AI suggest run (started with this ``progress`` id) is at, while it runs.",
+        "operationId": "suggest_progress_api_suggest_progress__progress_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "progress_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f-]{8,64}$",
+              "title": "Progress Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestProgress"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/source-concepts/{source_id}/suggest": {
       "post": {
         "tags": [
@@ -1584,6 +1633,25 @@
               "type": "integer",
               "title": "Source Id"
             }
+          },
+          {
+            "name": "progress",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f-]{8,64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Id under which the current step can be polled",
+              "title": "Progress"
+            },
+            "description": "Id under which the current step can be polled"
           }
         ],
         "requestBody": {
@@ -4754,6 +4822,23 @@
         },
         "type": "object",
         "title": "SourceVocabularyUpdate"
+      },
+      "SuggestProgress": {
+        "properties": {
+          "step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "type": "object",
+        "title": "SuggestProgress"
       },
       "SuggestRequest": {
         "properties": {

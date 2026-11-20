@@ -513,6 +513,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/suggest-progress/{progress_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggest Progress
+         * @description The step an AI suggest run (started with this ``progress`` id) is at, while it runs.
+         */
+        get: operations["suggest_progress_api_suggest_progress__progress_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/source-concepts/{source_id}/suggest": {
         parameters: {
             query?: never;
@@ -1572,6 +1592,11 @@ export interface components {
             is_drug?: boolean | null;
             /** Code Vocabularies */
             code_vocabularies?: string[] | null;
+        };
+        /** SuggestProgress */
+        SuggestProgress: {
+            /** Step */
+            step?: string | null;
         };
         /** SuggestRequest */
         SuggestRequest: {
@@ -3180,9 +3205,43 @@ export interface operations {
             };
         };
     };
-    suggest_api_source_concepts__source_id__suggest_post: {
+    suggest_progress_api_suggest_progress__progress_id__get: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                progress_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestProgress"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_api_source_concepts__source_id__suggest_post: {
+        parameters: {
+            query?: {
+                /** @description Id under which the current step can be polled */
+                progress?: string | null;
+            };
             header?: never;
             path: {
                 source_id: number;

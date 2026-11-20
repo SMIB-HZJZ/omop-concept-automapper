@@ -32,5 +32,17 @@ class NodeContext:
     run_agent: Callable[..., Awaitable[MappingDecision]] | None = None
     # Pydantic AI model override (tests pass TestModel/FunctionModel here)
     agent_model: Any = None
+    # Told when a step starts (state, node id, step type, detail), for live progress in the UI.
+    # The detail is a ready label for events inside a step (escalation, agent searches).
+    on_step: Callable[[dict, str | None, str, str | None], None] | None = None
     logger: logging.Logger = field(default_factory=lambda: logging.getLogger("workflow"))
     extras: dict[str, Any] = field(default_factory=dict)
+
+    def report(self, state: dict, node_id: str | None, uses: str, detail: str | None = None):
+        """Progress is best effort: a failing listener never breaks a mapping."""
+        if self.on_step is None:
+            return
+        try:
+            self.on_step(state, node_id, uses, detail)
+        except Exception:
+            self.logger.debug("Step listener failed", exc_info=True)

@@ -5,7 +5,15 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { ApiError, errorMessage } from "@/api/client";
-import { useDecideSuggestions, useMapConcepts, useSearch, useSuggest, useSuggestions, useUnmap } from "@/api/queries";
+import {
+  useDecideSuggestions,
+  useMapConcepts,
+  useSearch,
+  useSuggest,
+  useSuggestProgress,
+  useSuggestions,
+  useUnmap,
+} from "@/api/queries";
 import type { SearchRequest, SuggestResponse, UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { ErrorAlert } from "@/components/common";
@@ -55,6 +63,14 @@ function ExplainButton({ conceptId }: { conceptId: number }) {
 }
 
 /** Seconds since mount, for long waits such as AI suggest (which may ask a stronger model). */
+/** A random id for polling AI suggest progress (crypto.randomUUID needs HTTPS or localhost). */
+function newProgressId(set: (id: string) => void): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const id = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  set(id);
+  return id;
+}
+
 function Elapsed({ prefix }: { prefix: string }) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
@@ -177,6 +193,10 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const results = (search.data?.results ?? []) as ConceptLike[];
 
   const suggest = useSuggest();
+  // Polled while AI suggest runs, to show which step it is at
+  const [progressId, setProgressId] = useState<string | null>(null);
+  const progress = useSuggestProgress(suggest.isPending ? progressId : null);
+  const step = suggest.isPending ? (progress.data?.step ?? null) : null;
   const mapConcepts = useMapConcepts(vocabularyId);
   const unmap = useUnmap(vocabularyId);
   const acceptSuggestion = useDecideSuggestions(vocabularyId, "accept");
@@ -253,6 +273,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const runSuggest = () =>
     suggest.mutate(
       {
+        progress: newProgressId(setProgressId),
         sourceId: concept.source_id,
         query: name.trim() !== concept.source_concept_name ? name.trim() : null,
         domains,
@@ -520,6 +541,12 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
               ? "Searching for your text instead of the source term; AI suggest uses it too."
               : "Starts with the source term. No good match? Edit it: fix a typo, write it in English, or try other words. Results update as you type."}
           </p>
+          {suggest.isPending && (
+            <div aria-live="polite" className="text-primary flex min-w-0 items-center gap-2 text-sm">
+              <Loader2 className="size-4 shrink-0 animate-spin" />
+              <span className="truncate">AI suggest: {step ?? "starting"}…</span>
+            </div>
+          )}
         </div>
 
         {othersHere.length > 0 && (

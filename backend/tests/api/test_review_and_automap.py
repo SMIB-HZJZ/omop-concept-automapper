@@ -165,12 +165,26 @@ def test_ai_suggest_single_concept(
     item = client.get("/api/source-vocabularies/23/unmapped", headers=user_headers).json()["items"][
         0
     ]
+    progress_id = "0123456789abcdef"
+    assert client.get(f"/api/suggest-progress/{progress_id}", headers=user_headers).json() == {
+        "step": None
+    }
     resp = client.post(
         f"/api/source-concepts/{item['source_id']}/suggest",
+        params={"progress": progress_id},
         json={"domains": ["Drug"], "drug_specific": True},
         headers=user_headers,
     )
     assert resp.status_code == 200, resp.text
+    # The last step it reported (the AI pick; the gate is not shown)
+    step = client.get(f"/api/suggest-progress/{progress_id}", headers=user_headers).json()
+    assert step == {"step": "AI pick"}
+    assert client.get(
+        "/api/suggest-progress/not-a-valid-id!", headers=user_headers
+    ).status_code in (
+        404,
+        422,
+    )
     body = resp.json()
     assert body["outcome"] == "accepted"
     assert body["selected"]["concept_id"] == 1 and body["confidence"] == 9

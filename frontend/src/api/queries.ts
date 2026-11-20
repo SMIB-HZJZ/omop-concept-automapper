@@ -285,12 +285,26 @@ export function useDecideSuggestions(vocabularyId: number | null, decision: "acc
 
 export function useSuggest() {
   return useMutation({
-    mutationFn: async ({ sourceId, ...body }: SuggestRequest & { sourceId: number }) =>
+    mutationFn: async ({ sourceId, progress, ...body }: SuggestRequest & { sourceId: number; progress?: string }) =>
       unwrap(
-        await api.POST("/api/source-concepts/{source_id}/suggest", { params: { path: { source_id: sourceId } }, body }),
+        await api.POST("/api/source-concepts/{source_id}/suggest", {
+          params: { path: { source_id: sourceId }, query: progress ? { progress } : {} },
+          body,
+        }),
       ),
   });
 }
+
+/** The step a running AI suggest is at (polled while it runs; null before its first step). */
+export const useSuggestProgress = (progressId: string | null) =>
+  useQuery({
+    queryKey: ["suggest-progress", progressId],
+    queryFn: async () =>
+      unwrap(await api.GET("/api/suggest-progress/{progress_id}", { params: { path: { progress_id: progressId! } } })),
+    enabled: progressId !== null,
+    refetchInterval: 500,
+    gcTime: 0,
+  });
 
 // ----------------------------------------------------------------------------- search / concepts
 

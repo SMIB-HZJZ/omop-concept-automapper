@@ -26,6 +26,15 @@ class AgentDeps:
     max_results: int = 20
     # Name and description of the source vocabulary
     context: str | None = None
+    # Live progress: told what the agent is doing (a short label)
+    report: Callable[[str], None] | None = None
+
+    def tell(self, what: str) -> None:
+        if self.report is not None:
+            try:
+                self.report(what)
+            except Exception:
+                pass
 
 
 def _brief(c: dict) -> dict:
@@ -73,6 +82,7 @@ async def search_concepts(
         use_atc7_filter: Restrict to drugs with the source's ATC7 code(s), if any were found.
         k: Number of results (max 30).
     """
+    ctx.deps.tell(f"Agent retry: searching '{query}'")
     filters = SearchFilters(
         domains=domains or ctx.deps.domains,
         atc7_codes=ctx.deps.atc7_codes if use_atc7_filter else (),
@@ -96,6 +106,7 @@ async def get_concept(ctx: RunContext[AgentDeps], concept_id: int) -> dict | Non
 @mapping_agent.tool
 async def get_ancestors(ctx: RunContext[AgentDeps], concept_id: int, levels: int = 2) -> list[dict]:
     """Ancestors of a concept up to `levels` steps up the hierarchy (useful to find a less specific concept)."""
+    ctx.deps.tell("Agent retry: checking broader concepts")
     ancestors = await asyncio.to_thread(ctx.deps.get_ancestors, concept_id, min(levels, 4))
     for a in ancestors:
         ctx.deps.seen.setdefault(a["concept_id"], a)
