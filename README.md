@@ -35,7 +35,6 @@ backend/     FastAPI app (app/), Alembic migrations, Celery tasks, LLM layer, wo
 frontend/    React app; src/api/schema.d.ts is generated from frontend/openapi.json
 examples/    workflow plugin example (custom "translate_query" step)
 litellm/     LiteLLM proxy configuration
-vocabulary/  put the OMOP vocabulary files here
 ```
 
 ## Quick start
@@ -69,8 +68,8 @@ This version starts from an empty database: import the vocabulary and embed conc
 ## Using the app
 
 1. **Import → OMOP Vocabulary Tables** (admin).
-   - Put the Athena download zip in `vocabulary/` as it is (it is read without unpacking), or the CSVs from it: `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv` and `CONCEPT_ANCESTOR.csv`, plus the optional `DRUG_STRENGTH.csv` (deterministic drug mapping) and `CONCEPT_SYNONYM.csv` (synonyms).
-   - Start the import. It runs in the background with a progress bar, and you can leave the page.
+   - Upload the Athena download zip as it is (no unpacking). It must contain `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv` and `CONCEPT_ANCESTOR.csv`, and may contain `DRUG_STRENGTH.csv` (deterministic drug mapping) and `CONCEPT_SYNONYM.csv` (synonyms). Tables missing from the zip are skipped. The upload limit is `VOCABULARY_UPLOAD_MAX_MB` (default 20 GB); the zip is deleted after the import.
+   - The import runs in the background with a progress bar, and you can leave the page once the upload has finished.
    - Importing a new release updates everything derived from the vocabulary:
      - mappings to concepts that are no longer standard are replaced by their `Maps to` successor, or removed (audit: `auto_vocab_update`, `vocab_removed`);
      - ATC7 codes of drugs are recomputed;

@@ -1,4 +1,5 @@
 import logging
+import os
 
 from sqlmodel import select
 
@@ -69,9 +70,20 @@ def _refresh_active_collection(conn, user_id: int | None) -> dict:
 
 
 @celery_app.task(bind=True, base=TrackedTask, name="vocabulary.import_all", lock_name="vocab")
-def import_vocabulary(self, user_id: int | None = None) -> dict:
+def import_vocabulary(
+    self, path: str, filename: str | None = None, user_id: int | None = None
+) -> dict:
+    """Import an uploaded Athena zip; the task owns the file and deletes it when done."""
+    try:
+        return _import_vocabulary(self, path, user_id)
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def _import_vocabulary(self, path: str, user_id: int | None) -> dict:
     with raw_connection() as conn:
-        results = import_all(conn, self.progress, task_id=self.request.id)
+        results = import_all(conn, path, self.progress, task_id=self.request.id)
         self.progress.phase("Updating mappings to concepts that are no longer standard")
         stale = mapping.update_non_standard_mappings(conn)
         conn.commit()

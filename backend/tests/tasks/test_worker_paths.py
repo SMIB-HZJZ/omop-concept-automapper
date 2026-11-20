@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from app.core.db import get_engine, raw_connection
 from app.llm.embeddings import Embedder
+from tests.conftest import upload_vocabulary
 
 REAL_EMBED = Embedder.embed  # captured at import, before conftest's session-wide fake
 
@@ -97,7 +98,7 @@ def test_vocabulary_reimport_swaps_tables_and_keeps_indexes(
             )
 
     before = index_names("concept_ancestor")
-    resp = client.post("/api/vocabulary/import", headers=admin_headers)
+    resp = upload_vocabulary(client, admin_headers)
     assert _status(client, admin_headers, resp)["status"] == "SUCCESS"
     assert index_names("concept_ancestor") == before
     with get_engine().connect() as conn:
@@ -128,7 +129,7 @@ def test_vocabulary_import_with_a_failing_table_fails(
         raise RuntimeError("bad file")
 
     monkeypatch.setattr(vocabulary_import, "import_truncate_copy", broken)
-    resp = client.post("/api/vocabulary/import", headers=admin_headers)
+    resp = upload_vocabulary(client, admin_headers)
     task = _status(client, admin_headers, resp)
     assert task["status"] == "FAILURE"
     assert "concept_relationship" in task["error"] and "concept_ancestor" in task["error"]

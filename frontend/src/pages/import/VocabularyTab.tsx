@@ -1,17 +1,21 @@
-import { CheckCircle2, XCircle } from "lucide-react";
+import { UploadCloud } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { api, unwrap } from "@/api/client";
 import { useVocabularyStatus } from "@/api/queries";
 import { taskResult } from "@/api/taskResults";
-import type { Task } from "@/api/types";
+import type { Task, TaskRef } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
 import { ErrorAlert, StatCard } from "@/components/common";
 import { TaskProgress } from "@/components/TaskProgress";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { useStartTask } from "@/hooks/useStartTask";
 import { useLatestTask } from "@/hooks/useTasks";
 import { formatBytes, formatDate, formatNumber } from "@/lib/format";
+import { uploadFile } from "@/lib/upload";
 import { AdminNote } from "./AdminNote";
 
 function VocabularyImportResult({ task }: { task: Task }) {
@@ -47,12 +51,52 @@ function VocabularyImportResult({ task }: { task: Task }) {
   );
 }
 
+type Upload = { file: File; loaded: number; total: number; abort: () => void };
+
 export function VocabularyTab() {
   const { isAdmin } = useAuth();
   const status = useVocabularyStatus();
   const latest = useLatestTask("vocabulary.import");
   const { run, busy } = useStartTask();
   const active = latest.data && !latest.data.is_terminal;
+  const [file, setFile] = useState<File | null>(null);
+  const [upload, setUpload] = useState<Upload | null>(null);
+
+  const maxBytes = status.data?.max_upload_bytes ?? Infinity;
+  const problem = !file
+    ? null
+    : !file.name.toLowerCase().endsWith(".zip")
+      ? "Choose the .zip file as downloaded from Athena."
+      : file.size > maxBytes
+        ? `The file is ${formatBytes(file.size)}; the limit is ${formatBytes(maxBytes)}.`
+        : null;
+
+  // Leaving the page would cancel the upload
+  useEffect(() => {
+    if (!upload) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [upload]);
+
+  const start = (zip: File) =>
+    run(async () => {
+      const handle = uploadFile<TaskRef>(
+        `/api/vocabulary/import?filename=${encodeURIComponent(zip.name)}`,
+        zip,
+        (loaded, total) => setUpload((u) => (u ? { ...u, loaded, total } : u)),
+      );
+      setUpload({ file: zip, loaded: 0, total: zip.size, abort: handle.abort });
+      try {
+        const ref = await handle.promise;
+        setFile(null);
+        return ref;
+      } finally {
+        setUpload(null);
+      }
+    }, "Vocabulary import");
+
+  const percent = upload ? Math.round((upload.loaded / Math.max(upload.total, 1)) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -60,18 +104,21 @@ export function VocabularyTab() {
         <CardHeader>
           <CardTitle>Import OMOP vocabulary tables</CardTitle>
           <CardDescription>
-            Put the Athena download zip (no need to unpack it) or its CSV files in the <code>vocabulary/</code>{" "}
-            directory: <code>CONCEPT.csv</code>, <code>CONCEPT_RELATIONSHIP.csv</code> and{" "}
-            <code>CONCEPT_ANCESTOR.csv</code>, optionally <code>DRUG_STRENGTH.csv</code> and{" "}
-            <code>CONCEPT_SYNONYM.csv</code>. With several zips, the newest is used; a CSV next to it is used only if it
-            is newer. Concepts are upserted; the other tables are replaced. Mappings to concepts that are no longer
-            standard are replaced by their successor or removed. Search and mapping keep working during the import.
+            Upload the vocabulary download from{" "}
+            <a href="https://athena.ohdsi.org/" target="_blank" rel="noreferrer" className="underline">
+              Athena
+            </a>{" "}
+            as it is, a <code>.zip</code> (no need to unpack it). It should contain <code>CONCEPT.csv</code>,{" "}
+            <code>CONCEPT_RELATIONSHIP.csv</code> and <code>CONCEPT_ANCESTOR.csv</code>, optionally{" "}
+            <code>DRUG_STRENGTH.csv</code> and <code>CONCEPT_SYNONYM.csv</code>. Concepts are upserted; the other tables
+            are replaced. Mappings to concepts that are no longer standard are replaced by their successor or removed.
+            Search and mapping keep working during the import.
           </CardDescription>
         </CardHeader>
       </Card>
 
       <section className="space-y-3">
-        <h3 className="font-medium">Current import status</h3>
+        <h3 className="font-medium">Current tables</h3>
         <ErrorAlert error={status.error} />
         <div className="grid gap-4 sm:grid-cols-3">
           {status.data?.tables.map((t) => (
@@ -90,42 +137,62 @@ export function VocabularyTab() {
         </div>
       </section>
 
-      <section className="space-y-3">
-        <h3 className="font-medium">File status</h3>
-        <div className="divide-y rounded-md border">
-          {status.data?.files.map((f) => (
-            <div key={f.table_name} className="flex items-center gap-3 px-4 py-2 text-sm">
-              {f.exists ? (
-                <CheckCircle2 className="text-success size-4" aria-hidden />
-              ) : (
-                <XCircle className="text-destructive size-4" aria-hidden />
-              )}
-              <span className="flex-1 font-medium">
-                {f.filename}
-                {f.archive && <span className="text-muted-foreground font-normal"> in {f.archive}</span>}
-              </span>
-              <span className="text-muted-foreground w-24 text-right tabular-nums">
-                {f.exists ? formatBytes(f.size) : "Not found"}
-              </span>
-              <span className="w-36 text-right">{f.exists ? "Ready to import" : "File missing"}</span>
-            </div>
-          ))}
-        </div>
-        {status.data && (
-          <p className="text-muted-foreground text-xs">
-            Files are read from <code>{status.data.vocabulary_dir}</code> (the host's <code>vocabulary/</code> folder).
-          </p>
-        )}
-      </section>
-
       {isAdmin ? (
-        <Button
-          variant="cta"
-          disabled={busy || !!active || !status.data?.files.some((f) => f.exists)}
-          onClick={() => void run(async () => unwrap(await api.POST("/api/vocabulary/import")), "Vocabulary import")}
-        >
-          Import OMOP vocabulary
-        </Button>
+        <section className="space-y-3">
+          <h3 className="font-medium">Upload a vocabulary release</h3>
+          <div className="grid max-w-xl gap-2">
+            <Label htmlFor="vocabulary-zip">Athena download (.zip)</Label>
+            <Input
+              id="vocabulary-zip"
+              type="file"
+              accept=".zip,application/zip"
+              disabled={!!upload}
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+            {file && !problem && (
+              <p className="text-muted-foreground text-xs">
+                {file.name} · {formatBytes(file.size)}
+              </p>
+            )}
+            {problem && <p className="text-destructive text-xs">{problem}</p>}
+          </div>
+
+          {upload ? (
+            <div className="max-w-xl space-y-2 rounded-xl border p-3">
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
+                  <UploadCloud className="text-primary size-4 shrink-0" />
+                  <span className="truncate">Uploading {upload.file.name}</span>
+                </span>
+                <span className="text-muted-foreground shrink-0 tabular-nums">
+                  {formatBytes(upload.loaded)} / {formatBytes(upload.total)} · {percent}%
+                </span>
+              </div>
+              <Progress value={percent} />
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-muted-foreground text-xs">
+                  {percent >= 100
+                    ? "Checking the zip…"
+                    : "Keep this page open until the upload finishes; the import then runs in the background."}
+                </p>
+                <Button size="sm" variant="ghost" onClick={upload.abort} disabled={percent >= 100}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="cta"
+              disabled={!file || !!problem || busy || !!active}
+              onClick={() => file && void start(file)}
+            >
+              Upload and import
+            </Button>
+          )}
+          {active && !upload && (
+            <p className="text-muted-foreground text-xs">An import is running; wait for it to finish.</p>
+          )}
+        </section>
       ) : (
         <AdminNote />
       )}

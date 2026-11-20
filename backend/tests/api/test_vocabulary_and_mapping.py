@@ -1,10 +1,36 @@
-from tests.conftest import import_source_csv
+from tests.conftest import import_source_csv, upload_vocabulary, vocabulary_zip
 
 
-def test_vocabulary_status_lists_files(client, user_headers):
+def test_vocabulary_upload_is_checked(client, admin_headers, user_headers):
+    import io
+    import os
+    import zipfile
+
+    from app.core.config import get_settings
+
+    assert upload_vocabulary(client, user_headers).status_code == 403
+    bad = upload_vocabulary(client, admin_headers, b"concept_id\tconcept_name\n")
+    assert bad.status_code == 400 and "not a valid zip" in bad.json()["detail"]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("readme.txt", "no tables")
+    empty = upload_vocabulary(client, admin_headers, buf.getvalue())
+    assert empty.status_code == 400 and "CONCEPT.csv" in empty.json()["detail"]
+    assert upload_vocabulary(client, admin_headers, b"").status_code == 400
+    # Rejected uploads are not left on disk
+    upload_dir = get_settings().upload_dir
+    assert not [f for f in os.listdir(upload_dir) if f.startswith("vocabulary-")]
     status = client.get("/api/vocabulary/status", headers=user_headers).json()
-    files = {f["table_name"]: f for f in status["files"]}
-    assert files["concept"]["exists"] and files["concept"]["size"] > 0
+    assert status["max_upload_bytes"] > 1024**3
+    assert len(vocabulary_zip()) > 0
+
+
+def test_vocabulary_upload_size_limit(client, admin_headers, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "vocabulary_upload_max_mb", 0)
+    resp = upload_vocabulary(client, admin_headers)
+    assert resp.status_code == 413
 
 
 def test_vocabulary_import_and_atc7(client, admin_headers, loaded_vocabulary):
@@ -35,7 +61,7 @@ def test_vocabulary_import_and_atc7(client, admin_headers, loaded_vocabulary):
 
 
 def test_reimport_upserts_concepts(client, admin_headers, loaded_vocabulary):
-    resp = client.post("/api/vocabulary/import", headers=admin_headers)
+    resp = upload_vocabulary(client, admin_headers)
     task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
     assert task["status"] == "SUCCESS"
     assert task["result"]["tables"]["concept"]["records_imported"] == 0  # net new rows
@@ -193,7 +219,7 @@ def test_non_standard_mappings_are_replaced_or_removed_after_reimport(
     )
     stats = client.get("/api/source-vocabularies/11/stats", headers=user_headers).json()
     assert stats["mapped"] == 3  # pre-mapping to a non-standard concept is accepted on import
-    resp = client.post("/api/vocabulary/import", headers=admin_headers)
+    resp = upload_vocabulary(client, admin_headers)
     task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
     # ICD10 501 has "Maps to" SNOMED 201 and is replaced; ATC class 101 has no successor
     assert task["result"]["non_standard_mappings_replaced"] == 1
@@ -207,49 +233,22 @@ def test_non_standard_mappings_are_replaced_or_removed_after_reimport(
     assert {"auto_vocab_update", "vocab_removed"} <= methods
 
 
-def test_vocabulary_import_reads_an_athena_zip(
-    client, admin_headers, loaded_vocabulary, tmp_path, monkeypatch
-):
-    import zipfile
+def test_vocabulary_import_reads_an_athena_zip(client, admin_headers, loaded_vocabulary):
+    import os
 
     from app.core.config import get_settings
-    from tests.conftest import FIXTURES
 
-    archive = tmp_path / "vocabulary_download_v5.zip"
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
-        for csv in (FIXTURES / "vocabulary").glob("*.csv"):
-            zf.write(csv, f"athena/{csv.name}")  # a sub-folder inside the zip is fine
-        zf.writestr("readme.txt", "not a table")
-    monkeypatch.setattr(get_settings(), "vocabulary_dir", str(tmp_path))
-
-    files = client.get("/api/vocabulary/status", headers=admin_headers).json()["files"]
-    by_table = {f["table_name"]: f for f in files}
-    assert by_table["concept"]["exists"] and by_table["concept"]["archive"] == archive.name
-    assert by_table["drug_strength"]["exists"] is False  # not in the fixtures, so not in the zip
-
-    resp = client.post("/api/vocabulary/import", headers=admin_headers)
+    # A sub-folder inside the zip is fine; drug_strength is not in the fixtures
+    resp = upload_vocabulary(client, admin_headers, vocabulary_zip(prefix="athena/"))
     task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
     assert task["status"] == "SUCCESS", task
-    assert task["result"]["tables"]["concept_relationship"]["status"] == "success"
-    assert task["result"]["tables"]["concept_relationship"]["records_imported"] > 0
-
-
-def test_newer_csv_wins_over_an_older_zip(tmp_path):
-    import os
-    import zipfile
-
-    from app.services.vocabulary_status import check_vocabulary_files
-
-    archive = tmp_path / "old.zip"
-    with zipfile.ZipFile(archive, "w") as zf:
-        zf.writestr("CONCEPT.csv", "concept_id\n")
-        zf.writestr("CONCEPT_ANCESTOR.csv", "ancestor_concept_id\n")
-    os.utime(archive, (1_000_000, 1_000_000))
-    (tmp_path / "CONCEPT.csv").write_text("concept_id\n")
-    files = check_vocabulary_files(str(tmp_path))
-    assert files["concept"]["archive"] is None  # the CSV is newer
-    assert files["concept_ancestor"]["archive"] == "old.zip"  # only in the zip
-    assert files["concept_relationship"]["exists"] is False
+    tables = task["result"]["tables"]
+    assert tables["concept_relationship"]["status"] == "success"
+    assert tables["concept_relationship"]["records_imported"] > 0
+    assert tables["drug_strength"]["status"] == "skipped"
+    # The uploaded zip is deleted after the import
+    upload_dir = get_settings().upload_dir
+    assert not [f for f in os.listdir(upload_dir) if f.startswith("vocabulary-")]
 
 
 def test_vocabulary_update_reembeds_changed_and_new_concepts(
@@ -261,7 +260,6 @@ def test_vocabulary_update_reembeds_changed_and_new_concepts(
 
     from sqlalchemy import text
 
-    from app.core.config import get_settings
     from app.core.db import session_scope
     from tests.conftest import EMBED_CALLS, FIXTURES
 
@@ -279,16 +277,15 @@ def test_vocabulary_update_reembeds_changed_and_new_concepts(
     ]
     concept.write_text("\n".join(rows) + "\n")
 
-    def run_import():
-        resp = client.post("/api/vocabulary/import", headers=admin_headers)
+    def run_import(source=None):
+        resp = upload_vocabulary(client, admin_headers, vocabulary_zip(source))
         task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
         assert task["status"] == "SUCCESS", task
         return task["result"]
 
-    monkeypatch.setattr(get_settings(), "vocabulary_dir", str(tmp_path))
     try:
         EMBED_CALLS.clear()
-        result = run_import()
+        result = run_import(tmp_path)
         assert result["vectors_text_changed"] == 1
         assert result["drugs_with_atc7"] is not None
         refresh = result["embedding_refresh"]
@@ -301,7 +298,6 @@ def test_vocabulary_update_reembeds_changed_and_new_concepts(
         status = client.get("/api/embeddings/status", headers=admin_headers).json()
         assert status["changed"] == 0
     finally:
-        monkeypatch.undo()
         with session_scope() as session:
             session.execute(text("DELETE FROM concept WHERE concept_id IN (9001, 9002)"))
             session.commit()

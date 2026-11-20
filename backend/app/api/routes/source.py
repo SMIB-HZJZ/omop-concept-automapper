@@ -39,9 +39,7 @@ def _save_upload(file: UploadFile, path: str) -> None:
         while chunk := file.file.read(_CHUNK):
             written += len(chunk)
             if written > MAX_UPLOAD_BYTES:
-                raise HTTPException(
-                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "File is larger than 500 MB"
-                )
+                raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "File is larger than 500 MB")
             out.write(chunk)
 
 

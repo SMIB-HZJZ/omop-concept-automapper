@@ -601,7 +601,34 @@
           "vocabulary"
         ],
         "summary": "Start Vocabulary Import",
+        "description": "Upload an Athena vocabulary download (the zip as it is) and import it in the background.\n\nThe zip is the request body (not a form), so a multi-GB file is streamed straight to disk.",
         "operationId": "start_vocabulary_import_api_vocabulary_import_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 255
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Name of the uploaded zip",
+              "title": "Filename"
+            },
+            "description": "Name of the uploaded zip"
+          }
+        ],
         "responses": {
           "202": {
             "description": "Successful Response",
@@ -612,13 +639,29 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         },
-        "security": [
-          {
-            "HTTPBearer": []
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/zip": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
           }
-        ]
+        }
       }
     },
     "/api/atc7/stats": {
@@ -3846,45 +3889,6 @@
         ],
         "title": "EmbeddingStatus"
       },
-      "FileStatus": {
-        "properties": {
-          "table_name": {
-            "type": "string",
-            "title": "Table Name"
-          },
-          "filename": {
-            "type": "string",
-            "title": "Filename"
-          },
-          "exists": {
-            "type": "boolean",
-            "title": "Exists"
-          },
-          "size": {
-            "type": "integer",
-            "title": "Size"
-          },
-          "archive": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Archive"
-          }
-        },
-        "type": "object",
-        "required": [
-          "table_name",
-          "filename",
-          "exists",
-          "size"
-        ],
-        "title": "FileStatus"
-      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5810,23 +5814,15 @@
             "type": "array",
             "title": "Tables"
           },
-          "files": {
-            "items": {
-              "$ref": "#/components/schemas/FileStatus"
-            },
-            "type": "array",
-            "title": "Files"
-          },
-          "vocabulary_dir": {
-            "type": "string",
-            "title": "Vocabulary Dir"
+          "max_upload_bytes": {
+            "type": "integer",
+            "title": "Max Upload Bytes"
           }
         },
         "type": "object",
         "required": [
           "tables",
-          "files",
-          "vocabulary_dir"
+          "max_upload_bytes"
         ],
         "title": "VocabularyStatus"
       },

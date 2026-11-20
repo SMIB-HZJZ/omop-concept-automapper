@@ -237,7 +237,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start Vocabulary Import */
+        /**
+         * Start Vocabulary Import
+         * @description Upload an Athena vocabulary download (the zip as it is) and import it in the background.
+         *
+         *     The zip is the request body (not a form), so a multi-GB file is streamed straight to disk.
+         */
         post: operations["start_vocabulary_import_api_vocabulary_import_post"];
         delete?: never;
         options?: never;
@@ -1271,19 +1276,6 @@ export interface components {
             /** Percentage */
             percentage: number;
         };
-        /** FileStatus */
-        FileStatus: {
-            /** Table Name */
-            table_name: string;
-            /** Filename */
-            filename: string;
-            /** Exists */
-            exists: boolean;
-            /** Size */
-            size: number;
-            /** Archive */
-            archive?: string | null;
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1881,10 +1873,8 @@ export interface components {
         VocabularyStatus: {
             /** Tables */
             tables: components["schemas"]["TableStatus"][];
-            /** Files */
-            files: components["schemas"]["FileStatus"][];
-            /** Vocabulary Dir */
-            vocabulary_dir: string;
+            /** Max Upload Bytes */
+            max_upload_bytes: number;
         };
         /** WorkflowCatalog */
         WorkflowCatalog: {
@@ -2597,12 +2587,19 @@ export interface operations {
     };
     start_vocabulary_import_api_vocabulary_import_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Name of the uploaded zip */
+                filename?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/zip": string;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {
@@ -2611,6 +2608,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskRef"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

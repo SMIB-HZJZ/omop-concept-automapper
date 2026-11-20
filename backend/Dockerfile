@@ -25,7 +25,7 @@ COPY examples/ /app/examples/
 ENV PYTHONPATH=/app/backend:/app
 
 RUN useradd --uid 1001 --create-home app \
-    && mkdir -p /data/uploads /data/vocabulary \
+    && mkdir -p /data/uploads \
     && chown -R app:app /data
 USER app
 

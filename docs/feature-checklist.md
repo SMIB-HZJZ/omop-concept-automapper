@@ -12,7 +12,7 @@ Verified on 2026-10-07 against the full `docker compose up` stack (PostgreSQL 18
 | ID | Feature | Where now | Verified by |
 |---|---|---|---|
 | F1 | Vocabulary row counts + last import | Import › Vocabulary · `GET /vocabulary/status` | test_vocabulary_import_and_atc7, UI |
-| F2 | Vocabulary file status (exists, size) | same | test_vocabulary_status_lists_files, UI |
+| F2 | Vocabulary zip upload (checked: zip, tables present, size limit) | Import › Vocabulary · `POST /vocabulary/import` (zip as the request body) | test_vocabulary_upload_is_checked, test_vocabulary_upload_size_limit, UI |
 | F3 | Import OMOP vocabulary (upsert concept, truncate+copy others, index drop/recreate, `vocabulary_imports` log, clean non-standard mappings) | Celery `vocabulary.import_all` (COPY FROM STDIN, byte progress) | test_vocabulary_import_and_atc7, test_reimport_upserts_concepts, test_clean_non_standard_mappings_after_reimport, e2e |
 | F4 | Process ATC7 | Celery `atc7.process` | test_vocabulary_import_and_atc7, e2e |
 | F5 | ATC7 statistics | Import › ATC7 · `GET /atc7/stats` | test, UI |

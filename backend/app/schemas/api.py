@@ -132,19 +132,10 @@ class TableStatus(BaseModel):
     last_error: str | None = None
 
 
-class FileStatus(BaseModel):
-    table_name: str
-    filename: str
-    exists: bool
-    size: int
-    # Name of the zip the file is read from (None: a plain CSV in the directory)
-    archive: str | None = None
-
-
 class VocabularyStatus(BaseModel):
     tables: list[TableStatus]
-    files: list[FileStatus]
-    vocabulary_dir: str
+    # Largest zip the upload accepts, in bytes
+    max_upload_bytes: int
 
 
 class Atc7Stats(BaseModel):

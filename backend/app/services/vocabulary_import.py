@@ -1,6 +1,5 @@
-"""OMOP vocabulary import, streamed from the vocabulary directory with COPY … FROM STDIN.
-
-Files are read as CSVs or straight from an Athena download zip (decompressed while streaming).
+"""OMOP vocabulary import from an uploaded Athena download zip, streamed with COPY … FROM STDIN
+(the files are decompressed while they are read; nothing is unpacked to disk).
 
 Behaviour is ported from the Streamlit app:
 - ``concept`` is upserted through a temp table (existing concepts are updated, not deleted)
@@ -13,13 +12,12 @@ place, and the other two tables are built next to the live ones and swapped in a
 """
 
 import logging
-import os
 
 import psycopg
 
 from app.services.vocabulary_status import (
     VOCABULARY_FILES,
-    check_vocabulary_files,
+    archive_files,
     open_vocabulary_file,
 )
 from app.worker.progress import ProgressReporter, TaskCancelled
@@ -179,11 +177,11 @@ def import_truncate_copy(
 
 def import_all(
     conn: psycopg.Connection,
+    archive: str,
     progress: ProgressReporter | None = None,
     task_id: str | None = None,
-    vocabulary_dir: str | None = None,
 ) -> dict:
-    files = check_vocabulary_files(vocabulary_dir)
+    files = archive_files(archive)
     total = sum(f["size"] for f in files.values() if f["exists"])
     tracker = ByteProgress(progress, total)
     results: dict[str, dict] = {}
@@ -192,7 +190,7 @@ def import_all(
             results[table] = {
                 "status": "skipped",
                 "records_imported": 0,
-                "error": f"File not found: {info['filename']}",
+                "error": f"Not in the zip: {info['filename']}",
             }
             continue
         try:
@@ -213,7 +211,3 @@ def import_all(
             # The file was only partly read; keep the overall byte counter consistent
             tracker.done = sum(f["size"] for t, f in files.items() if f["exists"] and t in results)
     return results
-
-
-def vocabulary_dir_exists(path: str) -> bool:
-    return os.path.isdir(path)

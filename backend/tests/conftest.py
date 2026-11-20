@@ -5,10 +5,12 @@ Run inside the dev stack:  docker compose -f docker-compose.dev.yaml exec backen
 """
 
 import hashlib
+import io
 import math
 import os
 import re
 import uuid
+import zipfile
 from pathlib import Path
 
 import psycopg
@@ -30,7 +32,6 @@ os.environ.update(
         "DATABASE_URL": f"postgresql+psycopg://{_PG['user']}:{_PG['password']}@{_PG['host']}:{_PG['port']}/{_DB_NAME}",
         "REDIS_URL": os.environ.get("TEST_REDIS_URL", "redis://redis:6379/15"),
         "CELERY_TASK_ALWAYS_EAGER": "1",
-        "VOCABULARY_DIR": str(FIXTURES / "vocabulary"),
         "UPLOAD_DIR": f"/tmp/{_DB_NAME}-uploads",
         "LLM_EMBEDDING_MODEL": "test/embedder",
         "LLM_CHAT_MODEL": "test/chat",
@@ -180,10 +181,28 @@ def user_headers(client, admin_headers) -> dict:
     return _login(client, "mapper", "mapper-password")
 
 
+def vocabulary_zip(source: Path | None = None, prefix: str = "") -> bytes:
+    """An Athena-style zip of the CSVs in ``source`` (default: the fixture vocabulary)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for csv in sorted((source or FIXTURES / "vocabulary").glob("*.csv")):
+            zf.write(csv, f"{prefix}{csv.name}")
+    return buf.getvalue()
+
+
+def upload_vocabulary(client, headers, content: bytes | None = None, filename="athena.zip"):
+    return client.post(
+        "/api/vocabulary/import",
+        content=vocabulary_zip() if content is None else content,
+        params={"filename": filename},
+        headers={**headers, "Content-Type": "application/zip"},
+    )
+
+
 @pytest.fixture(scope="session")
 def loaded_vocabulary(client, admin_headers):
     """OMOP fixture vocabulary imported through the API, with ATC7 processed."""
-    resp = client.post("/api/vocabulary/import", headers=admin_headers)
+    resp = upload_vocabulary(client, admin_headers)
     assert resp.status_code == 202, resp.text
     task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
     assert task["status"] == "SUCCESS", task

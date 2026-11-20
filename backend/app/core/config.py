@@ -136,8 +136,9 @@ class Settings(BaseSettings):
     diskann_maintenance_work_mem: str = Field(default="1GB", pattern=r"^\d+\s*(kB|MB|GB|TB)?$")
 
     # --- Files ---
-    vocabulary_dir: str = "/data/vocabulary"
     upload_dir: str = "/data/uploads"
+    # Largest Athena vocabulary zip accepted for upload (a full download is a few GB)
+    vocabulary_upload_max_mb: int = 20_480
 
     # --- Auth ---
     jwt_secret: str = "change-me"

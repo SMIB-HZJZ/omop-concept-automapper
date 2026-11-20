@@ -12,8 +12,8 @@ x-backend-env: &backend-env
   POSTGRES_PORT: "5432"
   REDIS_URL: redis://redis:6379/0
   LLM_GATEWAY_URL: ${LLM_GATEWAY_URL:-http://litellm:4000}
-  VOCABULARY_DIR: /data/vocabulary
   UPLOAD_DIR: /data/uploads
+  VOCABULARY_UPLOAD_MAX_MB: ${VOCABULARY_UPLOAD_MAX_MB:-20480}
   CORS_ORIGINS: http://localhost:5173
   FORWARDED_ALLOW_IPS: 127.0.0.1
 
@@ -116,7 +116,6 @@ services:
       - ./backend:/app/backend
       - /app/backend/.venv
       - ./examples:/app/examples
-      - ./vocabulary:/data/vocabulary:ro
       - uploads:/data/uploads
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
@@ -146,7 +145,6 @@ services:
       - ./backend:/app/backend
       - /app/backend/.venv
       - ./examples:/app/examples
-      - ./vocabulary:/data/vocabulary:ro
       - uploads:/data/uploads
 
   frontend:

@@ -10,8 +10,8 @@ x-backend-env: &backend-env
   POSTGRES_PORT: "5432"
   REDIS_URL: redis://redis:6379/0
   LLM_GATEWAY_URL: ${LLM_GATEWAY_URL:-http://litellm:4000}
-  VOCABULARY_DIR: /data/vocabulary
   UPLOAD_DIR: /data/uploads
+  VOCABULARY_UPLOAD_MAX_MB: ${VOCABULARY_UPLOAD_MAX_MB:-20480}
   # Only the compose network (i.e. the nginx frontend) may set X-Forwarded-For
   FORWARDED_ALLOW_IPS: ${APP_SUBNET:-172.29.250.0/24}
 
@@ -94,7 +94,6 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./vocabulary:/data/vocabulary:ro
       - uploads:/data/uploads
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
@@ -115,7 +114,6 @@ services:
       backend:
         condition: service_healthy
     volumes:
-      - ./vocabulary:/data/vocabulary:ro
       - uploads:/data/uploads
     # Same image as the API: replace its HTTP healthcheck with a Celery ping
     healthcheck:
