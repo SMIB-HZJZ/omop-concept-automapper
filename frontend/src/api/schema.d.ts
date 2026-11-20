@@ -1794,6 +1794,11 @@ export interface components {
              * @default 0
              */
             flagged: number;
+            /**
+             * Todo
+             * @default 0
+             */
+            todo: number;
             /** Total */
             total: number;
             /** Page */

@@ -168,36 +168,38 @@ function AuditTrail({ vocabularyId }: { vocabularyId: number }) {
   );
 }
 
-const VIEWS: { value: UnmappedView; label: string }[] = [
-  { value: "todo", label: "To do" },
-  { value: "suggested", label: "AI suggested" },
-  { value: "flagged", label: "Flagged" },
-  { value: "all", label: "All" },
+const VIEWS: { value: UnmappedView; label: string; hint: string }[] = [
+  { value: "todo", label: "To do", hint: "Terms nobody is handling yet: no flag, nothing waiting in Review" },
+  { value: "suggested", label: "In review", hint: "AI suggestions waiting in Review" },
+  { value: "flagged", label: "Flagged", hint: "Ask a colleague or can't be mapped" },
+  { value: "all", label: "All unmapped", hint: "Every term without a mapping; mapped terms are in Check & commit" },
 ];
 
 function ListTabs({
   value,
   onChange,
-  flagged,
-  pending,
+  counts,
 }: {
   value: UnmappedView;
   onChange: (v: UnmappedView) => void;
-  flagged: number;
-  pending: number;
+  counts: Partial<Record<UnmappedView, number>>;
 }) {
-  const counts: Partial<Record<UnmappedView, number>> = { flagged, suggested: pending };
   return (
-    <div role="tablist" aria-label="Which terms to show" className="bg-muted inline-flex rounded-lg p-0.5">
+    <div
+      role="tablist"
+      aria-label="Which terms to show"
+      className="bg-muted inline-flex max-w-full flex-wrap rounded-lg p-0.5"
+    >
       {VIEWS.map((v) => (
         <button
           key={v.value}
           type="button"
           role="tab"
           aria-selected={value === v.value}
+          title={v.hint}
           onClick={() => onChange(v.value)}
           className={cn(
-            "flex h-7 cursor-pointer items-center gap-1 rounded-md px-2.5 text-xs transition-colors",
+            "flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-xs whitespace-nowrap transition-colors",
             value === v.value
               ? "bg-background text-foreground font-medium shadow-sm"
               : "text-muted-foreground hover:text-foreground",
@@ -363,8 +365,12 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
                 <ListTabs
                   value={view}
                   onChange={setView}
-                  flagged={unmapped.data?.flagged ?? 0}
-                  pending={stats.data?.pending_suggestions ?? 0}
+                  counts={{
+                    todo: unmapped.data?.todo,
+                    suggested: stats.data?.pending_suggestions,
+                    flagged: unmapped.data?.flagged,
+                    all: stats.data?.unmapped,
+                  }}
                 />
                 <span className="text-muted-foreground text-xs">
                   {formatNumber(unmapped.data?.total)} · most frequent first · ↑↓

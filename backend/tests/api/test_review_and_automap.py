@@ -70,6 +70,7 @@ def test_automap_review_mode_then_accept_and_reject(
     assert any(i["suggestion_concept_id"] == 1 for i in suggested["items"])
     todo = client.get(url, headers=user_headers).json()
     assert all(i["suggestion_id"] is None for i in todo["items"]) and todo["items"]
+    assert todo["todo"] == todo["total"] == suggested["todo"]
     again = _run(client, admin_headers, 21, drug_specific=True)
     assert again["result"]["processed"] == 2
 

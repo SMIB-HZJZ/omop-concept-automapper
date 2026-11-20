@@ -5620,6 +5620,11 @@
             "title": "Flagged",
             "default": 0
           },
+          "todo": {
+            "type": "integer",
+            "title": "Todo",
+            "default": 0
+          },
           "total": {
             "type": "integer",
             "title": "Total"

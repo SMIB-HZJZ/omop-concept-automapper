@@ -257,6 +257,8 @@ class UnmappedPage(BaseModel):
     items: list[UnmappedItem]
     # Flagged terms not mapped yet (in any view), for the "Flagged" tab count
     flagged: int = 0
+    # Terms left to do whatever the selected view (no flag, nothing waiting in Review)
+    todo: int = 0
     total: int
     page: int
     per_page: int

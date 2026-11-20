@@ -148,6 +148,16 @@ def get_unmapped(
         ),
         {"v": vocabulary_id},
     ).scalar_one()
+    todo = session.execute(
+        text(
+            f"""
+            SELECT COUNT(*) {joins}
+            WHERE sc.source_vocabulary_id = :v AND {UNMAPPED_VIEWS["todo"]}
+              AND NOT EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
+            """
+        ),
+        {"v": vocabulary_id},
+    ).scalar_one()
     pages = max(1, math.ceil(total / per_page))
     page = min(max(page, 1), pages)
     rows = session.execute(
@@ -182,6 +192,7 @@ def get_unmapped(
         "per_page": per_page,
         "pages": pages,
         "flagged": flagged,
+        "todo": todo,
     }
 
 
