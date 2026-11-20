@@ -85,10 +85,6 @@ def test_sync_tasks(client, admin_headers, embedded):
     task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
     assert task["status"] == "SUCCESS" and task["result"]["removed"] == 0
 
-    resp = client.post("/api/embeddings/sync-atc7", headers=admin_headers)
-    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
-    assert task["result"]["embedded_with_atc7"] == 7  # 9 drugs with ATC7 minus box + marketed
-
 
 def test_clear_embeddings_in_other_collection(client, admin_headers, embedded):
     # Switch to another embedding space, embed one domain, clear it, switch back

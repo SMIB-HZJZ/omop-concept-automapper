@@ -11,7 +11,7 @@ export const TASK_LABELS: Record<string, string> = {
   "source.import": "Source concept import",
   "embeddings.embed": "Embedding",
   "embeddings.sync_metadata": "Metadata sync",
-  "embeddings.sync_atc7": "ATC7 sync",
+  "embeddings.sync_atc7": "ATC7 sync", // older task history
   "automap.run": "Auto-mapping",
 };
 

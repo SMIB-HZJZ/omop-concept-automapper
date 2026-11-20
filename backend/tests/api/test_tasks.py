@@ -58,7 +58,7 @@ def test_task_lock_released_and_heartbeat_cleared(client, admin_headers):
     from app.worker.base import lock_key
     from app.worker.progress import heartbeat_key
 
-    resp = client.post("/api/embeddings/sync-atc7", headers=admin_headers)
+    resp = client.post("/api/embeddings/sync-metadata", headers=admin_headers)
     task_id = resp.json()["task_id"]
     assert client.get(f"/api/tasks/{task_id}", headers=admin_headers).json()["status"] == "SUCCESS"
     assert not get_redis().exists(lock_key("embed"))
@@ -66,23 +66,23 @@ def test_task_lock_released_and_heartbeat_cleared(client, admin_headers):
 
 
 def test_broker_failure_marks_task_failed(client, admin_headers, monkeypatch):
-    from app.worker.tasks.embeddings import sync_atc7
+    from app.worker.tasks.embeddings import sync_metadata
 
     def broken(*args, **kwargs):
         raise ConnectionError("broker down")
 
-    monkeypatch.setattr(sync_atc7, "apply_async", broken)
-    resp = client.post("/api/embeddings/sync-atc7", headers=admin_headers)
+    monkeypatch.setattr(sync_metadata, "apply_async", broken)
+    resp = client.post("/api/embeddings/sync-metadata", headers=admin_headers)
     assert resp.status_code == 503
     failed = client.get(
         "/api/tasks",
-        params={"kind": "embeddings.sync_atc7", "active": False},
+        params={"kind": "embeddings.sync_metadata", "active": False},
         headers=admin_headers,
     ).json()[0]
     assert failed["status"] == "FAILURE" and "broker down" in failed["error"]
     # The failed launch does not block the next one
     monkeypatch.undo()
-    assert client.post("/api/embeddings/sync-atc7", headers=admin_headers).status_code == 202
+    assert client.post("/api/embeddings/sync-metadata", headers=admin_headers).status_code == 202
 
 
 def test_cooperative_cancel(

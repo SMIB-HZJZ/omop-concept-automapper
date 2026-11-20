@@ -68,12 +68,6 @@ class SyncMetadataResult(_Result):
     message: str | None = None
 
 
-class SyncAtc7Result(_Result):
-    collection: str | None = None
-    embedded_with_atc7: int
-    message: str | None = None
-
-
 class AutomapResult(_Result):
     vocabulary_id: int
     total_concepts: int
@@ -97,7 +91,6 @@ TASK_RESULT_MODELS: dict[str, type[BaseModel]] = {
     "source.import": SourceImportResult,
     "embeddings.embed": EmbedResult,
     "embeddings.sync_metadata": SyncMetadataResult,
-    "embeddings.sync_atc7": SyncAtc7Result,
     "automap.run": AutomapResult,
 }
 

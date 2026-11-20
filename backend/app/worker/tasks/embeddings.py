@@ -4,8 +4,6 @@ import hashlib
 import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 
-from sqlalchemy import text
-
 from app.core import cache
 from app.core.config import get_settings
 from app.core.db import raw_connection, session_scope
@@ -175,23 +173,4 @@ def sync_metadata(self, user_id: int | None = None) -> dict:
         "removed": removed,
         "relabeled": relabeled,
         "message": "Names, classes and ATC7 codes are read live from the vocabulary tables.",
-    }
-
-
-@celery_app.task(bind=True, base=TrackedTask, name="embeddings.sync_atc7", lock_name="embed")
-def sync_atc7(self, user_id: int | None = None) -> dict:
-    _, _, col = _active_collection(probe=False)
-    if col is None:
-        return {"embedded_with_atc7": 0, "message": "No embeddings in the current collection"}
-    self.progress.phase("Checking ATC7 coverage of embedded concepts")
-    with session_scope() as session:
-        count = session.execute(
-            text(
-                f"SELECT COUNT(*) FROM {col.table_name} e JOIN concept_atc7 a ON a.concept_id = e.concept_id"
-            )
-        ).scalar_one()
-    return {
-        "collection": col.name,
-        "embedded_with_atc7": count,
-        "message": "ATC7 codes are joined live at search time, so they are always current.",
     }

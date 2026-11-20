@@ -21,7 +21,6 @@ LOCK_GROUPS = {
     "vocabulary.import": "vocab",
     "embeddings.embed": "embed",
     "embeddings.sync_metadata": "embed",
-    "embeddings.sync_atc7": "embed",
 }
 
 

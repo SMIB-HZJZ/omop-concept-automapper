@@ -19,7 +19,7 @@ Verified on 2026-10-07 against the full `docker compose up` stack (PostgreSQL 18
 | F6 | Source CSV upload, preview, vocabulary id, freq NaN→1, `;` pre-mappings validated | Import › Source (papaparse preview/validation) · Celery `source.import_csv` | test_source_import_and_mapping_flow, test_source_import_validates_columns, e2e |
 | F7 | Embedding status, domain filter, batch size, embed standard concepts | Import › Embeddings · Celery `embeddings.embed_standard` | test_embed_status_and_index, e2e, UI |
 | F8 | Sync standard metadata | `embeddings.sync_metadata` (prune non-standard + relabel; metadata is joined live) | test_sync_tasks, e2e |
-| F9 | Sync ATC7 only | `embeddings.sync_atc7` (coverage report; ATC7 is joined live) | test_sync_tasks |
+| F9 | Sync ATC7 only | Removed: ATC7 codes are joined live at search time and computed by the vocabulary import | — |
 | F10 | Clear all embeddings | `DELETE /embeddings` (confirm by typing the collection name) | test_clear_embeddings_in_other_collection |
 | F11 | Search (query, domains, k, vocabulary, ATC7; rank/score/details/≤5 ATC7) | Search page · `POST /search` | test_search_filters, UI |
 | F12 | Source vocabulary selector + drug checkbox | `VocabularySelector` (shared across pages; drug default stored per vocabulary) | UI |

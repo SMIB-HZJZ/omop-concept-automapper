@@ -9,7 +9,6 @@ export type TaskResults = {
   "source.import": S["SourceImportResult"];
   "embeddings.embed": S["EmbedResult"];
   "embeddings.sync_metadata": S["SyncMetadataResult"];
-  "embeddings.sync_atc7": S["SyncAtc7Result"];
   "automap.run": S["AutomapResult"];
 };
 

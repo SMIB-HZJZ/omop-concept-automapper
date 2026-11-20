@@ -2273,32 +2273,6 @@
         ]
       }
     },
-    "/api/embeddings/sync-atc7": {
-      "post": {
-        "tags": [
-          "embeddings"
-        ],
-        "summary": "Start Sync Atc7",
-        "operationId": "start_sync_atc7_api_embeddings_sync_atc7_post",
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskRef"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/embeddings": {
       "delete": {
         "tags": [
@@ -6209,44 +6183,6 @@
           "vocabulary_id"
         ],
         "title": "SourceImportResult",
-        "type": "object"
-      },
-      "SyncAtc7Result": {
-        "additionalProperties": true,
-        "properties": {
-          "collection": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Collection"
-          },
-          "embedded_with_atc7": {
-            "title": "Embedded With Atc7",
-            "type": "integer"
-          },
-          "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Message"
-          }
-        },
-        "required": [
-          "embedded_with_atc7"
-        ],
-        "title": "SyncAtc7Result",
         "type": "object"
       },
       "SyncMetadataResult": {

@@ -7,7 +7,7 @@ from app.schemas.api import EmbeddingStatus, EmbedRequest, Message, TaskRef
 from app.services import tasks as task_service
 from app.services.settings_store import get_effective_config
 from app.vector import store
-from app.worker.tasks.embeddings import embed_standard_concepts, sync_atc7, sync_metadata
+from app.worker.tasks.embeddings import embed_standard_concepts, sync_metadata
 
 router = APIRouter(prefix="/embeddings", tags=["embeddings"])
 
@@ -40,11 +40,6 @@ def embed(body: EmbedRequest, user: AdminUser, session: SessionDep):
 @router.post("/sync-metadata", response_model=TaskRef, status_code=status.HTTP_202_ACCEPTED)
 def start_sync_metadata(user: AdminUser, session: SessionDep):
     return start_task(session, "embeddings.sync_metadata", sync_metadata, {}, user)
-
-
-@router.post("/sync-atc7", response_model=TaskRef, status_code=status.HTTP_202_ACCEPTED)
-def start_sync_atc7(user: AdminUser, session: SessionDep):
-    return start_task(session, "embeddings.sync_atc7", sync_atc7, {}, user)
 
 
 @router.delete("", response_model=Message)

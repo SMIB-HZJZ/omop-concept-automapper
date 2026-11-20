@@ -738,23 +738,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/embeddings/sync-atc7": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start Sync Atc7 */
-        post: operations["start_sync_atc7_api_embeddings_sync_atc7_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/embeddings": {
         parameters: {
             query?: never;
@@ -2038,23 +2021,6 @@ export interface components {
              * @default null
              */
             filename: string | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /** SyncAtc7Result */
-        SyncAtc7Result: {
-            /**
-             * Collection
-             * @default null
-             */
-            collection: string | null;
-            /** Embedded With Atc7 */
-            embedded_with_atc7: number;
-            /**
-             * Message
-             * @default null
-             */
-            message: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -3531,26 +3497,6 @@ export interface operations {
         };
     };
     start_sync_metadata_api_embeddings_sync_metadata_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TaskRef"];
-                };
-            };
-        };
-    };
-    start_sync_atc7_api_embeddings_sync_atc7_post: {
         parameters: {
             query?: never;
             header?: never;

@@ -7,7 +7,6 @@ ADMIN_ONLY = [
     ("post", "/api/vocabulary/import", None),
     ("post", "/api/embeddings/embed", {"batch_size": 100}),
     ("post", "/api/embeddings/sync-metadata", None),
-    ("post", "/api/embeddings/sync-atc7", None),
     ("delete", "/api/embeddings", None),
     ("put", "/api/config", {"llm_model": "x/y"}),
     ("post", "/api/config/reset", None),

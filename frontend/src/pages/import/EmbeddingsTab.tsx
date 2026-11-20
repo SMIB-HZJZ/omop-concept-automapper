@@ -29,8 +29,6 @@ function EmbeddingResult({ task }: { task: Task }) {
   if (sync) {
     return `Removed ${formatNumber(sync.removed)} non-standard concepts, refreshed ${formatNumber(sync.relabeled)} domain labels. ${sync.message ?? ""}`;
   }
-  const atc7 = taskResult(task, "embeddings.sync_atc7");
-  if (atc7) return `${formatNumber(atc7.embedded_with_atc7)} embedded concepts have ATC7 codes. ${atc7.message ?? ""}`;
   return null;
 }
 
@@ -117,8 +115,7 @@ export function EmbeddingsTab() {
 
   const embed = useLatestTask("embeddings.embed");
   const syncMetadata = useLatestTask("embeddings.sync_metadata");
-  const syncAtc7 = useLatestTask("embeddings.sync_atc7");
-  const tasks = [embed.data, syncMetadata.data, syncAtc7.data];
+  const tasks = [embed.data, syncMetadata.data];
   const latest = newest(tasks);
   const anyActive = tasks.some((t) => t && !t.is_terminal);
   const disabled = busy || anyActive;
@@ -209,20 +206,13 @@ export function EmbeddingsTab() {
             >
               Sync standard concepts metadata
             </Button>
-            <Button
-              variant="outline"
-              disabled={disabled}
-              onClick={() => void run(async () => unwrap(await api.POST("/api/embeddings/sync-atc7")), "ATC7 sync")}
-            >
-              Sync ATC7 codes only
-            </Button>
           </div>
         ) : (
           <AdminNote />
         )}
         <p className="text-muted-foreground text-xs">
-          Concept names, classes and ATC7 codes are joined live from the vocabulary tables at search time, so the syncs
-          only remove vectors of concepts that are no longer standard, refresh domain labels, and report ATC7 coverage.
+          Concept names, classes and ATC7 codes are joined live from the vocabulary tables at search time, so the sync
+          only removes vectors of concepts that are no longer standard and refreshes domain labels.
         </p>
       </section>
 
