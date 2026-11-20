@@ -55,6 +55,7 @@ def test_automap_review_mode_then_accept_and_reject(
     assert result["processed"] == 4
     assert result["queued"] == 2 and result["mapped"] == 0
     assert result["outcomes"].get("no_match") == 1
+    assert result["below_threshold"] == 1  # headache: kept for the term list, not queued
 
     page = client.get("/api/source-vocabularies/21/suggestions", headers=user_headers).json()
     assert page["total"] == 2
@@ -95,6 +96,47 @@ def test_automap_review_mode_then_accept_and_reject(
         headers=user_headers,
     ).json()
     assert history["items"][0]["decided_by"] == "mapper"
+
+
+def test_automap_keeps_the_latest_pick_below_the_threshold(
+    client, admin_headers, user_headers, embedded, fake_reranker, no_name_match
+):
+    import_source_csv(client, admin_headers, 24)
+    fake_reranker.overrides = {"headache": 5}
+    task = _run(client, admin_headers, 24)
+    assert task["result"]["below_threshold"] == 1, task["result"]
+
+    # Not in the review queue, but on the term list with its pick and confidence
+    review = client.get("/api/source-vocabularies/24/suggestions", headers=user_headers).json()
+    assert "headache" not in {s["source_concept_name"] for s in review["items"]}
+    unmapped = client.get("/api/source-vocabularies/24/unmapped", headers=user_headers).json()
+    item = next(i for i in unmapped["items"] if i["source_concept_name"] == "headache")
+    assert item["low_confidence"] == 5 and item["low_concept_name"]
+    assert item["suggestion_id"] is None
+    low = client.get(
+        "/api/source-vocabularies/24/suggestions",
+        params={"status": "below_threshold", "source_id": item["source_id"]},
+        headers=user_headers,
+    ).json()
+    assert low["total"] == 1 and low["items"][0]["confidence"] == 5
+
+    # The next run tries the term again; the latest result replaces the old one
+    fake_reranker.overrides = {"headache": 6}
+    again = _run(client, admin_headers, 24)
+    assert again["result"]["processed"] == 1  # only headache is left (the rest is queued)
+    low = client.get(
+        "/api/source-vocabularies/24/suggestions",
+        params={"status": "below_threshold"},
+        headers=user_headers,
+    ).json()
+    assert [s["confidence"] for s in low["items"]] == [6]
+
+    # A confident pick queues it for review and drops the hint
+    fake_reranker.overrides = {}
+    _run(client, admin_headers, 24)
+    unmapped = client.get("/api/source-vocabularies/24/unmapped", headers=user_headers).json()
+    item = next(i for i in unmapped["items"] if i["source_concept_name"] == "headache")
+    assert item["low_concept_id"] is None and item["suggestion_id"] is not None
 
 
 def test_automap_commit_mode(

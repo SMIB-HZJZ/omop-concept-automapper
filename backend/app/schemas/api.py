@@ -220,6 +220,11 @@ class UnmappedItem(BaseModel):
     suggestion_concept_id: int | None = None
     suggestion_confidence: int | None = None
     suggestion_id: int | None = None
+    # The latest auto-mapping pick under the confidence threshold (not queued for review)
+    low_concept_id: int | None = None
+    low_concept_name: str | None = None
+    low_confidence: int | None = None
+    low_extra_count: int | None = None
     flag: Literal["unmappable", "question"] | None = None
     flag_note: str | None = None
     flagged_by: str | None = None

@@ -35,7 +35,7 @@ import { ManualConceptIds } from "./ManualConceptIds";
 import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 import { SelectedConcepts } from "./SelectedConcepts";
 import { SuggestionAlert } from "./SuggestionAlert";
-import { FlagBanner, FlagButton, WaitingSuggestion } from "./TermExtras";
+import { BelowThresholdPick, FlagBanner, FlagButton, WaitingSuggestion } from "./TermExtras";
 import { DEFAULT_LIMIT } from "./searchRequest";
 import type { ConceptLike } from "./types";
 import { ConceptLink } from "@/components/ConceptLink";
@@ -193,6 +193,15 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
     sort: "newest",
   });
   const waiting = concept.suggestion_id ? (waitingQuery.data?.items[0] ?? null) : null;
+  // The latest auto-mapping pick under the threshold (not queued): shown as a hint, not pre-ticked
+  const lowQuery = useSuggestions(concept.low_concept_id && !concept.suggestion_id ? vocabularyId : null, {
+    status: "below_threshold",
+    source_id: concept.source_id,
+    page: 1,
+    per_page: 1,
+    sort: "newest",
+  });
+  const lowPick = concept.low_concept_id && !concept.suggestion_id ? (lowQuery.data?.items[0] ?? null) : null;
   const waitingIds = useMemo(
     () => (waiting ? [waiting.concept_id, ...(waiting.extra_concepts ?? []).map((c) => c.concept_id)] : []),
     [waiting],
@@ -521,6 +530,29 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
             busy={acceptSuggestion.isPending || rejectSuggestion.isPending}
             onAccept={() => decideWaiting("accept")}
             onReject={() => decideWaiting("reject")}
+          />
+        )}
+
+        {lowPick && !suggestion && (
+          <BelowThresholdPick
+            suggestion={lowPick}
+            onSelect={() => {
+              addConcept({
+                concept_id: lowPick.concept_id,
+                concept_name: lowPick.concept_name,
+                domain_id: lowPick.domain_id,
+                vocabulary_id: lowPick.vocabulary_id,
+                concept_class_id: lowPick.concept_class_id,
+              });
+              for (const c of lowPick.extra_concepts ?? [])
+                addConcept({
+                  concept_id: c.concept_id,
+                  concept_name: c.concept_name,
+                  domain_id: lowPick.domain_id,
+                  vocabulary_id: lowPick.vocabulary_id,
+                  concept_class_id: c.concept_class_id,
+                });
+            }}
           />
         )}
 

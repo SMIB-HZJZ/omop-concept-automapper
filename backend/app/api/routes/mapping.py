@@ -166,7 +166,9 @@ def list_suggestions(
     vocabulary_id: int,
     _: CurrentUser,
     session: SessionDep,
-    status_: str = Query("pending", alias="status", pattern="^(pending|accepted|rejected)$"),
+    status_: str = Query(
+        "pending", alias="status", pattern="^(pending|accepted|rejected|below_threshold)$"
+    ),
     min_confidence: int | None = Query(None, ge=1, le=10),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=500),

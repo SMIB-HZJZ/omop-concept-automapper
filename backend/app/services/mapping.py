@@ -126,6 +126,12 @@ def get_unmapped(
         "FROM source_concepts sc"
         " LEFT JOIN mapping_suggestion ms ON ms.source_id = sc.source_id AND ms.status = 'pending'"
     )
+    # The latest auto-mapping pick that stayed under the threshold (not in the review queue)
+    low_join = (
+        " LEFT JOIN mapping_suggestion low"
+        " ON low.source_id = sc.source_id AND low.status = 'below_threshold'"
+        " LEFT JOIN concept lc ON lc.concept_id = low.concept_id"
+    )
     total = session.execute(text(f"SELECT COUNT(*) {joins} WHERE {where}"), params).scalar_one()
     flagged = session.execute(
         text(
@@ -146,8 +152,11 @@ def get_unmapped(
                    sc.source_vocabulary_id, sc.freq, 0 AS mapped_concepts,
                    ms.concept_id AS suggestion_concept_id, ms.confidence AS suggestion_confidence,
                    ms.id AS suggestion_id,
+                   low.concept_id AS low_concept_id, lc.concept_name AS low_concept_name,
+                   low.confidence AS low_confidence,
+                   cardinality(low.extra_concept_ids) AS low_extra_count,
                    sc.flag, sc.flag_note, sc.flagged_at, u.username AS flagged_by
-            {joins}
+            {joins}{low_join}
             LEFT JOIN app_user u ON u.id = sc.flagged_by
             WHERE {where}
             ORDER BY sc.freq DESC NULLS LAST, sc.source_id
@@ -503,7 +512,10 @@ def map_concepts(
     session.execute(text("DELETE FROM source_standard_map WHERE source_id = :s"), {"s": source_id})
     # A manual/accepted mapping supersedes a pending suggestion
     session.execute(
-        text("DELETE FROM mapping_suggestion WHERE source_id = :s AND status = 'pending'"),
+        text(
+            "DELETE FROM mapping_suggestion "
+            "WHERE source_id = :s AND status IN ('pending', 'below_threshold')"
+        ),
         {"s": source_id},
     )
     for concept_id in concept_ids:
@@ -637,7 +649,7 @@ def update_non_standard_mappings(conn) -> dict[str, int]:
         cur.execute(
             """
             DELETE FROM mapping_suggestion ms
-            WHERE ms.status = 'pending' AND EXISTS (
+            WHERE ms.status IN ('pending', 'below_threshold') AND EXISTS (
                 SELECT 1 FROM concept c
                 WHERE c.concept_id = ANY(ms.extra_concept_ids || ms.concept_id)
                   AND (c.standard_concept IS DISTINCT FROM 'S' OR c.invalid_reason IS NOT NULL))

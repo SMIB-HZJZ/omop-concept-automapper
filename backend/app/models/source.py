@@ -89,7 +89,7 @@ class MappingSuggestion(SQLModel, table=True):
     )
     rationale: str | None = None
     task_id: str | None = None
-    status: str = "pending"  # pending | accepted | rejected
+    status: str = "pending"  # pending | accepted | rejected | below_threshold
     decided_by: int | None = Field(default=None, foreign_key="app_user.id")
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now())

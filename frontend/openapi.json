@@ -1715,7 +1715,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "pattern": "^(pending|accepted|rejected)$",
+              "pattern": "^(pending|accepted|rejected|below_threshold)$",
               "default": "pending",
               "title": "Status"
             }
@@ -5474,6 +5474,50 @@
             ],
             "title": "Suggestion Id"
           },
+          "low_concept_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Concept Id"
+          },
+          "low_concept_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Concept Name"
+          },
+          "low_confidence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Confidence"
+          },
+          "low_extra_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Extra Count"
+          },
           "flag": {
             "anyOf": [
               {
@@ -5940,6 +5984,11 @@
           },
           "queued": {
             "title": "Queued",
+            "type": "integer"
+          },
+          "below_threshold": {
+            "default": 0,
+            "title": "Below Threshold",
             "type": "integer"
           },
           "skipped": {

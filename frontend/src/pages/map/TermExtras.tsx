@@ -1,4 +1,4 @@
-import { Ban, Check, Flag, MessageCircleQuestion, Sparkles, X } from "lucide-react";
+import { Ban, Check, Flag, MessageCircleQuestion, Plus, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -62,6 +62,44 @@ export function WaitingSuggestion({
             <X /> Reject
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** The latest auto-mapping pick for this term that stayed under the confidence threshold: not in
+ *  the review queue, shown as a hint the mapper can take over. */
+export function BelowThresholdPick({ suggestion, onSelect }: { suggestion: Suggestion; onSelect: () => void }) {
+  return (
+    <div className="rounded-xl border border-dashed p-3">
+      <div className="flex flex-wrap items-start gap-3">
+        <Sparkles className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Last auto-mapping picked </span>
+            <ConceptLink conceptId={suggestion.concept_id} className="font-semibold">
+              {suggestion.concept_name}
+            </ConceptLink>
+            {(suggestion.extra_concepts ?? []).map((c) => (
+              <span key={c.concept_id}>
+                {" + "}
+                <ConceptLink conceptId={c.concept_id} className="font-semibold">
+                  {c.concept_name}
+                </ConceptLink>
+              </span>
+            ))}
+            <span className="text-muted-foreground">
+              {" "}
+              · confidence <b className="text-warning">{suggestion.confidence}</b>, below the threshold
+              {suggestion.match_type && suggestion.match_type !== "exact" ? ` · ${suggestion.match_type} match` : ""}
+            </span>
+          </div>
+          <Rationale text={suggestion.rationale} className="text-muted-foreground text-xs leading-relaxed" />
+          <div className="text-muted-foreground text-xs">{formatDate(suggestion.created_at)}</div>
+        </div>
+        <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={onSelect}>
+          <Plus /> Select
+        </Button>
       </div>
     </div>
   );

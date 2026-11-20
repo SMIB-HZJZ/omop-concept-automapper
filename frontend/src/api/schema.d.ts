@@ -1758,6 +1758,14 @@ export interface components {
             suggestion_confidence?: number | null;
             /** Suggestion Id */
             suggestion_id?: number | null;
+            /** Low Concept Id */
+            low_concept_id?: number | null;
+            /** Low Concept Name */
+            low_concept_name?: string | null;
+            /** Low Confidence */
+            low_confidence?: number | null;
+            /** Low Extra Count */
+            low_extra_count?: number | null;
             /** Flag */
             flag?: ("unmappable" | "question") | null;
             /** Flag Note */
@@ -1903,6 +1911,11 @@ export interface components {
             mapped: number;
             /** Queued */
             queued: number;
+            /**
+             * Below Threshold
+             * @default 0
+             */
+            below_threshold: number;
             /**
              * Skipped
              * @default 0

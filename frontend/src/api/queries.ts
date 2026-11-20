@@ -188,7 +188,7 @@ export const useAuditRecent = (id: number | null, limit = 10) =>
   });
 
 export type SuggestionFilters = {
-  status: "pending" | "accepted" | "rejected";
+  status: "pending" | "accepted" | "rejected" | "below_threshold";
   source_id?: number;
   min_confidence?: number;
   page: number;

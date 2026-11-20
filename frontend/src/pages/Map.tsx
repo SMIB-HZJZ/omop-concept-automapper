@@ -59,6 +59,19 @@ const unmappedColumns = (othersOn: Map<number, string[]>): ColumnDef<UnmappedIte
           <div className="min-w-0 flex-1">
             <div className="leading-snug font-medium">{row.original.source_concept_name}</div>
             <div className="text-muted-foreground truncate font-mono text-xs">{row.original.source_value}</div>
+            {row.original.low_concept_id && !row.original.suggestion_id && (
+              <div
+                className="text-muted-foreground mt-0.5 flex min-w-0 items-center gap-1 text-xs"
+                title={`Last auto-mapping picked this with confidence ${row.original.low_confidence}, below the threshold, so it was not queued for review`}
+              >
+                <Sparkles className="size-3 shrink-0 opacity-70" />
+                <span className="truncate">
+                  {row.original.low_concept_name}
+                  {row.original.low_extra_count ? ` + ${row.original.low_extra_count} more` : ""}
+                </span>
+                <span className="text-warning shrink-0 font-medium tabular-nums">· {row.original.low_confidence}</span>
+              </div>
+            )}
           </div>
           {others.length > 0 && (
             <div className="flex -space-x-1.5 pt-0.5" title={`Open by ${others.join(", ")}`}>

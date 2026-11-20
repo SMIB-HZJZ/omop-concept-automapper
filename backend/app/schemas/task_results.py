@@ -74,6 +74,8 @@ class AutomapResult(_Result):
     processed: int
     mapped: int
     queued: int
+    # Kept for the Map list, not queued: the AI's pick had a confidence under the threshold
+    below_threshold: int = 0
     skipped: int = 0
     errors: int = 0
     reused: int = 0

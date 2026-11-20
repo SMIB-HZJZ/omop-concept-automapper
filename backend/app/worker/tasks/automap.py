@@ -29,6 +29,24 @@ from app.workflows.state import DEFAULT_CONFIDENCE_THRESHOLD
 logger = logging.getLogger(__name__)
 
 
+_BELOW_THRESHOLD_SQL = text(
+    """
+    INSERT INTO mapping_suggestion
+        (source_id, concept_id, extra_concept_ids, confidence, method, pipeline,
+         target_domains, rationale, task_id, match_type, status)
+    SELECT :s, :c, CAST(:extra AS integer[]), :conf, :method, :pipeline, :domains,
+           :rationale, :task, :match_type, 'below_threshold'
+    WHERE NOT EXISTS (SELECT 1 FROM source_standard_map WHERE source_id = :s)
+    ON CONFLICT (source_id) WHERE status = 'below_threshold' DO UPDATE SET
+        concept_id = EXCLUDED.concept_id, extra_concept_ids = EXCLUDED.extra_concept_ids,
+        confidence = EXCLUDED.confidence, method = EXCLUDED.method,
+        pipeline = EXCLUDED.pipeline, target_domains = EXCLUDED.target_domains,
+        rationale = EXCLUDED.rationale, task_id = EXCLUDED.task_id,
+        match_type = EXCLUDED.match_type, created_at = now()
+    """
+)
+
+
 def persist_outcome(
     state: dict,
     *,
@@ -38,15 +56,48 @@ def persist_outcome(
     task_id: str | None,
     user_id: int | None,
 ) -> str:
-    """Store an accepted decision. Returns 'mapped', 'queued' or 'skipped'."""
-    if state.get("outcome") != "accepted" or not state.get("selected"):
-        return "skipped"
-    selected = state["selected"]
-    concept_ids = [c["concept_id"] for c in state.get("selected_concepts") or []] or [
-        selected["concept_id"]
-    ]
+    """Store the decision. Returns 'mapped', 'queued', 'below_threshold' or 'skipped'.
+
+    A selection under the confidence threshold is kept (one row per term, the latest run wins)
+    so the Map list can show it; it never enters the review queue."""
+    selected = state.get("selected")
+    accepted = state.get("outcome") == "accepted" and selected
+    concept_ids = [c["concept_id"] for c in state.get("selected_concepts") or []] or (
+        [selected["concept_id"]] if selected else []
+    )
     method = state.get("method") or "auto_standard"
+    params = {
+        "s": state["source_id"],
+        "c": concept_ids[0] if concept_ids else None,
+        "extra": concept_ids[1:],
+        "conf": int(state.get("confidence") or 0),
+        "method": method,
+        "pipeline": pipeline,
+        "domains": domains,
+        "rationale": state.get("rationale"),
+        "task": task_id,
+        "match_type": state.get("match_type"),
+    }
     with session_scope() as session:
+        if not accepted:
+            if selected and state.get("confidence") is not None:
+                stored = session.execute(_BELOW_THRESHOLD_SQL, params).rowcount
+                return "below_threshold" if stored else "skipped"
+            # Nothing usable this time: an older below-threshold result is no longer the latest
+            session.execute(
+                text(
+                    "DELETE FROM mapping_suggestion "
+                    "WHERE source_id = :s AND status = 'below_threshold'"
+                ),
+                {"s": state["source_id"]},
+            )
+            return "skipped"
+        session.execute(
+            text(
+                "DELETE FROM mapping_suggestion WHERE source_id = :s AND status = 'below_threshold'"
+            ),
+            {"s": state["source_id"]},
+        )
         if mode == "commit":
             written = mapping.map_concepts(
                 session,
@@ -77,18 +128,7 @@ def persist_outcome(
                 ON CONFLICT (source_id) WHERE status = 'pending' DO NOTHING
                 """
             ),
-            {
-                "s": state["source_id"],
-                "c": concept_ids[0],
-                "extra": concept_ids[1:],
-                "conf": int(state.get("confidence") or 0),
-                "method": method,
-                "pipeline": pipeline,
-                "domains": domains,
-                "rationale": state.get("rationale"),
-                "task": task_id,
-                "match_type": state.get("match_type"),
-            },
+            params,
         ).rowcount
         return "queued" if inserted else "skipped"
 
@@ -118,7 +158,15 @@ async def automap_concepts(
     vocabulary_context: str | None = None,
 ) -> dict:
     compiled = compiled or get_pipeline(pipeline)
-    counts = {"processed": 0, "mapped": 0, "queued": 0, "skipped": 0, "errors": 0, "reused": 0}
+    counts = {
+        "processed": 0,
+        "mapped": 0,
+        "queued": 0,
+        "below_threshold": 0,
+        "skipped": 0,
+        "errors": 0,
+        "reused": 0,
+    }
     # Source lists repeat terms: decide each distinct (name, code, structure) once per run
     decisions: dict[tuple, asyncio.Future] = {}
 

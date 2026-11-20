@@ -14,8 +14,13 @@ export function AutomapResult({ task }: { task: Task }) {
     <div className="space-y-1 text-sm">
       <div>
         Processed {n(r.processed)} of {n(r.total_concepts)} concepts · mapped {n(r.mapped)} · queued for review{" "}
-        {n(r.queued)} · skipped {n(r.skipped)} · errors {n(r.errors)}
+        {n(r.queued)} · below threshold {n(r.below_threshold)} · skipped {n(r.skipped)} · errors {n(r.errors)}
       </div>
+      {(r.below_threshold ?? 0) > 0 && (
+        <div className="text-muted-foreground text-xs">
+          Picks below the threshold are not queued for review; the term list shows each one with its confidence.
+        </div>
+      )}
       {(r.errors ?? 0) > 0 && (
         <div className="text-destructive">
           {n(r.errors)} concepts could not be processed (LLM or search errors; see the worker log). Run auto-mapping
@@ -50,8 +55,14 @@ export function AutomapDoneLine({ task, onDismiss }: { task: Task; onDismiss: ()
       <span className="text-muted-foreground text-xs">{formatDate(task.finished_at)}</span>
       {r && (
         <span>
-          {n(r.processed)} terms · {n(r.mapped)} mapped · <b>{n(r.queued)}</b> to review · {n(r.skipped)} without a
-          confident match
+          {n(r.processed)} terms · {n(r.mapped)} mapped · <b>{n(r.queued)}</b> to review
+          {(r.below_threshold ?? 0) > 0 && (
+            <span title="Their pick and confidence are shown in the term list">
+              {" "}
+              · {n(r.below_threshold)} below the threshold
+            </span>
+          )}{" "}
+          · {n(r.skipped)} without a match
           {(r.errors ?? 0) > 0 && (
             <span className="text-destructive"> · {n(r.errors)} errors (run again to retry)</span>
           )}
