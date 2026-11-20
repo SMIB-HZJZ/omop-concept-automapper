@@ -86,7 +86,7 @@ export function DrugModeNote({ isDrug }: { isDrug: boolean }) {
             <b>General mode</b>: no drug-specific rules.
           </>
         )}{" "}
-        Change it with <i>Vocabulary type</i> above the table.
+        An admin changes it with <i>Edit</i> next to the vocabulary's description.
       </span>
     </div>
   );

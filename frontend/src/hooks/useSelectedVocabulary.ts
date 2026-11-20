@@ -1,11 +1,10 @@
-import { useSourceVocabularies, useUpdateVocabulary } from "@/api/queries";
+import { useSourceVocabularies } from "@/api/queries";
 import type { SourceVocabulary } from "@/api/types";
 import { usePersistentState } from "@/hooks/usePersistentState";
 
 /** The selected source vocabulary is shared by the Map, Review and Commit pages. */
 export function useSelectedVocabulary() {
   const vocabularies = useSourceVocabularies();
-  const update = useUpdateVocabulary();
   const [selectedId, setSelectedId] = usePersistentState<number | null>("vocabulary", null);
 
   const list = vocabularies.data ?? [];
@@ -15,9 +14,6 @@ export function useSelectedVocabulary() {
 
   // The vocabulary's own setting is the only switch for drug mode (auto-map and manual mapping)
   const isDrug = vocabulary?.is_drug ?? false;
-  const setIsDrug = (value: boolean) => {
-    if (vocabulary) update.mutate({ id: vocabulary.id, is_drug: value });
-  };
 
   return {
     vocabularies: list,
@@ -26,7 +22,5 @@ export function useSelectedVocabulary() {
     vocabularyId: vocabulary?.id ?? null,
     select: setSelectedId,
     isDrug,
-    setIsDrug,
-    isSavingDrug: update.isPending,
   };
 }

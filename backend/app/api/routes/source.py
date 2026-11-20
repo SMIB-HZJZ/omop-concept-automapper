@@ -67,6 +67,7 @@ def create_vocabulary(body: SourceVocabularyCreate, _: AdminUser, session: Sessi
         vocabulary_id=body.id,
         description=body.description,
         is_drug=body.is_drug,
+        code_vocabularies=body.code_vocabularies,
     )
     return SourceVocabularyOut(**vocab.model_dump())
 
@@ -95,8 +96,24 @@ def delete_vocabulary(vocabulary_id: int, _: AdminUser, session: SessionDep):
 _DESCRIPTION_FORM = Form(
     None,
     max_length=VOCABULARY_DESCRIPTION_MAX,
-    description="What the terms denote, in 1-2 sentences; sent (empty) to clear it",
+    description="What the terms denote, in 1-2 sentences (change or clear it later with PATCH)",
 )
+
+_CODES_FORM = Form(
+    None,
+    max_length=500,
+    description=(
+        "Comma-separated OMOP vocabulary_ids of the codes in source_value (e.g. ICD10), looked up "
+        "and followed through Maps to before any AI step (change or clear it later with PATCH)"
+    ),
+)
+
+
+def _parse_codes(value: str | None) -> list[str] | None:
+    """None when not sent (an empty form field also arrives as None); else the distinct ids."""
+    if value is None:
+        return None
+    return list(dict.fromkeys(v.strip() for v in value.split(",") if v.strip()))
 
 
 @router.post("/import", response_model=TaskRef, status_code=status.HTTP_202_ACCEPTED)
@@ -107,9 +124,12 @@ def import_new_vocabulary(
     name: str = Form(..., max_length=VOCABULARY_NAME_MAX),
     description: str | None = _DESCRIPTION_FORM,
     is_drug: bool = Form(False),
+    code_vocabularies: str | None = _CODES_FORM,
 ):
     """Import source concepts into a new vocabulary, which gets the next free id."""
-    return _start_import(session, user, file, None, name, description, is_drug)
+    return _start_import(
+        session, user, file, None, name, description, is_drug, _parse_codes(code_vocabularies)
+    )
 
 
 @router.post(
@@ -123,11 +143,21 @@ def import_concepts(
     name: str | None = Form(None, max_length=VOCABULARY_NAME_MAX),
     description: str | None = _DESCRIPTION_FORM,
     is_drug: bool | None = Form(None),
+    code_vocabularies: str | None = _CODES_FORM,
 ):
     """Add source concepts to a vocabulary (created with this id when it does not exist)."""
     if vocabulary_id < 1:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Vocabulary id must be a positive integer")
-    return _start_import(session, user, file, vocabulary_id, name, description, is_drug)
+    return _start_import(
+        session,
+        user,
+        file,
+        vocabulary_id,
+        name,
+        description,
+        is_drug,
+        _parse_codes(code_vocabularies),
+    )
 
 
 def _start_import(
@@ -138,6 +168,7 @@ def _start_import(
     name: str | None,
     description: str | None,
     is_drug: bool | None,
+    code_vocabularies: list[str] | None = None,
 ):
     name = " ".join((name or "").split()) or None
     description = None if description is None else (" ".join(description.split()) or "")
@@ -161,14 +192,19 @@ def _start_import(
                 vocabulary_id=vocabulary_id,
                 description=description,
                 is_drug=bool(is_drug),
+                code_vocabularies=code_vocabularies,
             )
-        elif name or is_drug is not None or description is not None:
+        elif (
+            name or is_drug is not None or description is not None or code_vocabularies is not None
+        ):
             if name:
                 vocab.name = name
             if description is not None:
                 vocab.description = description or None
             if is_drug is not None:
                 vocab.is_drug = is_drug
+            if code_vocabularies is not None:
+                vocab.code_vocabularies = code_vocabularies
             session.add(vocab)
             session.commit()
             mapping.invalidate_vocabulary(vocab.id)

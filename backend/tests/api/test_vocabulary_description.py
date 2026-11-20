@@ -90,3 +90,19 @@ def test_new_vocabularies_get_the_next_id(client, admin_headers):
     assert no_name.status_code == 422
     for vid in (first["id"], first["id"] + 1):
         client.delete(f"/api/source-vocabularies/{vid}", headers=admin_headers)
+
+
+def test_code_systems_are_set_at_import(client, admin_headers):
+    resp = _import(client, admin_headers, 164, name="Diagnoses", code_vocabularies="ICD10, ICD10,")
+    assert resp.status_code == 202, resp.text
+    assert _vocab(client, admin_headers, 164)["code_vocabularies"] == ["ICD10"]
+    # Not sent: kept; changed or cleared later with PATCH
+    assert _import(client, admin_headers, 164).status_code == 202
+    assert _vocab(client, admin_headers, 164)["code_vocabularies"] == ["ICD10"]
+    assert _import(client, admin_headers, 164, code_vocabularies="LOINC").status_code == 202
+    assert _vocab(client, admin_headers, 164)["code_vocabularies"] == ["LOINC"]
+    resp = client.patch(
+        "/api/source-vocabularies/164", json={"code_vocabularies": []}, headers=admin_headers
+    )
+    assert resp.json()["code_vocabularies"] == []
+    client.delete("/api/source-vocabularies/164", headers=admin_headers)

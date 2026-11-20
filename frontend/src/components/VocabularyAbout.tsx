@@ -1,4 +1,4 @@
-import { Info, Pencil, Plus } from "lucide-react";
+import { Info, Pencil } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -6,14 +6,17 @@ import { errorMessage } from "@/api/client";
 import { useUpdateVocabulary } from "@/api/queries";
 import type { SourceVocabulary } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
+import { CodeSystemsField } from "@/components/CodeSystemsField";
 import { VocabularyDescriptionField } from "@/components/VocabularyDescriptionField";
+import { VocabularyTypeSwitch } from "@/components/VocabularyTypeSwitch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { VOCABULARY_NAME_MAX } from "@/lib/vocabularyText";
 
-/** What the selected vocabulary contains, as the AI is told; admins can edit it. */
+/** What the selected vocabulary contains, as the AI is told; admins edit it and the vocabulary's
+ *  settings (type, code system) here. */
 export function VocabularyAbout({ vocabulary }: { vocabulary: SourceVocabulary }) {
   const { isAdmin } = useAuth();
   const description = vocabulary.description?.trim();
@@ -29,29 +32,39 @@ export function VocabularyAbout({ vocabulary }: { vocabulary: SourceVocabulary }
       ) : (
         <p className="min-w-0">No description yet. A sentence on what these terms denote helps the AI choose.</p>
       )}
-      {isAdmin && <EditVocabulary vocabulary={vocabulary} hasDescription={!!description} />}
+      {isAdmin && <EditVocabulary vocabulary={vocabulary} />}
     </div>
   );
 }
 
-function EditVocabulary({ vocabulary, hasDescription }: { vocabulary: SourceVocabulary; hasDescription: boolean }) {
+function EditVocabulary({ vocabulary }: { vocabulary: SourceVocabulary }) {
   const update = useUpdateVocabulary();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(vocabulary.name);
   const [description, setDescription] = useState(vocabulary.description ?? "");
+  const [isDrug, setIsDrug] = useState(vocabulary.is_drug);
+  const [codes, setCodes] = useState<string[]>(vocabulary.code_vocabularies ?? []);
 
   const onOpenChange = (next: boolean) => {
     if (next) {
       // Start from the saved values each time
       setName(vocabulary.name);
       setDescription(vocabulary.description ?? "");
+      setIsDrug(vocabulary.is_drug);
+      setCodes(vocabulary.code_vocabularies ?? []);
     }
     setOpen(next);
   };
 
   const save = () =>
     update.mutate(
-      { id: vocabulary.id, name: name.trim(), description: description.trim() },
+      {
+        id: vocabulary.id,
+        name: name.trim(),
+        description: description.trim(),
+        is_drug: isDrug,
+        code_vocabularies: codes,
+      },
       {
         onSuccess: () => {
           toast.success("Vocabulary saved", {
@@ -67,11 +80,13 @@ function EditVocabulary({ vocabulary, hasDescription }: { vocabulary: SourceVoca
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <Button size="sm" variant="ghost" className="-my-1 h-7 shrink-0 gap-1">
-          {hasDescription ? <Pencil className="size-3.5" /> : <Plus className="size-3.5" />}
-          {hasDescription ? "Edit" : "Add description"}
+          <Pencil className="size-3.5" /> Edit
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[28rem] max-w-[calc(100vw-2rem)] space-y-3">
+      <PopoverContent
+        align="start"
+        className="max-h-(--radix-popover-content-available-height) w-[28rem] max-w-[calc(100vw-2rem)] space-y-3 overflow-y-auto"
+      >
         <div className="grid gap-1.5">
           <Label htmlFor="vocab-edit-name">Name</Label>
           <Input
@@ -82,6 +97,8 @@ function EditVocabulary({ vocabulary, hasDescription }: { vocabulary: SourceVoca
           />
         </div>
         <VocabularyDescriptionField id="vocab-edit-description" value={description} onChange={setDescription} />
+        <VocabularyTypeSwitch isDrug={isDrug} onChange={setIsDrug} />
+        <CodeSystemsField id="vocab-edit-codes" value={codes} onChange={setCodes} />
         <Button className="w-full" onClick={save} disabled={!name.trim() || update.isPending}>
           Save
         </Button>

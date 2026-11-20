@@ -291,7 +291,7 @@ export function ReviewPage() {
         title="Review AI suggestions"
         description="Check what the AI proposed. Accepted suggestions become mappings; rejected ones go back to the terms still to map."
       />
-      <VocabularySelector selection={selection} showDrug={false} />
+      <VocabularySelector selection={selection} />
       <CalibrationPanel vocabularyId={vocabularyId} />
 
       {vocabularyId !== null && (

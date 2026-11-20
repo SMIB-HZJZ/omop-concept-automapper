@@ -187,7 +187,7 @@ export function CommitPage() {
         title="Check & commit"
         description="Look over the final mappings, remove wrong ones, and download them as CSV."
       />
-      <VocabularySelector selection={selection} showDrug={false} />
+      <VocabularySelector selection={selection} />
       <ErrorAlert error={stats.error} title="Could not load mapping statistics" />
 
       {vocabularyId !== null && s && s.total_mappings === 0 && (

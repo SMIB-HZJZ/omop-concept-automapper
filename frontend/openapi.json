@@ -3070,7 +3070,7 @@
               }
             ],
             "title": "Description",
-            "description": "What the terms denote, in 1-2 sentences; sent (empty) to clear it"
+            "description": "What the terms denote, in 1-2 sentences (change or clear it later with PATCH)"
           },
           "is_drug": {
             "anyOf": [
@@ -3082,6 +3082,19 @@
               }
             ],
             "title": "Is Drug"
+          },
+          "code_vocabularies": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Vocabularies",
+            "description": "Comma-separated OMOP vocabulary_ids of the codes in source_value (e.g. ICD10), looked up and followed through Maps to before any AI step (change or clear it later with PATCH)"
           }
         },
         "type": "object",
@@ -3113,12 +3126,25 @@
               }
             ],
             "title": "Description",
-            "description": "What the terms denote, in 1-2 sentences; sent (empty) to clear it"
+            "description": "What the terms denote, in 1-2 sentences (change or clear it later with PATCH)"
           },
           "is_drug": {
             "type": "boolean",
             "title": "Is Drug",
             "default": false
+          },
+          "code_vocabularies": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Vocabularies",
+            "description": "Comma-separated OMOP vocabulary_ids of the codes in source_value (e.g. ICD10), looked up and followed through Maps to before any AI step (change or clear it later with PATCH)"
           }
         },
         "type": "object",

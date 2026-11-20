@@ -10,6 +10,7 @@ import type { Task } from "@/api/types";
 import { ErrorAlert } from "@/components/common";
 import { TaskProgress } from "@/components/TaskProgress";
 import { VocabularyDescriptionField } from "@/components/VocabularyDescriptionField";
+import { CodeSystemsField } from "@/components/CodeSystemsField";
 import { VocabularyTypeSwitch } from "@/components/VocabularyTypeSwitch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,7 @@ export function SourceTab() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isDrug, setIsDrug] = useState(false);
+  const [codes, setCodes] = useState<string[]>([]);
 
   const existing = target === "new" ? undefined : vocabularies.data?.find((v) => v.id === target);
   // Appending to an existing vocabulary starts from its saved name, description and type
@@ -105,6 +107,7 @@ export function SourceTab() {
     setName(existing?.name ?? "");
     setDescription(existing?.description ?? "");
     setIsDrug(existing?.is_drug ?? false);
+    setCodes(existing?.code_vocabularies ?? []);
   }
   const nameMissing = !name.trim();
   const missing = preview ? missingSourceColumns(preview.columns) : [];
@@ -128,32 +131,51 @@ export function SourceTab() {
   };
 
   const submit = (upload: File) => {
-    const fields = { name: name.trim(), description: description.trim(), is_drug: isDrug };
+    const settings = {
+      name: name.trim(),
+      description: description.trim(),
+      is_drug: isDrug,
+      code_vocabularies: codes,
+    };
     // The schema types the file part as a string; the serializer sends the real File
-    const bodySerializer = (body: { name?: string | null; description?: string | null; is_drug?: boolean | null }) => {
+    const fileOnly = () => {
       const fd = new FormData();
       fd.append("file", upload);
-      if (body.name) fd.append("name", body.name);
-      fd.append("description", body.description ?? "");
-      fd.append("is_drug", body.is_drug ? "true" : "false");
+      return fd;
+    };
+    const withSettings = () => {
+      const fd = fileOnly();
+      fd.append("name", settings.name);
+      if (settings.description) fd.append("description", settings.description);
+      fd.append("is_drug", settings.is_drug ? "true" : "false");
+      if (codes.length) fd.append("code_vocabularies", codes.join(","));
       return fd;
     };
     return run(
-      async () =>
-        existing
-          ? unwrap(
-              await api.POST("/api/source-vocabularies/{vocabulary_id}/concepts/import", {
-                params: { path: { vocabulary_id: existing.id } },
-                body: { file: upload.name, ...fields },
-                bodySerializer,
-              }),
-            )
-          : unwrap(
-              await api.POST("/api/source-vocabularies/import", {
-                body: { file: upload.name, ...fields },
-                bodySerializer,
-              }),
-            ),
+      async () => {
+        if (!existing) {
+          return unwrap(
+            await api.POST("/api/source-vocabularies/import", {
+              body: { file: upload.name, name: settings.name, is_drug: settings.is_drug },
+              bodySerializer: withSettings,
+            }),
+          );
+        }
+        // An existing vocabulary's settings are saved as they are (cleared fields too), then the file is added
+        unwrap(
+          await api.PATCH("/api/source-vocabularies/{vocabulary_id}", {
+            params: { path: { vocabulary_id: existing.id } },
+            body: settings,
+          }),
+        );
+        return unwrap(
+          await api.POST("/api/source-vocabularies/{vocabulary_id}/concepts/import", {
+            params: { path: { vocabulary_id: existing.id } },
+            body: { file: upload.name },
+            bodySerializer: fileOnly,
+          }),
+        );
+      },
       existing ? `Add concepts to ${existing.name}` : "Source concept import",
     );
   };
@@ -198,7 +220,8 @@ export function SourceTab() {
           <p>
             Set <b>Vocabulary type</b> to <b>Drugs</b> for medicine lists. Mapping then uses drug rules: an ATC7 code at
             the start of <code>source_value</code> (e.g. 'A10BA02XYZ') narrows the search, and drugs are matched on
-            ingredient, strength and dose form. You can change the type later on the Map page.
+            ingredient, strength and dose form. Type and code system can be changed later with <b>Edit</b> next to the
+            vocabulary's description on the Map page.
           </p>
         </AlertDescription>
       </Alert>
@@ -232,7 +255,7 @@ export function SourceTab() {
           </Select>
           <p className="text-muted-foreground text-xs">
             {existing
-              ? `The file's concepts are added to "${existing.name}" (ID ${existing.id}); its name and description below are updated.`
+              ? `The file's concepts are added to "${existing.name}" (ID ${existing.id}); its settings below are updated.`
               : "Creates a new source vocabulary; it gets the next free ID."}
           </p>
         </div>
@@ -250,6 +273,7 @@ export function SourceTab() {
           {!!file && nameMissing && <p className="text-destructive text-xs">Give the vocabulary a name.</p>}
         </div>
         <VocabularyTypeSwitch isDrug={isDrug} onChange={setIsDrug} />
+        <CodeSystemsField id="source-vocab-codes" className="md:col-span-2" value={codes} onChange={setCodes} />
         <VocabularyDescriptionField
           id="source-vocab-description"
           className="md:col-span-2"

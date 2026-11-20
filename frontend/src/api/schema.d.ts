@@ -988,11 +988,16 @@ export interface components {
             name?: string | null;
             /**
              * Description
-             * @description What the terms denote, in 1-2 sentences; sent (empty) to clear it
+             * @description What the terms denote, in 1-2 sentences (change or clear it later with PATCH)
              */
             description?: string | null;
             /** Is Drug */
             is_drug?: boolean | null;
+            /**
+             * Code Vocabularies
+             * @description Comma-separated OMOP vocabulary_ids of the codes in source_value (e.g. ICD10), looked up and followed through Maps to before any AI step (change or clear it later with PATCH)
+             */
+            code_vocabularies?: string | null;
         };
         /** Body_import_new_vocabulary_api_source_vocabularies_import_post */
         Body_import_new_vocabulary_api_source_vocabularies_import_post: {
@@ -1002,7 +1007,7 @@ export interface components {
             name: string;
             /**
              * Description
-             * @description What the terms denote, in 1-2 sentences; sent (empty) to clear it
+             * @description What the terms denote, in 1-2 sentences (change or clear it later with PATCH)
              */
             description?: string | null;
             /**
@@ -1010,6 +1015,11 @@ export interface components {
              * @default false
              */
             is_drug: boolean;
+            /**
+             * Code Vocabularies
+             * @description Comma-separated OMOP vocabulary_ids of the codes in source_value (e.g. ICD10), looked up and followed through Maps to before any AI step (change or clear it later with PATCH)
+             */
+            code_vocabularies?: string | null;
         };
         /** Calibration */
         Calibration: {

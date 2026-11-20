@@ -62,6 +62,7 @@ def create_vocabulary(
     vocabulary_id: int | None = None,
     description: str | None = None,
     is_drug: bool = False,
+    code_vocabularies: list[str] | None = None,
 ) -> SourceVocabulary:
     """Create a source vocabulary; without ``vocabulary_id`` it gets the next free id.
 
@@ -73,7 +74,11 @@ def create_vocabulary(
             text("SELECT COALESCE(MAX(id), 0) + 1 FROM source_vocabulary")
         ).scalar_one()
     vocab = SourceVocabulary(
-        id=vocabulary_id, name=name, description=description or None, is_drug=is_drug
+        id=vocabulary_id,
+        name=name,
+        description=description or None,
+        is_drug=is_drug,
+        code_vocabularies=list(code_vocabularies or []),
     )
     session.add(vocab)
     session.commit()
