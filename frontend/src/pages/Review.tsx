@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Check, ChevronLeft, ChevronRight, ListChecks, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ListChecks, Maximize2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalibrationPanel } from "./review/CalibrationPanel";
+import { ConfidenceMeter } from "./review/ConfidenceMeter";
+import { SuggestionDetail, type DetailPosition } from "./review/SuggestionDetail";
 import { ConceptLink } from "@/components/ConceptLink";
 import { Rationale } from "@/components/Rationale";
 
@@ -31,19 +33,6 @@ const SORTS = [
   { value: "newest", label: "Newest" },
 ];
 const LEVELS = Array.from({ length: 10 }, (_, i) => i + 1);
-
-/** Confidence 1-10 as a number and a coloured bar (green ≥ 8, amber ≥ 5, red below). */
-function ConfidenceMeter({ value }: { value: number }) {
-  const tone = value >= 8 ? "bg-success" : value >= 5 ? "bg-warning" : "bg-destructive";
-  return (
-    <div className="flex items-center gap-2" title={`Confidence ${value} of 10`}>
-      <span className="w-5 text-sm font-semibold tabular-nums">{value}</span>
-      <div className="bg-muted h-1.5 w-14 overflow-hidden rounded-full">
-        <div className={`${tone} h-full rounded-full`} style={{ width: `${value * 10}%` }} />
-      </div>
-    </div>
-  );
-}
 
 export function ReviewPage() {
   const selection = useSelectedVocabulary();
@@ -90,6 +79,16 @@ export function ReviewPage() {
   // Keyboard review: J/K or ↓/↑ move the cursor row, A accepts it, R rejects it, X ticks it
   const items = useMemo(() => data?.items ?? [], [data]);
   const [cursor, setCursor] = useState(0);
+  // The suggestion open in the details window (by id, with its row as a fallback)
+  const [detail, setDetail] = useState<DetailPosition | null>(null);
+  const openDetail = (id: number) => {
+    const index = items.findIndex((s) => s.id === id);
+    if (index >= 0) setDetail({ id, index });
+  };
+  const openDetailRef = useRef(openDetail);
+  useEffect(() => {
+    openDetailRef.current = openDetail;
+  });
   const cursorRow = items[Math.min(cursor, Math.max(0, items.length - 1))];
   const keys = useRef({ items, cursor, cursorRow, selected, busy, pending });
   useEffect(() => {
@@ -109,7 +108,8 @@ export function ReviewPage() {
       if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('[role="dialog"]')) return;
       if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
       const k = keys.current;
-      if (!k.pending || k.items.length === 0) return;
+      if (k.items.length === 0) return;
+      if (!k.pending && e.key !== "Enter" && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
       const move = (to: number) => {
         const next = Math.min(k.items.length - 1, Math.max(0, to));
         setCursor(next);
@@ -122,6 +122,7 @@ export function ReviewPage() {
       else if (key === "k" || e.key === "ArrowUp") move(k.cursor - 1);
       else if ((key === "a" || key === "r") && k.cursorRow && !k.busy)
         decideRef.current(key === "a" ? "accept" : "reject", { ids: [k.cursorRow.id] });
+      else if (e.key === "Enter" && k.cursorRow) openDetailRef.current(k.cursorRow.id);
       else if (key === "x" && k.cursorRow) {
         const id = String(k.cursorRow.id);
         setSelectedRef.current(k.selected.includes(id) ? k.selected.filter((x) => x !== id) : [...k.selected, id]);
@@ -139,7 +140,17 @@ export function ReviewPage() {
         header: "Source term",
         cell: ({ row }) => (
           <div className="min-w-40">
-            <div className="leading-snug font-medium">{row.original.source_concept_name}</div>
+            <button
+              type="button"
+              className="hover:text-primary line-clamp-3 cursor-pointer text-left leading-snug font-medium break-words underline-offset-2 hover:underline"
+              title="Show the whole suggestion (Enter)"
+              onClick={(e) => {
+                e.stopPropagation();
+                openDetailRef.current(row.original.id);
+              }}
+            >
+              {row.original.source_concept_name}
+            </button>
             <div className="text-muted-foreground text-xs">
               <span className="font-mono">{row.original.source_value}</span>
               {row.original.freq != null && <> · freq {row.original.freq.toLocaleString()}</>}
@@ -191,7 +202,24 @@ export function ReviewPage() {
           const text = row.original.rationale ?? "";
           return (
             <div className="max-w-80">
-              {text ? <Rationale text={text} clamp className="text-xs" /> : "—"}
+              {text ? (
+                <button
+                  type="button"
+                  className="group hover:bg-muted/60 -mx-1 block cursor-pointer rounded-md px-1 text-left"
+                  title="Show the whole reason"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openDetailRef.current(row.original.id);
+                  }}
+                >
+                  <Rationale text={text} clamp className="text-xs" />
+                  <span className="text-primary inline-flex items-center gap-0.5 text-[11px] opacity-70 group-hover:opacity-100">
+                    <Maximize2 className="size-3" /> more
+                  </span>
+                </button>
+              ) : (
+                "—"
+              )}
               <span className="text-muted-foreground text-[11px]">
                 {row.original.method}
                 {row.original.pipeline ? ` · ${row.original.pipeline}` : ""}
@@ -399,20 +427,32 @@ export function ReviewPage() {
             <>
               {pending && (
                 <p className="text-muted-foreground text-xs">
-                  Keyboard: <b>J</b>/<b>K</b> or ↓/↑ move · <b>A</b> accept · <b>R</b> reject · <b>X</b> tick for bulk
-                  actions
+                  Keyboard: <b>J</b>/<b>K</b> or ↓/↑ move · <b>Enter</b> details · <b>A</b> accept · <b>R</b> reject ·{" "}
+                  <b>X</b> tick for bulk actions. Click a term or its reason to see it in full.
                 </p>
               )}
               <DataTable
                 columns={columns}
                 data={items}
                 getRowId={(row) => String(row.id)}
-                highlightId={pending && cursorRow ? String(cursorRow.id) : null}
+                highlightId={cursorRow ? String(cursorRow.id) : null}
                 selection={pending ? "multi" : "none"}
                 selected={selected}
                 onSelectedChange={setSelected}
                 isLoading={suggestions.isLoading}
                 maxHeight="40rem"
+              />
+              <SuggestionDetail
+                items={items}
+                position={detail}
+                onPositionChange={setDetail}
+                onClose={(index) => {
+                  setDetail(null);
+                  setCursor(index);
+                }}
+                onDecide={(kind, id) => decide(kind, { ids: [id] })}
+                busy={busy}
+                pending={pending}
               />
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{data?.total.toLocaleString() ?? 0} suggestions</span>
