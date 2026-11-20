@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Filter, Hash, Loader2, Search as SearchIcon, Sparkles } from "lucide-react";
+import { Filter, Hash, Loader2, RotateCcw, Search as SearchIcon, Sparkles } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -168,6 +168,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
     return manualAtc7 && isValidAtc7(manualAtc7) ? [manualAtc7] : [];
   }, [isDrug, useAtc7, detected, manualAtc7]);
 
+  const edited = name.trim() !== concept.source_concept_name.trim();
   const debouncedName = useDebounce(name.trim(), 400);
   const debouncedVocab = useDebounce(vocabFilter.trim(), 400);
   const debouncedLimit = useDebounce(limit, 400);
@@ -389,125 +390,147 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
           </div>
         </motion.div>
 
-        {/* Search and AI */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-56 flex-1">
-            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-            <Input
-              aria-label="Search text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="pr-9 pl-9"
-            />
-            {busy && (
-              <Loader2
-                aria-label="Searching"
-                className="text-primary absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin"
-              />
+        {/* Search and AI. The box starts with the source term; first-time users need to be told
+            they can change it */}
+        <div className="grid gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="concept-search">Search standard concepts</Label>
+            {edited && (
+              <button
+                type="button"
+                className="text-primary flex cursor-pointer items-center gap-1 text-xs hover:underline"
+                onClick={() => setName(concept.source_concept_name)}
+              >
+                <RotateCcw className="size-3" /> Back to the source term
+              </button>
             )}
           </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Filter className="size-4" /> Filters
-                {filterCount > 0 && <Badge variant="secondary">{filterCount}</Badge>}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              side="bottom"
-              collisionPadding={12}
-              className="max-h-(--radix-popover-content-available-height) w-96 space-y-4 overflow-y-auto"
-            >
-              <div className="grid gap-1.5">
-                <Label htmlFor="map-domains">Target domains</Label>
-                <MultiSelect
-                  id="map-domains"
-                  options={meta.data?.domains ?? []}
-                  value={domains}
-                  onChange={setDomains}
-                  placeholder="All domains"
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-56 flex-1">
+              <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+              <Input
+                id="concept-search"
+                aria-describedby="concept-search-hint"
+                placeholder="Type words to search, e.g. type 2 diabetes mellitus"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="pr-9 pl-9"
+              />
+              {busy && (
+                <Loader2
+                  aria-label="Searching"
+                  className="text-primary absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin"
                 />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="vocab-filter">Vocabulary ID</Label>
-                <Input
-                  id="vocab-filter"
-                  placeholder="e.g. SNOMED, RxNorm"
-                  value={vocabFilter}
-                  onChange={(e) => setVocabFilter(e.target.value)}
-                />
-              </div>
-              {isDrug && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox id="use-atc7" checked={useAtc7} onCheckedChange={(v) => setUseAtc7(!!v)} />
-                    <Label htmlFor="use-atc7">Enable ATC7 filtering</Label>
-                  </div>
-                  {useAtc7 &&
-                    (detected ? (
-                      <p className="text-sm">
-                        Using ATC7 code from source value: <b className="font-mono">{detected}</b>
-                      </p>
-                    ) : (
-                      <div className="grid gap-1.5">
-                        <p className="text-muted-foreground text-xs">
-                          No ATC7 code detected at the beginning of the source value.
-                        </p>
-                        <Input
-                          aria-label="ATC7 code"
-                          placeholder="A10BA02"
-                          maxLength={7}
-                          value={manualAtc7}
-                          onChange={(e) => setManualAtc7(e.target.value.toUpperCase().trim())}
-                        />
-                        {!manualValid && manualAtc7.length > 0 && (
-                          <p className="text-destructive text-xs">
-                            Invalid ATC7 code format. Expected: Letter-Digit-Digit-Letter-Letter-Digit-Digit (e.g.,
-                            A10BA02)
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                </div>
               )}
-              <div className="grid gap-2">
-                <Label>
-                  Max results: <span className="tabular-nums">{limit}</span>
-                </Label>
-                <Slider
-                  thumbLabel="Max results"
-                  min={10}
-                  max={200}
-                  step={10}
-                  value={[limit]}
-                  onValueChange={(v) => setLimit(v[0] ?? 100)}
-                />
-              </div>
-              <div className="text-muted-foreground text-xs">
-                AI suggest uses the confidence threshold from Auto map settings ({threshold}).
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="suggest-pipeline">AI suggest pipeline</Label>
-                <PipelineSelect id="suggest-pipeline" value={pipeline} onChange={setPipeline} />
-              </div>
-            </PopoverContent>
-          </Popover>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Hash className="size-4" /> By ID
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-96">
-              <ManualConceptIds isSelected={(id) => selected.has(id)} onAdd={addConcept} alwaysOpen />
-            </PopoverContent>
-          </Popover>
-          <Button variant="secondary" className="gap-2" onClick={runSuggest} disabled={suggest.isPending}>
-            {suggest.isPending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-            {suggest.isPending ? <Elapsed prefix="Thinking… " /> : "AI suggest"}
-          </Button>
-          {!concept.flag && <FlagButton concept={concept} vocabularyId={vocabularyId} onFlagged={onMapped} />}
+            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Filter className="size-4" /> Filters
+                  {filterCount > 0 && <Badge variant="secondary">{filterCount}</Badge>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                side="bottom"
+                collisionPadding={12}
+                className="max-h-(--radix-popover-content-available-height) w-96 space-y-4 overflow-y-auto"
+              >
+                <div className="grid gap-1.5">
+                  <Label htmlFor="map-domains">Target domains</Label>
+                  <MultiSelect
+                    id="map-domains"
+                    options={meta.data?.domains ?? []}
+                    value={domains}
+                    onChange={setDomains}
+                    placeholder="All domains"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="vocab-filter">Vocabulary ID</Label>
+                  <Input
+                    id="vocab-filter"
+                    placeholder="e.g. SNOMED, RxNorm"
+                    value={vocabFilter}
+                    onChange={(e) => setVocabFilter(e.target.value)}
+                  />
+                </div>
+                {isDrug && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="use-atc7" checked={useAtc7} onCheckedChange={(v) => setUseAtc7(!!v)} />
+                      <Label htmlFor="use-atc7">Enable ATC7 filtering</Label>
+                    </div>
+                    {useAtc7 &&
+                      (detected ? (
+                        <p className="text-sm">
+                          Using ATC7 code from source value: <b className="font-mono">{detected}</b>
+                        </p>
+                      ) : (
+                        <div className="grid gap-1.5">
+                          <p className="text-muted-foreground text-xs">
+                            No ATC7 code detected at the beginning of the source value.
+                          </p>
+                          <Input
+                            aria-label="ATC7 code"
+                            placeholder="A10BA02"
+                            maxLength={7}
+                            value={manualAtc7}
+                            onChange={(e) => setManualAtc7(e.target.value.toUpperCase().trim())}
+                          />
+                          {!manualValid && manualAtc7.length > 0 && (
+                            <p className="text-destructive text-xs">
+                              Invalid ATC7 code format. Expected: Letter-Digit-Digit-Letter-Letter-Digit-Digit (e.g.,
+                              A10BA02)
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                )}
+                <div className="grid gap-2">
+                  <Label>
+                    Max results: <span className="tabular-nums">{limit}</span>
+                  </Label>
+                  <Slider
+                    thumbLabel="Max results"
+                    min={10}
+                    max={200}
+                    step={10}
+                    value={[limit]}
+                    onValueChange={(v) => setLimit(v[0] ?? 100)}
+                  />
+                </div>
+                <div className="text-muted-foreground text-xs">
+                  AI suggest uses the confidence threshold from Auto map settings ({threshold}).
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="suggest-pipeline">AI suggest pipeline</Label>
+                  <PipelineSelect id="suggest-pipeline" value={pipeline} onChange={setPipeline} />
+                </div>
+              </PopoverContent>
+            </Popover>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Hash className="size-4" /> By ID
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-96">
+                <ManualConceptIds isSelected={(id) => selected.has(id)} onAdd={addConcept} alwaysOpen />
+              </PopoverContent>
+            </Popover>
+            <Button variant="secondary" className="gap-2" onClick={runSuggest} disabled={suggest.isPending}>
+              {suggest.isPending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+              {suggest.isPending ? <Elapsed prefix="Thinking… " /> : "AI suggest"}
+            </Button>
+            {!concept.flag && <FlagButton concept={concept} vocabularyId={vocabularyId} onFlagged={onMapped} />}
+          </div>
+          <p id="concept-search-hint" className="text-muted-foreground text-xs">
+            {edited
+              ? "Searching for your text instead of the source term; AI suggest uses it too."
+              : "Starts with the source term. No good match? Edit it: fix a typo, write it in English, or try other words. Results update as you type."}
+          </p>
         </div>
 
         {othersHere.length > 0 && (
