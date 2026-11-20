@@ -26,7 +26,7 @@ from app.workflows.builder import get_pipeline
 from app.workflows.context import NodeContext
 from app.workflows.service import build_context, default_pipeline, initial_state, run_pipeline
 from app.workflows.state import DEFAULT_CONFIDENCE_THRESHOLD
-from app.workflows.steps import step_label
+from app.workflows.steps import PART2_METHODS, decision_path, step_label
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +35,17 @@ _BELOW_THRESHOLD_SQL = text(
     """
     INSERT INTO mapping_suggestion
         (source_id, concept_id, extra_concept_ids, confidence, method, pipeline,
-         target_domains, rationale, task_id, match_type, status)
+         target_domains, rationale, task_id, match_type, decision_path, status)
     SELECT :s, :c, CAST(:extra AS integer[]), :conf, :method, :pipeline, :domains,
-           :rationale, :task, :match_type, 'below_threshold'
+           :rationale, :task, :match_type, :path, 'below_threshold'
     WHERE NOT EXISTS (SELECT 1 FROM source_standard_map WHERE source_id = :s)
     ON CONFLICT (source_id) WHERE status = 'below_threshold' DO UPDATE SET
         concept_id = EXCLUDED.concept_id, extra_concept_ids = EXCLUDED.extra_concept_ids,
         confidence = EXCLUDED.confidence, method = EXCLUDED.method,
         pipeline = EXCLUDED.pipeline, target_domains = EXCLUDED.target_domains,
         rationale = EXCLUDED.rationale, task_id = EXCLUDED.task_id,
-        match_type = EXCLUDED.match_type, created_at = now()
+        match_type = EXCLUDED.match_type, decision_path = EXCLUDED.decision_path,
+        created_at = now()
     """
 )
 
@@ -79,6 +80,7 @@ def persist_outcome(
         "rationale": state.get("rationale"),
         "task": task_id,
         "match_type": state.get("match_type"),
+        "path": decision_path(state),
     }
     with session_scope() as session:
         if not accepted:
@@ -100,7 +102,10 @@ def persist_outcome(
             ),
             {"s": state["source_id"]},
         )
-        if mode == "commit":
+        # Picks made for unsure terms (rewritten search, agent, final decision) always go to
+        # Review: a confidence reached after several failed attempts is not yet known to be as
+        # reliable as a first pick's
+        if mode == "commit" and method not in PART2_METHODS:
             written = mapping.map_concepts(
                 session,
                 state["source_id"],
@@ -123,9 +128,9 @@ def persist_outcome(
                 """
                 INSERT INTO mapping_suggestion
                     (source_id, concept_id, extra_concept_ids, confidence, method, pipeline,
-                     target_domains, rationale, task_id, match_type)
+                     target_domains, rationale, task_id, match_type, decision_path)
                 SELECT :s, :c, CAST(:extra AS integer[]), :conf, :method, :pipeline, :domains,
-                       :rationale, :task, :match_type
+                       :rationale, :task, :match_type, :path
                 WHERE NOT EXISTS (SELECT 1 FROM source_standard_map WHERE source_id = :s)
                 ON CONFLICT (source_id) WHERE status = 'pending' DO NOTHING
                 """

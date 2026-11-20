@@ -95,7 +95,10 @@ export function BelowThresholdPick({ suggestion, onSelect }: { suggestion: Sugge
             </span>
           </div>
           <Rationale text={suggestion.rationale} className="text-muted-foreground text-xs leading-relaxed" />
-          <div className="text-muted-foreground text-xs">{formatDate(suggestion.created_at)}</div>
+          <div className="text-muted-foreground text-xs">
+            {suggestion.decision_path ? `${suggestion.decision_path} · ` : ""}
+            {formatDate(suggestion.created_at)}
+          </div>
         </div>
         <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={onSelect}>
           <Plus /> Select

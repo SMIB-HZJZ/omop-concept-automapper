@@ -112,7 +112,10 @@ def build_reranker(llm_model: str) -> Reranker | CascadeReranker | EscalatingRer
     ):
         return first
     return EscalatingReranker(
-        first, Reranker(stronger, effort=stronger_effort), settings.rerank_escalate_below
+        first,
+        Reranker(stronger, effort=stronger_effort),
+        settings.rerank_escalate_below,
+        settings.rerank_escalate_from,
     )
 
 

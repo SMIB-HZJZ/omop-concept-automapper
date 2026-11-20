@@ -88,6 +88,8 @@ class MappingSuggestion(SQLModel, table=True):
         default_factory=list, sa_column=Column(ARRAY(Integer), server_default="{}", nullable=False)
     )
     rationale: str | None = None
+    # How it came about, e.g. "AI pick 6 → agent retry 7 → final decision 8"
+    decision_path: str | None = None
     task_id: str | None = None
     status: str = "pending"  # pending | accepted | rejected | below_threshold
     decided_by: int | None = Field(default=None, foreign_key="app_user.id")

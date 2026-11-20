@@ -53,6 +53,7 @@ def list_suggestions(
             SELECT ms.id, ms.source_id, sc.source_value, sc.source_concept_name, sc.freq,
                    ms.concept_id, c.concept_name, c.domain_id, c.vocabulary_id, c.concept_class_id,
                    c.concept_code, ms.confidence, ms.method, ms.pipeline, ms.rationale, ms.match_type,
+                   ms.decision_path,
                    ms.target_domains, ms.status, ms.created_at, ms.decided_at,
                    u.username AS decided_by,
                    COALESCE((
@@ -129,11 +130,11 @@ def accept(
                 """
                 INSERT INTO mapping_suggestion
                     (source_id, concept_id, extra_concept_ids, confidence, method, pipeline,
-                     target_domains, rationale, task_id, match_type, status, decided_by,
-                     created_at, decided_at)
+                     target_domains, rationale, task_id, match_type, decision_path, status,
+                     decided_by, created_at, decided_at)
                 VALUES (:source_id, :concept_id, :extra_concept_ids, :confidence, :method, :pipeline,
-                        :target_domains, :rationale, :task_id, :match_type, 'accepted', :u,
-                        :created_at, :now)
+                        :target_domains, :rationale, :task_id, :match_type, :decision_path,
+                        'accepted', :u, :created_at, :now)
                 """
             ),
             {**row, "u": user_id, "now": now},

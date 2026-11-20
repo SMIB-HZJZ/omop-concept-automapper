@@ -65,8 +65,9 @@ async def test_agent_refines_rejected_mapping():
         "extract_atc7",
         "match_previous",
         "match_code",
-        "translate",
         "match_name",
+        "translate",
+        "match_english",
         "retrieve",
         "rerank",
         "gate",
@@ -268,8 +269,8 @@ async def test_steps_are_reported_as_they_start():
     assert shown[:4] == [
         "Checking earlier mappings",
         "Looking up the source code",
-        "Translating",
         "Exact name match",
+        "Translating",
     ]
     assert "AI pick" in shown and "Rewriting the search" in shown
     assert "Agent retry: searching 'acetaminophen 500 mg tablet'" in shown

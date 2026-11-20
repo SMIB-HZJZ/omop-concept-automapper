@@ -30,7 +30,7 @@ from app.vector.store import CollectionMissing
 from app.worker.tasks.automap import run_automap
 from app.workflows.builder import PipelineError, get_pipeline
 from app.workflows.service import build_context, default_pipeline, initial_state, run_pipeline
-from app.workflows.steps import step_label
+from app.workflows.steps import decision_path, step_label
 
 router = APIRouter(tags=["mapping"])
 
@@ -181,6 +181,7 @@ async def suggest(
         confidence=result.get("confidence"),
         rationale=result.get("rationale"),
         match_type=result.get("match_type"),
+        decision_path=decision_path(result),
         candidates=result.get("candidates") or [],
         trace=result.get("trace") or [],
     )

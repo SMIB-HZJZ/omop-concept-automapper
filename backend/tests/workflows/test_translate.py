@@ -51,12 +51,13 @@ async def test_translation_searches_both_terms_and_informs_the_reranker():
     assert result["selected"]["concept_id"] == 201
     assert result["translated_query"] == "type 2 diabetes mellitus"
     assert reranker.kwargs == [{"translation": "type 2 diabetes mellitus"}]
-    assert [t["node"] for t in result["trace"]][:6] == [
+    assert [t["node"] for t in result["trace"]][:7] == [
         "extract_atc7",
         "match_previous",
         "match_code",
-        "translate",
         "match_name",
+        "translate",
+        "match_english",
         "retrieve",
     ]
 
@@ -164,3 +165,17 @@ async def test_an_exact_match_of_the_translation_is_left_to_the_reranker():
     assert reranker.first == 201 and result["selected"]["concept_id"] == 201
     assert result.get("method") != "auto_exact_name"
     assert "rerank" in [t["node"] for t in result["trace"]]
+
+
+async def test_an_exact_name_match_needs_no_translation():
+    class OriginalNameMatches(EnglishNameOnly):
+        def match_name(self, names, vocabularies=None):
+            from app.services.lexical import TextMatch
+            from tests.workflows.helpers import CONCEPTS
+
+            return TextMatch(concepts=[CONCEPTS[201]], via="name")
+
+    translator = FakeTranslator({})
+    ctx = make_context(RecordingReranker(), translator=translator, lexical=OriginalNameMatches())
+    result = await run_pipeline(_state("type 2 diabetes mellitus"), ctx, "automap")
+    assert result["method"] == "auto_exact_name" and translator.calls == []

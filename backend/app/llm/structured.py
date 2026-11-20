@@ -217,16 +217,27 @@ def votes_note(votes: list[dict], candidates: list[dict]) -> str:
 
 
 class EscalatingReranker:
-    """The first reranker decides; when it is unsure (confidence below ``below``, no pick, or an
-    error) the stronger model reranks the term from scratch and its answer is used.
+    """The first reranker decides; when it is unsure (confidence from ``from_confidence`` up to
+    below ``below``, or an error) the stronger model reranks the term from scratch and its answer
+    is used. With ``from_confidence`` set, a very unsure first answer or none stands (later
+    pipeline steps search again instead).
 
     The stronger model gets the same prompt, not the first pick: in the evaluation, showing
     other models' picks to the deciding model did not help."""
 
-    def __init__(self, first: "Reranker | CascadeReranker", stronger: Reranker, below: int):
+    def __init__(
+        self,
+        first: "Reranker | CascadeReranker",
+        stronger: Reranker,
+        below: int,
+        from_confidence: int = 0,
+    ):
         self.first = first
         self.stronger = stronger
         self.below = below
+        # A pick under this, or no pick, usually means the right concept is not among the
+        # candidates: a stronger model cannot fix that, a new search (rewrite_search) can
+        self.from_confidence = from_confidence
         self.model = f"{first.model} → {stronger.model} (confidence < {below})"
         self.label = f"{first.label} → {stronger.label} (confidence < {below})"
 
@@ -256,6 +267,12 @@ class EscalatingReranker:
             logger.warning("Reranker %s failed for %r, escalating: %s", self.first.label, term, exc)
         if first is not None and first.index is not None and (first.confidence or 0) >= self.below:
             return dataclasses.replace(first, route=first.route or "first")
+        if (
+            first is not None
+            and self.from_confidence > 0
+            and (first.index is None or (first.confidence or 0) < self.from_confidence)
+        ):
+            return dataclasses.replace(first, route=first.route or "too_unsure")
         first_vote = {
             "model": self.first.label,
             "index": first.index if first else None,

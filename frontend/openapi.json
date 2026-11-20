@@ -4987,6 +4987,17 @@
             ],
             "title": "Match Type"
           },
+          "decision_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Path"
+          },
           "candidates": {
             "items": {
               "$ref": "#/components/schemas/SearchResult"
@@ -5153,6 +5164,17 @@
               }
             ],
             "title": "Match Type"
+          },
+          "decision_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Path"
           },
           "target_domains": {
             "anyOf": [

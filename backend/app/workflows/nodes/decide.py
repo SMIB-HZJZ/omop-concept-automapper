@@ -109,7 +109,15 @@ async def decide_with_evidence(state: AutomapState, ctx: NodeContext, params: De
         return {"_summary": "final decision: no suitable concept; earlier result stands"}
     selected = candidates[result.index]
     additional = [candidates[i] for i in getattr(result, "additional", None) or []]
+    attempt = {
+        "step": "final decision",
+        "concept": selected,
+        "confidence": result.confidence,
+        "match_type": getattr(result, "match_type", None),
+        "rationale": result.rationale,
+    }
     return {
+        "attempts": [attempt],
         "candidates": candidates,
         "selected": selected,
         "selected_concepts": [selected, *additional] if additional else [],

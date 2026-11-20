@@ -5,6 +5,7 @@ Ambiguous hits are passed on as the first candidates for the reranker.
 """
 
 import asyncio
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -84,6 +85,10 @@ async def match_code(state: AutomapState, ctx: NodeContext, params: TextMatchPar
 
 class NameMatchParams(TextMatchParams):
     confidence: int = Field(default=9, ge=1, le=10)
+    # original: the source term (before translating, so exact hits need no translation);
+    # english: the translation (its hits only become the reranker's first candidates);
+    # both: original, then English
+    term: Literal["original", "english", "both"] = "both"
 
 
 @router(
@@ -96,18 +101,19 @@ class NameMatchParams(TextMatchParams):
 async def match_name(state: AutomapState, ctx: NodeContext, params: NameMatchParams):
     if ctx.lexical is None:
         return "next", {"_summary": "skipped (no database)"}
-    match = await asyncio.to_thread(ctx.lexical.match_name, [state.get("source_name", "")])
-    if _in_domains(state, match.concepts):
-        return _outcome(state, match, params, "auto_exact_name", "exact name/synonym")
+    if params.term != "english":
+        match = await asyncio.to_thread(ctx.lexical.match_name, [state.get("source_name", "")])
+        if _in_domains(state, match.concepts) or params.term == "original":
+            return _outcome(state, match, params, "auto_exact_name", "exact name/synonym")
     translated = state.get("translated_query")
     if not translated:
-        return _outcome(state, match, params, "auto_exact_name", "exact name/synonym")
+        return "next", {"_summary": "exact name/synonym: no match (no English rendering)"}
     # A machine translation can be wrong, so an exact hit on it is a strong candidate for the
     # reranker, not an accepted mapping
     hit = await asyncio.to_thread(ctx.lexical.match_name, [translated])
     concepts = _in_domains(state, hit.concepts)
     if not concepts:
-        return "next", {"_summary": "exact name/synonym: no match (original or English)"}
+        return "next", {"_summary": "exact name/synonym of the English rendering: no match"}
     names = " + ".join(repr(c["concept_name"]) for c in concepts)
     return "next", {
         "structured_candidates": [*(state.get("structured_candidates") or []), *concepts][:30],

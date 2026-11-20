@@ -505,6 +505,8 @@ class SuggestionOut(BaseModel):
     pipeline: str | None
     rationale: str | None
     match_type: str | None = None
+    # How it came about, e.g. "AI pick 6 → agent retry 7 → final decision 8"
+    decision_path: str | None = None
     target_domains: list[str] | None
     status: str
     created_at: datetime | None
@@ -607,6 +609,8 @@ class SuggestResponse(BaseModel):
     confidence: int | None
     rationale: str | None
     match_type: str | None = None
+    # How it came about, e.g. "AI pick 6 → agent retry 7 → final decision 8"
+    decision_path: str | None = None
     candidates: list[SearchResult]
     trace: list[TraceStep]
 

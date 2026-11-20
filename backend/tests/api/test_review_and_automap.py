@@ -192,8 +192,9 @@ def test_ai_suggest_single_concept(
         "extract_atc7",
         "match_previous",
         "match_code",
-        "translate",
         "match_name",
+        "translate",
+        "match_english",
         "retrieve",
         "rerank",
         "gate",
@@ -215,3 +216,40 @@ def test_workflow_catalog(client, user_headers):
     assert {"retrieve", "llm_rerank", "confidence_gate", "agentic_refine"} <= {
         n["name"] for n in catalog["nodes"]
     }
+
+
+def test_commit_mode_sends_unsure_term_picks_to_review(
+    client, admin_headers, user_headers, embedded
+):
+    from app.worker.tasks.automap import persist_outcome
+
+    import_source_csv(client, admin_headers, 25)
+    items = client.get("/api/source-vocabularies/25/unmapped", headers=user_headers).json()["items"]
+    concept = {"concept_id": 1, "concept_name": "metformin 500 MG Oral Tablet"}
+    attempts = [
+        {"step": "AI pick", "concept": concept, "confidence": 5},
+        {"step": "final decision", "concept": concept, "confidence": 9},
+    ]
+
+    def state(item, method):
+        return {
+            "source_id": item["source_id"],
+            "outcome": "accepted",
+            "selected": concept,
+            "confidence": 9,
+            "method": method,
+            "attempts": attempts,
+        }
+
+    kwargs = {
+        "mode": "commit",
+        "pipeline": "automap",
+        "domains": [],
+        "task_id": None,
+        "user_id": None,
+    }
+    assert persist_outcome(state(items[0], "auto_final"), **kwargs) == "queued"
+    assert persist_outcome(state(items[1], "auto_standard"), **kwargs) == "mapped"
+    queued = client.get("/api/source-vocabularies/25/suggestions", headers=user_headers).json()
+    assert [s["decision_path"] for s in queued["items"]] == ["AI pick 5 → final decision 9"]
+    assert queued["items"][0]["method"] == "auto_final"

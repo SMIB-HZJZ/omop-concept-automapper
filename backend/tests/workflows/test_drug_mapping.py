@@ -410,13 +410,14 @@ async def test_no_deterministic_match_falls_back_with_context(drug_vocabulary):
     result = await run_pipeline(
         _state("Paracetamol 650 mg tbl"), _ctx(parser, Recording()), "automap_drug"
     )
-    assert [t["node"] for t in result["trace"]][:7] == [
+    assert [t["node"] for t in result["trace"]][:8] == [
         "extract_atc7",
         "match_previous",
         "match_code",
         "match_drug",
-        "translate",
         "match_name",
+        "translate",
+        "match_english",
         "retrieve",
     ]
     assert Recording.notes == ["Parsed drug structure (parsed): acetaminophen 650 mg; Oral Tablet"]

@@ -72,6 +72,11 @@ export function SuggestionAlert({
           </span>
         </div>
         <Rationale text={suggestion.rationale} className="mt-1 text-sm" />
+        {suggestion.decision_path && (
+          <div className="text-muted-foreground mt-0.5 text-xs" title="How the pipeline reached this pick">
+            Path: {suggestion.decision_path}
+          </div>
+        )}
         <Collapsible className="mt-1">
           <CollapsibleTrigger className="text-muted-foreground flex items-center gap-1 text-xs hover:underline">
             <ChevronDown className="size-3" /> Trace ({suggestion.trace.length} steps)

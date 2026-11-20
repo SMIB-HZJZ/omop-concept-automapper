@@ -2,8 +2,10 @@
 # 1. extract_atc7    ATC7 code from the source value (drug mode; narrows the drug search)
 # 2. match_previous  the reviewed mapping of another source concept with the same name
 # 3. match_code      the source code in the vocabulary's code systems (e.g. ICD10) -> Maps to
-# 4. translate       the term in English OMOP wording (cached per term; skipped if already English)
-# 5. match_name      exact name or synonym of the original or English term -> Maps to
+# 4. match_name      exact name or synonym of the original term -> Maps to (before translating:
+#                    exact hits need no translation)
+# 5. translate       the term in English OMOP wording (cached per term; skipped if already English);
+#    match_english   an exact hit of the English term becomes the reranker's first candidate
 # 6. retrieve        vector search for the original and the English term, merged
 #                    (keyword fusion optional: params { keyword: true })
 # 7. rerank          the LLM picks the best candidate, seeing both terms (similar reviewed
@@ -26,7 +28,7 @@
 # Searching original + English was the largest gain in the retrieval evaluation (noisy Croatian:
 # R@1 0.42 -> 0.66, R@30 0.90 -> 0.97); see docs/retrieval-evaluation-2026-11.md.
 name: automap
-description: earlier mappings → source code → translate → exact name/synonym → vector search (original + English) → LLM rerank → confidence gate; when not confident, rewritten searches + second LLM pick, then agent retry, then a final decision on all evidence
+description: earlier mappings → source code → exact name/synonym → translate → vector search (original + English) → LLM rerank → confidence gate; when not confident, rewritten searches + second LLM pick, then agent retry, then a final decision on all evidence
 entry: extract_atc7
 nodes:
   extract_atc7:
@@ -36,11 +38,16 @@ nodes:
     routes: { matched: gate, next: match_code }
   match_code:
     uses: match_code
+    routes: { matched: gate, next: match_name }
+  match_name:
+    uses: match_name
+    params: { term: original }
     routes: { matched: gate, next: translate }
   translate:
     uses: translate
-  match_name:
+  match_english:
     uses: match_name
+    params: { term: english }
     routes: { matched: gate, next: retrieve }
   retrieve:
     uses: retrieve
@@ -71,7 +78,7 @@ nodes:
     routes: { accept: END, reject: END }
 edges:
   - [extract_atc7, match_previous]
-  - [translate, match_name]
+  - [translate, match_english]
   - [retrieve, rerank]
   - [rerank, gate]
   - [rerank_again, gate_again]

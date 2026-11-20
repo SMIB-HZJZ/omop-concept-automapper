@@ -1647,6 +1647,8 @@ export interface components {
             rationale: string | null;
             /** Match Type */
             match_type?: string | null;
+            /** Decision Path */
+            decision_path?: string | null;
             /** Candidates */
             candidates: components["schemas"]["SearchResult"][];
             /** Trace */
@@ -1695,6 +1697,8 @@ export interface components {
             rationale: string | null;
             /** Match Type */
             match_type?: string | null;
+            /** Decision Path */
+            decision_path?: string | null;
             /** Target Domains */
             target_domains: string[] | null;
             /** Status */

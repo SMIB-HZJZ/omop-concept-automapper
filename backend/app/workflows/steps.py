@@ -25,3 +25,26 @@ def step_label(node_id: str | None, uses: str, detail: str | None = None) -> str
     if uses == "llm_rerank" and node_id and node_id != "rerank":
         label = "AI pick on the new candidates"
     return label
+
+
+# Methods of picks made for unsure terms (part 2 of the pipelines): not auto-committed
+PART2_METHODS = frozenset({"auto_rewritten", "auto_agentic", "auto_final"})
+_SHORT = {
+    "AI pick": "AI pick",
+    "second AI pick, after rewritten searches": "AI pick after rewrite",
+    "agent retry": "agent retry",
+    "final decision": "final decision",
+}
+
+
+def decision_path(state: dict) -> str | None:
+    """How the result came about, e.g. "AI pick 6 → agent retry 7 → final decision 8". None for
+    deterministic matches (earlier mapping, source code, exact name, drug match)."""
+    parts = []
+    for a in state.get("attempts") or []:
+        label = _SHORT.get(a.get("step", ""), a.get("step", "step"))
+        if a.get("route") == "escalated":
+            label += " (stronger model)"
+        found = str(a["confidence"]) if a.get("concept") and a.get("confidence") else "no match"
+        parts.append(f"{label} {found}")
+    return " → ".join(parts) or None

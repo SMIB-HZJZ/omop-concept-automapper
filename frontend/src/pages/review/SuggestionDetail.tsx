@@ -115,6 +115,11 @@ export function SuggestionDetail({
               ) : (
                 <p className="text-muted-foreground text-sm">No reason given.</p>
               )}
+              {s.decision_path && (
+                <p className="text-muted-foreground mt-1.5 text-xs" title="How the pipeline reached this pick">
+                  Path: {s.decision_path}
+                </p>
+              )}
             </section>
 
             <div className="text-muted-foreground text-xs">

@@ -110,6 +110,8 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
     return {
         "attempts": [attempt],
         **({"meta": meta} if meta else {}),
+        # A pick from the rewritten searches is told apart in the precision-by-method statistics
+        **({"method": "auto_rewritten"} if params.keep_better else {}),
         "selected": selected,
         "selected_concepts": [selected, *additional] if additional else [],
         "confidence": result.confidence,

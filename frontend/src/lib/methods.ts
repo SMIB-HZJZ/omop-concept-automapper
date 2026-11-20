@@ -7,6 +7,7 @@ const METHOD_LABELS: Record<string, string> = {
   auto_exact_name: "Exact name",
   auto_code: "Source code",
   auto_previous: "Earlier mapping",
+  auto_rewritten: "AI pick after rewrite",
   auto_agentic: "Agent retry",
   auto_final: "Final decision",
 };
@@ -25,6 +26,7 @@ const STEP_NAMES: Record<string, string> = {
   match_drug: "Drug match",
   translate: "Translation",
   match_name: "Exact name",
+  match_english: "Exact name (English)",
   retrieve: "Search",
   rerank: "AI pick",
   gate: "Confidence check",
