@@ -65,6 +65,7 @@ async def test_agent_refines_rejected_mapping():
         "extract_atc7",
         "match_previous",
         "match_code",
+        "translate",
         "match_name",
         "retrieve",
         "rerank",

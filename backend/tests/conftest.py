@@ -116,12 +116,21 @@ class FakeReranker:
         return RerankResult(best, self.overrides.get(term, self.confidence))
 
 
+class FakeTranslator:
+    async def translate(self, term, context=None):
+        from app.llm.structured import TranslationResult
+
+        return TranslationResult(term, "en")
+
+
 @pytest.fixture
 def fake_reranker(monkeypatch):
     import app.workflows.service as service
 
     reranker = FakeReranker()
     monkeypatch.setattr(service, "Reranker", lambda model, effort=None: reranker)
+    # The default pipeline translates; the fixture's terms are treated as English already
+    monkeypatch.setattr(service, "Translator", lambda model, effort=None: FakeTranslator())
     # One fake answers every term; escalation to a second model would only call it twice
     monkeypatch.setattr(service.get_settings(), "rerank_escalate_model", "")
     return reranker

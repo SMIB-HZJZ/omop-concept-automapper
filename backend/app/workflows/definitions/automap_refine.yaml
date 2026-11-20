@@ -1,4 +1,5 @@
-# Same as `automap`, but low-confidence results get a second chance from a tool-using agent
+# Same as `automap` (with translation), but low-confidence results get a second chance from a
+# tool-using agent
 name: automap_refine
 description: automap, then a Pydantic AI agent retries rejected concepts with query reformulation
 entry: extract_atc7
@@ -10,7 +11,9 @@ nodes:
     routes: { matched: final_gate, next: match_code }
   match_code:
     uses: match_code
-    routes: { matched: final_gate, next: match_name }
+    routes: { matched: final_gate, next: translate }
+  translate:
+    uses: translate
   match_name:
     uses: match_name
     routes: { matched: final_gate, next: retrieve }
@@ -29,6 +32,7 @@ nodes:
     routes: { accept: END, reject: END }
 edges:
   - [extract_atc7, match_previous]
+  - [translate, match_name]
   - [retrieve, rerank]
   - [rerank, gate]
   - [refine, final_gate]

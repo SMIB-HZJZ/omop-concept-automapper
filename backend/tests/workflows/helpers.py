@@ -70,7 +70,17 @@ class FakeSearcher:
         return [{**r, "rank": i + 1} for i, r in enumerate(results[:k])]
 
 
+class IdentityTranslator:
+    """The default pipeline translates; test terms count as English already."""
+
+    async def translate(self, term, context=None):
+        from app.llm.structured import TranslationResult
+
+        return TranslationResult(term, "en")
+
+
 def make_context(reranker, **kwargs) -> NodeContext:
+    kwargs.setdefault("translator", IdentityTranslator())
     return NodeContext(
         searcher=kwargs.pop("searcher", FakeSearcher()),
         reranker=reranker,

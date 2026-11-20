@@ -178,6 +178,7 @@ def test_ai_suggest_single_concept(
         "extract_atc7",
         "match_previous",
         "match_code",
+        "translate",
         "match_name",
         "retrieve",
         "rerank",

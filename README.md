@@ -158,7 +158,7 @@ EMBEDDING_DIMS=1024
 OLLAMA_API_BASE=http://host.docker.internal:11434
 ```
 
-**Languages and translation.** The default `automap` pipeline embeds the source term as is and relies on the multilingual embedding model; the reranker sees the original term next to the English OMOP candidates. The `automap_translated` pipeline adds a `translate` step: the term is rendered in English OMOP wording (cached per term and model), retrieval searches both the original and the English term, and the reranker sees both. `automap_refine` lets an agent reformulate and translate when the first pass is not confident.
+**Languages and translation.** The default `automap` pipeline has a `translate` step: the term is rendered in English OMOP wording (cached per term and model; skipped when it is already English), retrieval searches both the original and the English term and merges the results, and the reranker sees both. In the evaluation this was the largest single gain for noisy Croatian terms (R@1 0.42 → 0.66, R@30 0.90 → 0.97; [report](docs/retrieval-evaluation-2026-11.md)). `automap_original` leaves translation out, for source lists that are already in English. `automap_refine` also lets an agent reformulate and translate when the first pass is not confident.
 
 There is no published OMOP-specific benchmark for these models. Before relying on a model choice, run auto-mapping in review mode on a sample with known correct mappings and compare.
 
@@ -198,13 +198,14 @@ Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workfl
 - **`automap`** (default). Deterministic steps first, the search and the LLM only for what is left:
   1. `extract_atc7`: ATC7 code at the start of the source value (drug mode).
   2. `match_previous`: the reviewed mapping of another source concept with the same name (case, accents and punctuation ignored). Confidence 10, method `auto_previous`.
-  3. `match_code`: the source value looked up in the vocabulary's code systems (**Source codes are** on the vocabulary bar, e.g. `ICD10` for MKB-10), followed through `Maps to`. Confidence 10, `auto_code`.
-  4. `match_name`: exact name or synonym (CONCEPT_SYNONYM) of any concept, followed through `Maps to`. Confidence 9, `auto_exact_name`.
-  5. `retrieve`: vector search for up to 30 candidates (`k`). Keyword (trigram) search on names and synonyms, fused by reciprocal rank, can be turned on with `keyword: true`; it is off by default because it lowered search accuracy in the evaluation ([report](docs/retrieval-evaluation-2026-11.md)).
-  6. `llm_rerank`: the LLM picks a candidate, with reviewed mappings of similar source terms as examples. It also states the match type (exact / broader / narrower / related) and may map a combined term to several concepts.
-  7. `confidence_gate`.
+  3. `match_code`: the source value looked up in the vocabulary's code systems (**Source codes are**, set at import or with **Edit** next to the vocabulary's description, e.g. `ICD10` for MKB-10), followed through `Maps to`. Confidence 10, `auto_code`.
+  4. `translate`: the term in English OMOP wording (see *Languages and translation*).
+  5. `match_name`: exact name or synonym (CONCEPT_SYNONYM) of the original or English term, followed through `Maps to`. Confidence 9, `auto_exact_name`.
+  6. `retrieve`: vector search for up to 30 candidates (`k`), for the original and the English term. Keyword (trigram) search on names and synonyms, fused by reciprocal rank, can be turned on with `keyword: true`; it is off by default because it lowered search accuracy in the evaluation ([report](docs/retrieval-evaluation-2026-11.md)).
+  7. `llm_rerank`: the LLM picks a candidate, seeing the original and the English term, with reviewed mappings of similar source terms as examples. It also states the match type (exact / broader / narrower / related) and may map a combined term to several concepts.
+  8. `confidence_gate`.
   Ambiguous deterministic hits (different targets) go to the reranker as the first candidates.
-- **`automap_translated`**: the same, with a `translate` step before the name match; searches and the reranker use the original and the English term.
+- **`automap_original`**: the same without the `translate` step; the term is searched as is (for source lists already in English).
 - **`automap_drug`**: the same, with the structured drug match (see [Drug mapping](#drug-mapping)) before translation.
 - **`automap_refine`**: like `automap`, but rejected concepts go to a Pydantic AI agent. The agent reformulates the query (translations, synonyms, ingredient splits) using search and hierarchy tools, and a second gate decides.
 
@@ -225,7 +226,7 @@ Steps are registered with `@node(...)`/`@router(...)` in a registry, and pipelin
 
 #### Example: adding a custom step
 
-[`examples/workflow_plugins/translate_query`](examples/workflow_plugins/translate_query) adds a `translate_query` step: a Pydantic AI agent that rewrites a (for example Croatian) term in English OMOP wording before retrieval. It also adds the `example_translated` pipeline, which uses that step. (Translation itself is built in: the core `translate` step and `automap_translated` pipeline. The example only shows how a plugin adds a step.)
+[`examples/workflow_plugins/translate_query`](examples/workflow_plugins/translate_query) adds a `translate_query` step: a Pydantic AI agent that rewrites a (for example Croatian) term in English OMOP wording before retrieval. It also adds the `example_translated` pipeline, which uses that step. (Translation itself is built in: the core `translate` step, part of the default `automap` pipeline. The example only shows how a plugin adds a step.)
 
 ```yaml
 # examples/workflow_plugins/translate_query/example_translated.yaml

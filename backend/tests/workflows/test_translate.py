@@ -1,4 +1,4 @@
-"""The built-in `translate` step and the `automap_translated` pipeline."""
+"""The built-in `translate` step, part of the default `automap` pipeline."""
 
 from app.llm.structured import RerankResult, TranslationResult
 from app.workflows.service import initial_state, run_pipeline
@@ -44,7 +44,7 @@ async def test_translation_searches_both_terms_and_informs_the_reranker():
     translator = FakeTranslator({"šećerna bolest tip 2": "type 2 diabetes mellitus"})
     ctx = make_context(reranker, searcher=searcher, translator=translator)
 
-    result = await run_pipeline(_state("šećerna bolest tip 2"), ctx, "automap_translated")
+    result = await run_pipeline(_state("šećerna bolest tip 2"), ctx, "automap")
 
     # Original and English term are both searched; the English one finds the concept
     assert [c[0] for c in searcher.calls] == ["šećerna bolest tip 2", "type 2 diabetes mellitus"]
@@ -64,7 +64,7 @@ async def test_translation_searches_both_terms_and_informs_the_reranker():
 async def test_english_term_is_not_searched_twice():
     searcher = FakeSearcher()
     ctx = make_context(RecordingReranker(), searcher=searcher, translator=FakeTranslator({}))
-    result = await run_pipeline(_state("Type 2 diabetes mellitus"), ctx, "automap_translated")
+    result = await run_pipeline(_state("Type 2 diabetes mellitus"), ctx, "automap")
     assert len(searcher.calls) == 1 and result["translated_query"] is None
 
 
@@ -73,7 +73,7 @@ async def test_failed_translation_keeps_the_original_term():
     ctx = make_context(
         RecordingReranker(), searcher=searcher, translator=FakeTranslator({}, fail=True)
     )
-    result = await run_pipeline(_state("type 2 diabetes"), ctx, "automap_translated")
+    result = await run_pipeline(_state("type 2 diabetes"), ctx, "automap")
     assert result["outcome"] == "accepted" and len(searcher.calls) == 1
 
 
@@ -126,3 +126,12 @@ def test_embed_many_splits_into_parallel_requests_in_order(monkeypatch):
 
     monkeypatch.setattr(get_settings(), "embedding_request_size", 40)
     assert request_size("gemini/gemini-embedding-2") == 40
+
+
+async def test_automap_original_does_not_translate():
+    searcher = FakeSearcher()
+    translator = FakeTranslator({"šećerna bolest tip 2": "type 2 diabetes mellitus"})
+    ctx = make_context(RecordingReranker(), searcher=searcher, translator=translator)
+    result = await run_pipeline(_state("šećerna bolest tip 2"), ctx, "automap_original")
+    assert translator.calls == [] and len(searcher.calls) == 1
+    assert "translate" not in [t["node"] for t in result["trace"]]

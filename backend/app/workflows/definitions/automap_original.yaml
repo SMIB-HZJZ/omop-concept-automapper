@@ -1,7 +1,7 @@
-# `automap` with a translation step: the source term is rendered in English OMOP wording; the
-# exact name match, the searches and the reranker use both the original and the English term.
-name: automap_translated
-description: earlier mappings → source code → translate → exact name/synonym → vector search (original + English) → LLM rerank → gate
+# `automap` without the translate step: the source term is searched as is. For source lists that
+# are already in English, where translating would only add an LLM call per term.
+name: automap_original
+description: automap without translation - earlier mappings → source code → exact name/synonym → vector search → LLM rerank → confidence gate
 entry: extract_atc7
 nodes:
   extract_atc7:
@@ -11,9 +11,7 @@ nodes:
     routes: { matched: gate, next: match_code }
   match_code:
     uses: match_code
-    routes: { matched: gate, next: translate }
-  translate:
-    uses: translate
+    routes: { matched: gate, next: match_name }
   match_name:
     uses: match_name
     routes: { matched: gate, next: retrieve }
@@ -27,6 +25,5 @@ nodes:
     routes: { accept: END, reject: END }
 edges:
   - [extract_atc7, match_previous]
-  - [translate, match_name]
   - [retrieve, rerank]
   - [rerank, gate]

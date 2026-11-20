@@ -99,6 +99,7 @@ async def test_accepts_confident_match_with_atc7_filter():
         "extract_atc7",
         "match_previous",
         "match_code",
+        "translate",
         "match_name",
         "retrieve",
         "rerank",

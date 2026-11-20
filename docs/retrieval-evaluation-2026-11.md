@@ -11,7 +11,7 @@ The status column says what the app does now (branch `rewrite/fastapi-react`, 20
 
 | # | Finding | Recommendation | Status |
 |---|---|---|---|
-| 1 | Translating the (noisy) Croatian term to English before search is the largest single gain: OpenAI R@1 0.42 → 0.66, R@30 0.90 → 0.97 (856 terms, p < 0.0001); significant for every embedding model. | Keep translation on by default. | Done (default). |
+| 1 | Translating the (noisy) Croatian term to English before search is the largest single gain: OpenAI R@1 0.42 → 0.66, R@30 0.90 → 0.97 (856 terms, p < 0.0001); significant for every embedding model. | Keep translation on by default. | Done (2026-11-20; until then only the drug pipeline and the optional `automap_translated` translated). |
 | 2 | Claude Haiku 5.5 as the translator is 1–2 points behind Sonnet 5.5 (R@1 −0.013, n.s. for OpenAI embeddings; significant for some open models). | Haiku is an acceptable cheaper translator. | Superseded: Haiku is no longer used; Sonnet 5.5 translates. |
 | 3 | Embedding concept name + synonyms (the new default) is significantly worse than the name alone (conditions, OpenAI R@1 0.51 vs 0.57). Adding concept class and domain (`name_context`) is also slightly worse (p = 0.006 en, p < 0.001 translated). | **Revert `EMBEDDING_TEXT` default to `name`.** | Done (`EMBEDDING_TEXT=name`). |
 | 4 | Fusing keyword search (trigram, names + synonyms) with vector search via RRF lowers R@1 by ~10 points for good embedding models (p < 0.0001) and does not raise R@30. At the app's `k_default = 15`, recall drops 2–3 points (OpenAI 0.955 → 0.926 clean English, 0.950 → 0.930 translated). It helps only Gemini Embedding 2. | Turn `keyword` off by default in the retrieve node (keep it as an option). | Done (`keyword: false` by default). |
