@@ -126,3 +126,41 @@ def test_embed_many_splits_into_parallel_requests_in_order(monkeypatch):
 
     monkeypatch.setattr(get_settings(), "embedding_request_size", 40)
     assert request_size("gemini/gemini-embedding-2") == 40
+
+
+class EnglishNameOnly:
+    """Stands in for app.services.lexical: only the English term matches a concept exactly."""
+
+    def match_name(self, names, vocabularies=None):
+        from app.services.lexical import TextMatch
+        from tests.workflows.helpers import CONCEPTS
+
+        if names == ["type 2 diabetes mellitus"]:
+            return TextMatch(concepts=[CONCEPTS[201]], via="name")
+        return TextMatch()
+
+    def match_previous(self, *args):
+        from app.services.lexical import TextMatch
+
+        return TextMatch()
+
+    match_code = match_previous
+
+    def similar_examples(self, *args):
+        return []
+
+
+async def test_an_exact_match_of_the_translation_is_left_to_the_reranker():
+    class Recording:
+        async def rerank(self, term, candidates, drug_specific, **kwargs):
+            self.first = candidates[0]["concept_id"]
+            return RerankResult(0, 9)
+
+    reranker = Recording()
+    translator = FakeTranslator({"šećerna bolest tip 2": "type 2 diabetes mellitus"})
+    ctx = make_context(reranker, translator=translator, lexical=EnglishNameOnly())
+    result = await run_pipeline(_state("šećerna bolest tip 2"), ctx, "automap")
+    # Not accepted by the name step: the reranker saw it first and chose
+    assert reranker.first == 201 and result["selected"]["concept_id"] == 201
+    assert result.get("method") != "auto_exact_name"
+    assert "rerank" in [t["node"] for t in result["trace"]]

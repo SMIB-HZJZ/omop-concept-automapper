@@ -90,11 +90,26 @@ class NameMatchParams(TextMatchParams):
     "match_name",
     routes={"matched", "next"},
     params=NameMatchParams,
-    description="Exact name or synonym match (case, accents and punctuation ignored), then Maps to",
+    description="Exact name or synonym match (case, accents and punctuation ignored), then Maps to; "
+    "a match of the English translation only goes to the reranker as the first candidates",
 )
 async def match_name(state: AutomapState, ctx: NodeContext, params: NameMatchParams):
     if ctx.lexical is None:
         return "next", {"_summary": "skipped (no database)"}
-    names = [state.get("source_name", ""), state.get("translated_query") or ""]
-    match = await asyncio.to_thread(ctx.lexical.match_name, names)
-    return _outcome(state, match, params, "auto_exact_name", "exact name/synonym")
+    match = await asyncio.to_thread(ctx.lexical.match_name, [state.get("source_name", "")])
+    if _in_domains(state, match.concepts):
+        return _outcome(state, match, params, "auto_exact_name", "exact name/synonym")
+    translated = state.get("translated_query")
+    if not translated:
+        return _outcome(state, match, params, "auto_exact_name", "exact name/synonym")
+    # A machine translation can be wrong, so an exact hit on it is a strong candidate for the
+    # reranker, not an accepted mapping
+    hit = await asyncio.to_thread(ctx.lexical.match_name, [translated])
+    concepts = _in_domains(state, hit.concepts)
+    if not concepts:
+        return "next", {"_summary": "exact name/synonym: no match (original or English)"}
+    names = " + ".join(repr(c["concept_name"]) for c in concepts)
+    return "next", {
+        "structured_candidates": [*(state.get("structured_candidates") or []), *concepts][:30],
+        "_summary": f"English {translated!r} matches {names} exactly; left to the reranker",
+    }

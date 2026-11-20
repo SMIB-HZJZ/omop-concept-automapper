@@ -200,7 +200,7 @@ Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workfl
   2. `match_previous`: the reviewed mapping of another source concept with the same name (case, accents and punctuation ignored). Confidence 10, method `auto_previous`.
   3. `match_code`: the source value looked up in the vocabulary's code systems (**Source codes are**, set at import or with **Edit** next to the vocabulary's description, e.g. `ICD10` for MKB-10), followed through `Maps to`. Confidence 10, `auto_code`.
   4. `translate`: the term in English OMOP wording (see *Languages and translation*).
-  5. `match_name`: exact name or synonym (CONCEPT_SYNONYM) of the original or English term, followed through `Maps to`. Confidence 9, `auto_exact_name`.
+  5. `match_name`: exact name or synonym (CONCEPT_SYNONYM) of the original term, followed through `Maps to`. Confidence 9, `auto_exact_name`. An exact match of only the English translation is not accepted (the translation may be wrong); it goes to the reranker as its first candidate.
   6. `retrieve`: vector search for up to 30 candidates (`k`), for the original and the English term. Keyword (trigram) search on names and synonyms, fused by reciprocal rank, can be turned on with `keyword: true`; it is off by default because it lowered search accuracy in the evaluation ([report](docs/retrieval-evaluation-2026-11.md)).
   7. `llm_rerank`: the LLM picks a candidate, seeing the original and the English term, with reviewed mappings of similar source terms as examples. It also states the match type (exact / broader / narrower / related) and may map a combined term to several concepts.
   8. `confidence_gate`: accepted at or above the threshold; otherwise
