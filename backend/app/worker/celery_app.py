@@ -16,7 +16,6 @@ celery_app = Celery(
     backend=settings.result_backend,
     include=[
         "app.worker.tasks.vocabulary",
-        "app.worker.tasks.atc7",
         "app.worker.tasks.source",
         "app.worker.tasks.embeddings",
         "app.worker.tasks.automap",

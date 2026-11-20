@@ -23,7 +23,7 @@ browser ──► frontend (nginx, React SPA) ──/api──► backend (FastA
 |---|---|
 | `frontend` | React + TypeScript (Vite), Tailwind + shadcn/ui, TanStack Query. Served by nginx on port **8501**, which also proxies `/api` to the backend. |
 | `backend` | FastAPI: REST API, authentication, Alembic migrations on start-up. |
-| `worker` | Celery: vocabulary import, ATC7 processing, CSV import, embedding, metadata sync, auto-mapping. |
+| `worker` | Celery: vocabulary import (with ATC7 codes), CSV import, embedding, metadata sync, auto-mapping. |
 | `postgres-db` | `timescale/timescaledb-ha:pg18` (PostgreSQL 18 with pgvector 0.8 and pgvectorscale 0.9). Holds the OMOP vocabulary, mappings and vectors (StreamingDiskANN index). |
 | `redis` | Celery broker and result backend, cache for read endpoints and query embeddings, task locks and cancel flags. |
 | `litellm` | OpenAI-compatible proxy in front of every LLM provider. It is the only service that receives provider API keys (from `.env.litellm`). |
@@ -72,26 +72,25 @@ This version starts from an empty database: import the vocabulary and embed conc
    - The import runs in the background with a progress bar, and you can leave the page once the upload has finished.
    - Importing a new release updates everything derived from the vocabulary:
      - mappings to concepts that are no longer standard are replaced by their `Maps to` successor, or removed (audit: `auto_vocab_update`, `vocab_removed`);
-     - ATC7 codes of drugs are recomputed;
+     - ATC7 codes of drugs are computed (no separate step);
      - every embedding collection drops vectors of concepts that left the standard set, moves domain labels, and flags vectors whose embedded text (name, synonyms, class/domain) changed;
      - the active collection is then re-embedded for changed concepts and new concepts in the domains it already covers (`AUTO_EMBED_AFTER_VOCABULARY_IMPORT`, default on).
-2. **Import → ATC7 Processing** (admin). Computes the 7-character ATC codes of every standard drug. These are used to narrow drug searches.
-3. **Import → Source Concepts**. Upload a comma-delimited CSV:
+2. **Import → Source Concepts**. Upload a comma-delimited CSV:
    - Required columns: `source_value` and `source_concept_name`.
    - Optional: `freq` (empty means 1), and `concept_id` for existing mappings (`;`-separated, for example `1234;5678`).
    - If a `source_value` starts with an ATC7 code (for example `A10BA02…`), drug mapping uses it.
    - Optional drug columns, in the shape of OMOP `drug_strength` (see [Drug mapping](#drug-mapping)).
-4. **Import → Embedding Management** (admin). Embeds the standard concepts with the configured embedding model. You can filter by domain and set the batch size.
-5. **Search**. Semantic search with domain, vocabulary and ATC7 filters.
-6. **Map Concepts**. Work through unmapped source concepts:
+3. **Import → Embedding Management** (admin). Embeds the standard concepts with the configured embedding model. You can filter by domain and set the batch size.
+4. **Search**. Semantic search with domain, vocabulary and ATC7 filters.
+5. **Map Concepts**. Work through unmapped source concepts:
    - Pick a concept, edit the search term and filters, select one or more results (or enter concept IDs), then confirm.
    - **AI suggest** runs the mapping pipeline for the selected concept and shows its pick, confidence and step-by-step trace.
    - **Auto map** runs the pipeline over the whole vocabulary as a background task.
      - In **review** mode (default), results above the confidence threshold become suggestions.
      - In **commit** mode, they are mapped directly, as the old app did.
-7. **Review**. Accept or reject suggestions one at a time, as a selection, or all at once above a confidence level.
-8. **Check & Commit**. Review the mappings, unmap, download `vocabulary_<id>_mappings.csv`, and view statistics. Admins can delete a source vocabulary.
-9. **Configuration**.
+6. **Review**. Accept or reject suggestions one at a time, as a selection, or all at once above a confidence level.
+7. **Check & Commit**. Review the mappings, unmap, download `vocabulary_<id>_mappings.csv`, and view statistics. Admins can delete a source vocabulary.
+8. **Configuration**.
    - LLM model, embedding model and dimensions; changes are stored as overrides of the `.env` defaults.
    - The available mapping pipelines.
    - **Users** (admin only): create users, change roles, deactivate and reset passwords.

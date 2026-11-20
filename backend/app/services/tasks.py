@@ -19,7 +19,6 @@ TERMINAL_STATUSES = ("SUCCESS", "FAILURE", "CANCELLED")
 # Kinds that must never run concurrently with another task of the same group
 LOCK_GROUPS = {
     "vocabulary.import": "vocab",
-    "atc7.process": "vocab",
     "embeddings.embed": "embed",
     "embeddings.sync_metadata": "embed",
     "embeddings.sync_atc7": "embed",

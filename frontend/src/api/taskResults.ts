@@ -6,7 +6,6 @@ type S = components["schemas"];
 /** Result payload of each task kind, as documented by the backend (app/schemas/task_results.py). */
 export type TaskResults = {
   "vocabulary.import": S["VocabularyImportResult"];
-  "atc7.process": S["Atc7Result"];
   "source.import": S["SourceImportResult"];
   "embeddings.embed": S["EmbedResult"];
   "embeddings.sync_metadata": S["SyncMetadataResult"];

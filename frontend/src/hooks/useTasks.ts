@@ -7,7 +7,7 @@ import type { Task } from "@/api/types";
 
 export const TASK_LABELS: Record<string, string> = {
   "vocabulary.import": "Vocabulary import",
-  "atc7.process": "ATC7 processing",
+  "atc7.process": "ATC7 processing", // older task history; now part of the vocabulary import
   "source.import": "Source concept import",
   "embeddings.embed": "Embedding",
   "embeddings.sync_metadata": "Metadata sync",
@@ -68,9 +68,6 @@ export function invalidateForTask(qc: QueryClient, task: Task) {
       void qc.invalidateQueries({ queryKey: ["embedding-status"] });
       void qc.invalidateQueries({ queryKey: keys.meta });
       invalidateVocabulary(qc);
-      break;
-    case "atc7.process":
-      void qc.invalidateQueries({ queryKey: keys.atc7Stats });
       break;
     case "source.import":
     case "automap.run": {

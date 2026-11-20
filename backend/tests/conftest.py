@@ -201,14 +201,11 @@ def upload_vocabulary(client, headers, content: bytes | None = None, filename="a
 
 @pytest.fixture(scope="session")
 def loaded_vocabulary(client, admin_headers):
-    """OMOP fixture vocabulary imported through the API, with ATC7 processed."""
+    """OMOP fixture vocabulary imported through the API (which also computes ATC7 codes)."""
     resp = upload_vocabulary(client, admin_headers)
     assert resp.status_code == 202, resp.text
     task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
-    assert task["status"] == "SUCCESS", task
-    resp = client.post("/api/atc7/process", headers=admin_headers)
-    task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
-    assert task["status"] == "SUCCESS", task
+    assert task["status"] == "SUCCESS", task  # ATC7 codes are computed by the import
     return task
 
 

@@ -5,7 +5,6 @@ import pytest
 
 ADMIN_ONLY = [
     ("post", "/api/vocabulary/import", None),
-    ("post", "/api/atc7/process", None),
     ("post", "/api/embeddings/embed", {"batch_size": 100}),
     ("post", "/api/embeddings/sync-metadata", None),
     ("post", "/api/embeddings/sync-atc7", None),

@@ -267,23 +267,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/atc7/process": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start Atc7 */
-        post: operations["start_atc7_api_atc7_process_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/source-vocabularies": {
         parameters: {
             query?: never;
@@ -1922,13 +1905,6 @@ export interface components {
             /** Plugin */
             plugin?: string | null;
         };
-        /** Atc7Result */
-        Atc7Result: {
-            /** Drugs With Atc7 */
-            drugs_with_atc7: number;
-        } & {
-            [key: string]: unknown;
-        };
         /** AutomapResult */
         AutomapResult: {
             /** Vocabulary Id */
@@ -2637,26 +2613,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Atc7Stats"];
-                };
-            };
-        };
-    };
-    start_atc7_api_atc7_process_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TaskRef"];
                 };
             };
         };

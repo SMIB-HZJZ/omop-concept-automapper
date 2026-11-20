@@ -1,7 +1,7 @@
 import { UploadCloud } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { useVocabularyStatus } from "@/api/queries";
+import { useAtc7Stats, useVocabularyStatus } from "@/api/queries";
 import { taskResult } from "@/api/taskResults";
 import type { Task, TaskRef } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
@@ -56,6 +56,7 @@ type Upload = { file: File; loaded: number; total: number; abort: () => void };
 export function VocabularyTab() {
   const { isAdmin } = useAuth();
   const status = useVocabularyStatus();
+  const atc7 = useAtc7Stats();
   const latest = useLatestTask("vocabulary.import");
   const { run, busy } = useStartTask();
   const active = latest.data && !latest.data.is_terminal;
@@ -111,8 +112,8 @@ export function VocabularyTab() {
             as it is, a <code>.zip</code> (no need to unpack it). It should contain <code>CONCEPT.csv</code>,{" "}
             <code>CONCEPT_RELATIONSHIP.csv</code> and <code>CONCEPT_ANCESTOR.csv</code>, optionally{" "}
             <code>DRUG_STRENGTH.csv</code> and <code>CONCEPT_SYNONYM.csv</code>. Concepts are upserted; the other tables
-            are replaced. Mappings to concepts that are no longer standard are replaced by their successor or removed.
-            Search and mapping keep working during the import.
+            are replaced, and the ATC7 codes of drugs are computed. Mappings to concepts that are no longer standard are
+            replaced by their successor or removed. Search and mapping keep working during the import.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -134,6 +135,13 @@ export function VocabularyTab() {
               }
             />
           ))}
+          {atc7.data && (
+            <StatCard
+              label="drugs with ATC7 codes"
+              value={formatNumber(atc7.data.total_drugs_with_atc7)}
+              hint="Computed by each import; ATC7 codes narrow drug searches."
+            />
+          )}
         </div>
       </section>
 

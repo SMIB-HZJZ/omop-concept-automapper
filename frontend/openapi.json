@@ -690,32 +690,6 @@
         ]
       }
     },
-    "/api/atc7/process": {
-      "post": {
-        "tags": [
-          "vocabulary"
-        ],
-        "summary": "Start Atc7",
-        "operationId": "start_atc7_api_atc7_process_post",
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskRef"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/source-vocabularies": {
       "get": {
         "tags": [
@@ -5973,20 +5947,6 @@
           "description"
         ],
         "title": "WorkflowNodeInfo"
-      },
-      "Atc7Result": {
-        "additionalProperties": true,
-        "properties": {
-          "drugs_with_atc7": {
-            "title": "Drugs With Atc7",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "drugs_with_atc7"
-        ],
-        "title": "Atc7Result",
-        "type": "object"
       },
       "AutomapResult": {
         "additionalProperties": true,

@@ -40,7 +40,6 @@ await step("login", async () => {
 for (const [path, heading, file] of [
   ["/import", "Import data", "01-import-vocabulary"],
   ["/import?tab=source", "Import data", "02-import-source"],
-  ["/import?tab=atc7", "Import data", "03-import-atc7"],
   ["/import?tab=embeddings", "Import data", "04-import-embeddings"],
 ]) {
   await step(`page ${path}`, async () => {
@@ -65,14 +64,20 @@ await step("map: select concept and search", async () => {
   await shot("06-map");
   const row = page.locator("table").first().locator("tbody tr").first();
   await row.click();
-  await page.getByText(/Mapping:/).first().waitFor();
+  await page
+    .getByText(/Mapping:/)
+    .first()
+    .waitFor();
   await settle();
   await page.waitForTimeout(1200);
   await shot("07-map-detail");
 });
 await step("map: AI suggest", async () => {
   await page.getByRole("button", { name: /AI suggest/i }).click();
-  await page.getByText(/accepted|rejected|no_match|no match/i).first().waitFor({ timeout: 15000 });
+  await page
+    .getByText(/accepted|rejected|no_match|no match/i)
+    .first()
+    .waitFor({ timeout: 15000 });
   await settle();
   await shot("08-map-ai-suggest");
 });
@@ -86,7 +91,10 @@ await step("map: select result and confirm", async () => {
   const results = page.locator("table").nth(1);
   await results.locator("tbody tr").first().click();
   await page.getByRole("button", { name: /Confirm mapping/i }).click();
-  await page.getByText(/Mapped to/i).first().waitFor({ timeout: 10000 });
+  await page
+    .getByText(/Mapped to/i)
+    .first()
+    .waitFor({ timeout: 10000 });
   await settle();
   await shot("09-map-confirmed");
 });

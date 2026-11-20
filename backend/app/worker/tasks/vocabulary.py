@@ -90,9 +90,11 @@ def _import_vocabulary(self, path: str, user_id: int | None) -> dict:
         # Vectors of concepts that left the standard set go, and domain labels (used by the
         # filtered vector search) follow concepts that changed domain
         imported = {t for t, r in results.items() if r["status"] == "success"}
+        # ATC7 codes of drugs (used to narrow drug searches) come from these three tables, so
+        # they are recomputed after every import that changed one of them
         atc7 = None
         if imported & {"concept", "concept_relationship", "concept_ancestor"}:
-            self.progress.phase("Recomputing ATC7 codes of drugs")
+            self.progress.phase("Computing ATC7 codes of drugs")
             atc7 = process_drug_atc7_codes(conn)
         self.progress.phase("Updating embedding collections")
         vectors = _sync_collections(conn)

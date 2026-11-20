@@ -44,10 +44,6 @@ class VocabularyImportResult(_Result):
     embedding_refresh: EmbeddingRefresh | None = None
 
 
-class Atc7Result(_Result):
-    drugs_with_atc7: int
-
-
 class SourceImportResult(_Result):
     inserted: int
     premapped_sources: int
@@ -98,7 +94,6 @@ class AutomapResult(_Result):
 
 TASK_RESULT_MODELS: dict[str, type[BaseModel]] = {
     "vocabulary.import": VocabularyImportResult,
-    "atc7.process": Atc7Result,
     "source.import": SourceImportResult,
     "embeddings.embed": EmbedResult,
     "embeddings.sync_metadata": SyncMetadataResult,

@@ -11,7 +11,6 @@ from app.core.config import get_settings
 from app.schemas.api import Atc7Stats, TaskRef, VocabularyStatus
 from app.services.atc7 import get_atc7_statistics
 from app.services.vocabulary_status import ArchiveError, archive_files, get_table_status
-from app.worker.tasks.atc7 import process_atc7
 from app.worker.tasks.vocabulary import import_vocabulary
 
 router = APIRouter(tags=["vocabulary"])
@@ -92,8 +91,3 @@ def _too_large(limit: int) -> str:
 @router.get("/atc7/stats", response_model=Atc7Stats)
 def atc7_stats(_: CurrentUser, session: SessionDep):
     return get_atc7_statistics(session)
-
-
-@router.post("/atc7/process", response_model=TaskRef, status_code=status.HTTP_202_ACCEPTED)
-def start_atc7(user: AdminUser, session: SessionDep):
-    return start_task(session, "atc7.process", process_atc7, {}, user)

@@ -19,8 +19,8 @@ describe("taskResult", () => {
   });
 
   it("returns null for another kind or a missing result", () => {
-    expect(taskResult(task({ result: { drugs_with_atc7: 1 } }), "atc7.process")).toBeNull();
-    expect(taskResult(task({ kind: "atc7.process", result: null }), "atc7.process")).toBeNull();
+    expect(taskResult(task({ result: { inserted: 1 } }), "source.import")).toBeNull();
+    expect(taskResult(task({ kind: "source.import", result: null }), "source.import")).toBeNull();
   });
 });
 

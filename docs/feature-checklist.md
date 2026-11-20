@@ -14,7 +14,7 @@ Verified on 2026-10-07 against the full `docker compose up` stack (PostgreSQL 18
 | F1 | Vocabulary row counts + last import | Import › Vocabulary · `GET /vocabulary/status` | test_vocabulary_import_and_atc7, UI |
 | F2 | Vocabulary zip upload (checked: zip, tables present, size limit) | Import › Vocabulary · `POST /vocabulary/import` (zip as the request body) | test_vocabulary_upload_is_checked, test_vocabulary_upload_size_limit, UI |
 | F3 | Import OMOP vocabulary (upsert concept, truncate+copy others, index drop/recreate, `vocabulary_imports` log, clean non-standard mappings) | Celery `vocabulary.import_all` (COPY FROM STDIN, byte progress) | test_vocabulary_import_and_atc7, test_reimport_upserts_concepts, test_clean_non_standard_mappings_after_reimport, e2e |
-| F4 | Process ATC7 | Celery `atc7.process` | test_vocabulary_import_and_atc7, e2e |
+| F4 | Process ATC7 | Part of the vocabulary import (no separate step) | test_vocabulary_import_and_atc7, e2e |
 | F5 | ATC7 statistics | Import › ATC7 · `GET /atc7/stats` | test, UI |
 | F6 | Source CSV upload, preview, vocabulary id, freq NaN→1, `;` pre-mappings validated | Import › Source (papaparse preview/validation) · Celery `source.import_csv` | test_source_import_and_mapping_flow, test_source_import_validates_columns, e2e |
 | F7 | Embedding status, domain filter, batch size, embed standard concepts | Import › Embeddings · Celery `embeddings.embed_standard` | test_embed_status_and_index, e2e, UI |
