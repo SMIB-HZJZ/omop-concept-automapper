@@ -5,6 +5,9 @@ from collections.abc import Sequence
 from sqlalchemy import text
 from sqlmodel import Session
 
+from app.core import cache
+from app.vector.store import EXCLUDED_CLASS_FILTER, _ident
+
 CONCEPT_COLUMNS = """
     c.concept_id, c.concept_name, c.concept_class_id, c.domain_id, c.vocabulary_id,
     c.concept_code, c.standard_concept, c.invalid_reason, ca.atc7_codes
@@ -137,3 +140,26 @@ def list_domains(session: Session) -> list[str]:
     return list(
         session.execute(text("SELECT domain_id FROM domain_label ORDER BY domain_id")).scalars()
     )
+
+
+@cache.cached("embeddings")
+def concept_facets(session: Session, embedding_table: str | None) -> list[dict]:
+    """The domain / vocabulary / concept class combinations of the concepts search can find:
+    valid standard concepts that are embedded (all of them when nothing is embedded yet). A few
+    dozen rows, so the browser can narrow each filter by the others, as Athena does. Cached
+    until embeddings change or the vocabulary is imported again."""
+    source = "concept c"
+    if embedding_table:
+        source = f"{_ident(embedding_table)} e JOIN concept c ON c.concept_id = e.concept_id"
+    rows = session.execute(
+        text(
+            f"""
+            SELECT DISTINCT c.domain_id, c.vocabulary_id, c.concept_class_id
+            FROM {source}
+            WHERE c.standard_concept = 'S' AND c.invalid_reason IS NULL
+              AND {EXCLUDED_CLASS_FILTER.replace("%%", "%")}
+            ORDER BY 1, 2, 3
+            """
+        )
+    ).mappings()
+    return [dict(r) for r in rows]

@@ -2,18 +2,7 @@ import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/MultiSelect";
 
 /** OMOP vocabularies whose codes can appear in source_value (MKB-10 = ICD10). */
-const CODE_VOCABULARIES = [
-  "ICD10",
-  "ICD10CM",
-  "ICD9CM",
-  "ICD10PCS",
-  "LOINC",
-  "SNOMED",
-  "ATC",
-  "NDC",
-  "CPT4",
-  "Read",
-];
+const CODE_VOCABULARIES = ["ICD10", "ICD10CM", "ICD9CM", "ICD10PCS", "LOINC", "SNOMED", "ATC", "NDC", "CPT4", "Read"];
 
 /** Which code system the source_value codes use. Auto-mapping and AI suggest look a code up there
  *  first and follow "Maps to": an exact mapping without the AI. */

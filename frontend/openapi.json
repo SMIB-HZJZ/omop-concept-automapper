@@ -1955,6 +1955,37 @@
         }
       }
     },
+    "/api/concept-facets": {
+      "get": {
+        "tags": [
+          "concepts"
+        ],
+        "summary": "Concept Facets",
+        "description": "Domain / vocabulary / concept class combinations of the concepts search can find, for the\nsearch filters.",
+        "operationId": "concept_facets_api_concept_facets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConceptFacet"
+                  },
+                  "type": "array",
+                  "title": "Response Concept Facets Api Concept Facets Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/concepts/{concept_id}": {
       "get": {
         "tags": [
@@ -3417,6 +3448,29 @@
         ],
         "title": "ConceptExplanation"
       },
+      "ConceptFacet": {
+        "properties": {
+          "domain_id": {
+            "type": "string",
+            "title": "Domain Id"
+          },
+          "vocabulary_id": {
+            "type": "string",
+            "title": "Vocabulary Id"
+          },
+          "concept_class_id": {
+            "type": "string",
+            "title": "Concept Class Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "domain_id",
+          "vocabulary_id",
+          "concept_class_id"
+        ],
+        "title": "ConceptFacet"
+      },
       "ConceptLookup": {
         "properties": {
           "found": {
@@ -4340,6 +4394,22 @@
             "title": "Domains",
             "default": []
           },
+          "vocabularies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Vocabularies",
+            "default": []
+          },
+          "concept_classes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Concept Classes",
+            "default": []
+          },
           "vocabulary_id": {
             "anyOf": [
               {
@@ -4349,7 +4419,8 @@
                 "type": "null"
               }
             ],
-            "title": "Vocabulary Id"
+            "title": "Vocabulary Id",
+            "description": "Deprecated: use vocabularies"
           },
           "atc7_codes": {
             "items": {

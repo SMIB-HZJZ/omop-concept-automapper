@@ -619,6 +619,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/concept-facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Concept Facets
+         * @description Domain / vocabulary / concept class combinations of the concepts search can find, for the
+         *     search filters.
+         */
+        get: operations["concept_facets_api_concept_facets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/concepts/{concept_id}": {
         parameters: {
             query?: never;
@@ -1111,6 +1132,15 @@ export interface components {
              */
             cached: boolean;
         };
+        /** ConceptFacet */
+        ConceptFacet: {
+            /** Domain Id */
+            domain_id: string;
+            /** Vocabulary Id */
+            vocabulary_id: string;
+            /** Concept Class Id */
+            concept_class_id: string;
+        };
         /** ConceptLookup */
         ConceptLookup: {
             /** Found */
@@ -1423,7 +1453,20 @@ export interface components {
              * @default []
              */
             domains: string[];
-            /** Vocabulary Id */
+            /**
+             * Vocabularies
+             * @default []
+             */
+            vocabularies: string[];
+            /**
+             * Concept Classes
+             * @default []
+             */
+            concept_classes: string[];
+            /**
+             * Vocabulary Id
+             * @description Deprecated: use vocabularies
+             */
             vocabulary_id?: string | null;
             /**
              * Atc7 Codes
@@ -3332,6 +3375,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    concept_facets_api_concept_facets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptFacet"][];
                 };
             };
         };

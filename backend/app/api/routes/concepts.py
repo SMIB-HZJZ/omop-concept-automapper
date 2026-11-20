@@ -11,6 +11,7 @@ from app.llm.explain import explain_concept
 from app.schemas.api import (
     ConceptDetails,
     ConceptExplanation,
+    ConceptFacet,
     ConceptLookup,
     ConceptOut,
     SearchRequest,
@@ -18,7 +19,13 @@ from app.schemas.api import (
 )
 from app.services import concepts as concept_service
 from app.services.settings_store import get_effective_config
-from app.vector.store import CollectionMissing, PgVectorStore, SearchFilters
+from app.vector.store import (
+    CollectionMissing,
+    PgVectorStore,
+    SearchFilters,
+    collection_exists,
+    get_collection,
+)
 
 router = APIRouter(tags=["concepts"])
 logger = logging.getLogger(__name__)
@@ -41,6 +48,20 @@ def lookup_concepts(
     found = concept_service.get_concepts(session, wanted)
     found_ids = {c["concept_id"] for c in found}
     return ConceptLookup(found=found, missing=[i for i in wanted if i not in found_ids])
+
+
+@router.get("/concept-facets", response_model=list[ConceptFacet])
+def concept_facets(_: CurrentUser, session: SessionDep):
+    """Domain / vocabulary / concept class combinations of the concepts search can find, for the
+    search filters."""
+    cfg = get_effective_config(session)
+    collection = get_collection(session, cfg.collection_name)
+    table = (
+        collection.table_name
+        if collection and collection_exists(session, cfg.collection_name)
+        else None
+    )
+    return concept_service.concept_facets(session, table)
 
 
 @router.get("/concepts/{concept_id}", response_model=ConceptOut)
@@ -87,7 +108,11 @@ def search(body: SearchRequest, _: CurrentUser, session: SessionDep):
         Embedder(cfg.embedding_model, cfg.embedding_dims, cfg.embedding_task_types),
     )
     filters = SearchFilters(
-        domains=body.domains, vocabulary_id=body.vocabulary_id or None, atc7_codes=body.atc7_codes
+        domains=body.domains,
+        vocabulary_id=body.vocabulary_id or None,
+        vocabularies=body.vocabularies,
+        concept_classes=body.concept_classes,
+        atc7_codes=body.atc7_codes,
     )
     try:
         results = vector_store.search(body.query.strip(), body.k, filters)

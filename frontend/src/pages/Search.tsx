@@ -3,10 +3,10 @@ import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
 import { ApiError } from "@/api/client";
-import { useMeta, useSearch } from "@/api/queries";
+import { useSearch } from "@/api/queries";
 import type { SearchRequest, SearchResult } from "@/api/types";
 import { ErrorAlert, PageHeader } from "@/components/common";
-import { MultiSelect } from "@/components/MultiSelect";
+import { ConceptFilterFields } from "@/components/ConceptFilterFields";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { useConceptModal } from "@/hooks/useConceptModal";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Skeleton } from "@/components/motion";
 import { isValidAtc7, normalizeAtc7 } from "@/lib/atc7";
+import type { ConceptFilterValues } from "@/lib/conceptFacets";
 
 function ResultItem({ result }: { result: SearchResult }) {
   const atc7 = result.atc7_codes ?? [];
@@ -95,11 +96,9 @@ function ResultItem({ result }: { result: SearchResult }) {
 }
 
 export function SearchPage() {
-  const meta = useMeta();
   const [query, setQuery] = useState("");
-  const [domains, setDomains] = useState<string[]>([]);
+  const [filters, setFilters] = useState<ConceptFilterValues>({ domains: [], vocabularies: [], conceptClasses: [] });
   const [k, setK] = useState(50);
-  const [vocabulary, setVocabulary] = useState("");
   const [atc7, setAtc7] = useState("");
 
   const atc7Code = normalizeAtc7(atc7);
@@ -107,7 +106,6 @@ export function SearchPage() {
   // Every typed field is debounced, so typing does not send a request per keystroke
   const debouncedQuery = useDebounce(query.trim(), 400);
   const debouncedK = useDebounce(k, 400);
-  const debouncedVocabulary = useDebounce(vocabulary.trim(), 400);
   const debouncedAtc7 = useDebounce(atc7Code && !atc7Invalid ? atc7Code : "", 400);
 
   const request = useMemo<SearchRequest | null>(() => {
@@ -115,18 +113,19 @@ export function SearchPage() {
     return {
       query: debouncedQuery,
       k: Math.min(100, Math.max(1, debouncedK || 50)),
-      domains,
-      vocabulary_id: debouncedVocabulary || null,
+      domains: filters.domains,
+      vocabularies: filters.vocabularies,
+      concept_classes: filters.conceptClasses,
       atc7_codes: debouncedAtc7 ? [debouncedAtc7] : [],
     };
-  }, [debouncedQuery, debouncedK, domains, debouncedVocabulary, debouncedAtc7]);
+  }, [debouncedQuery, debouncedK, filters, debouncedAtc7]);
 
   const search = useSearch(request);
   // Typing ahead of the debounce counts as busy too, so the spinner shows right away
   const typing = query.trim() !== debouncedQuery;
   const busy = typing || search.isFetching;
   const results = search.data?.results ?? [];
-  const advancedCount = (vocabulary.trim() ? 1 : 0) + (atc7Code ? 1 : 0);
+  const advancedCount = filters.vocabularies.length + filters.conceptClasses.length + (atc7Code ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -157,16 +156,7 @@ export function SearchPage() {
             )}
           </div>
         </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="search-domains">Domains</Label>
-          <MultiSelect
-            id="search-domains"
-            options={meta.data?.domains ?? []}
-            value={domains}
-            onChange={setDomains}
-            placeholder="All domains"
-          />
-        </div>
+        <ConceptFilterFields idPrefix="search" values={filters} onChange={setFilters} only={["domains"]} />
         <div className="grid gap-1.5">
           <Label htmlFor="search-k">Number of results</Label>
           <Input
@@ -186,17 +176,13 @@ export function SearchPage() {
               {advancedCount > 0 && <Badge className="h-5 px-1.5">{advancedCount}</Badge>}
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-72 space-y-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="search-vocabulary">Vocabulary</Label>
-              <Input
-                id="search-vocabulary"
-                value={vocabulary}
-                onChange={(e) => setVocabulary(e.target.value)}
-                placeholder="e.g. RxNorm, SNOMED"
-              />
-              <p className="text-muted-foreground text-xs">Filter by a specific vocabulary</p>
-            </div>
+          <PopoverContent align="end" className="w-80 space-y-3">
+            <ConceptFilterFields
+              idPrefix="search"
+              values={filters}
+              onChange={setFilters}
+              only={["vocabularies", "conceptClasses"]}
+            />
             <div className="grid gap-1.5">
               <Label htmlFor="search-atc7">ATC7 code</Label>
               <Input
@@ -229,7 +215,9 @@ export function SearchPage() {
             <ul className="list-disc pl-5">
               <li>Filter by domain to narrow down results</li>
               <li>Use ATC7 codes to find drugs in specific therapeutic classes</li>
-              <li>Try filtering by vocabularies (e.g. 'RxNorm' for drugs)</li>
+              <li>
+                Under Advanced filters, pick vocabularies (e.g. RxNorm for drugs) or concept classes, as in Athena
+              </li>
             </ul>
           </AlertDescription>
         </Alert>

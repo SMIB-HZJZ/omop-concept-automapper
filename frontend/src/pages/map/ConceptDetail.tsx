@@ -5,19 +5,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { ApiError, errorMessage } from "@/api/client";
-import {
-  useDecideSuggestions,
-  useMapConcepts,
-  useMeta,
-  useSearch,
-  useSuggest,
-  useSuggestions,
-  useUnmap,
-} from "@/api/queries";
+import { useDecideSuggestions, useMapConcepts, useSearch, useSuggest, useSuggestions, useUnmap } from "@/api/queries";
 import type { SearchRequest, SuggestResponse, UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { ErrorAlert } from "@/components/common";
-import { MultiSelect } from "@/components/MultiSelect";
+import { ConceptFilterFields } from "@/components/ConceptFilterFields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -146,10 +138,10 @@ function isTyping(target: EventTarget | null) {
 }
 
 export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndone, othersHere }: Props) {
-  const meta = useMeta();
   const [name, setName] = useState(concept.source_concept_name);
   const [domains, setDomains] = usePersistentState<string[]>("map-domains", []);
-  const [vocabFilter, setVocabFilter] = useState("");
+  const [vocabularies, setVocabularies] = useState<string[]>([]);
+  const [conceptClasses, setConceptClasses] = useState<string[]>([]);
   const detected = concept.atc7_codes?.[0] ?? null;
   const [useAtc7, setUseAtc7] = useState(isDrug && !!detected);
   const [manualAtc7, setManualAtc7] = useState("");
@@ -170,10 +162,16 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
 
   const edited = name.trim() !== concept.source_concept_name.trim();
   const debouncedName = useDebounce(name.trim(), 400);
-  const debouncedVocab = useDebounce(vocabFilter.trim(), 400);
   const debouncedLimit = useDebounce(limit, 400);
   const request: SearchRequest | null = debouncedName
-    ? { query: debouncedName, k: debouncedLimit, domains, vocabulary_id: debouncedVocab || null, atc7_codes: atc7Codes }
+    ? {
+        query: debouncedName,
+        k: debouncedLimit,
+        domains,
+        vocabularies,
+        concept_classes: conceptClasses,
+        atc7_codes: atc7Codes,
+      }
     : null;
   const search = useSearch(request);
   const results = (search.data?.results ?? []) as ConceptLike[];
@@ -357,7 +355,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
 
   const suggested = suggestion?.selected ?? null;
 
-  const filterCount = domains.length + (vocabFilter ? 1 : 0) + (atc7Codes.length ? 1 : 0);
+  const filterCount = domains.length + vocabularies.length + conceptClasses.length + (atc7Codes.length ? 1 : 0);
   const typing = name.trim() !== debouncedName;
   const busy = typing || search.isFetching;
 
@@ -436,25 +434,16 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
                 collisionPadding={12}
                 className="max-h-(--radix-popover-content-available-height) w-96 space-y-4 overflow-y-auto"
               >
-                <div className="grid gap-1.5">
-                  <Label htmlFor="map-domains">Target domains</Label>
-                  <MultiSelect
-                    id="map-domains"
-                    options={meta.data?.domains ?? []}
-                    value={domains}
-                    onChange={setDomains}
-                    placeholder="All domains"
-                  />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="vocab-filter">Vocabulary ID</Label>
-                  <Input
-                    id="vocab-filter"
-                    placeholder="e.g. SNOMED, RxNorm"
-                    value={vocabFilter}
-                    onChange={(e) => setVocabFilter(e.target.value)}
-                  />
-                </div>
+                <ConceptFilterFields
+                  idPrefix="map-filter"
+                  values={{ domains, vocabularies, conceptClasses }}
+                  onChange={(next) => {
+                    setDomains(next.domains);
+                    setVocabularies(next.vocabularies);
+                    setConceptClasses(next.conceptClasses);
+                  }}
+                />
+                <p className="text-muted-foreground -mt-2 text-xs">AI suggest uses the domain filter only.</p>
                 {isDrug && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">

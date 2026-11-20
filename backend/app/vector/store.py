@@ -58,6 +58,28 @@ class SearchFilters:
     domains: Sequence[str] = ()
     vocabulary_id: str | None = None
     atc7_codes: Sequence[str] = ()
+    # Athena-style filters (any of): OMOP vocabulary_ids and concept_class_ids
+    vocabularies: Sequence[str] = ()
+    concept_classes: Sequence[str] = ()
+
+    def vocabulary_ids(self) -> list[str]:
+        """``vocabulary_id`` (one, used by workflows) and ``vocabularies`` (several) combined."""
+        ids = list(self.vocabularies)
+        if self.vocabulary_id and self.vocabulary_id not in ids:
+            ids.append(self.vocabulary_id)
+        return ids
+
+    def where(self, params: dict) -> list[str]:
+        """Vocabulary and concept class conditions on ``concept c`` (domains are handled by
+        each search, the vector search uses its domain labels)."""
+        clauses = []
+        if vocabularies := self.vocabulary_ids():
+            clauses.append("c.vocabulary_id = ANY(:vocabularies)")
+            params["vocabularies"] = vocabularies
+        if self.concept_classes:
+            clauses.append("c.concept_class_id = ANY(:concept_classes)")
+            params["concept_classes"] = list(self.concept_classes)
+        return clauses
 
 
 class VectorSearcher(Protocol):
@@ -387,10 +409,7 @@ def search_vectors(
     settings = get_settings()
     table = _ident(collection.table_name)
     params: dict = {"q": vector_literal(query_vector), "k": k}
-    where = ["c.standard_concept = 'S'"]
-    if filters.vocabulary_id:
-        where.append("c.vocabulary_id = :voc")
-        params["voc"] = filters.vocabulary_id
+    where = ["c.standard_concept = 'S'", *filters.where(params)]
 
     if filters.atc7_codes:
         # ATC7 narrows the space to a handful of drugs: filter first, then exact distances

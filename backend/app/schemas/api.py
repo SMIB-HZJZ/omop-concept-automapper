@@ -387,11 +387,20 @@ class ConceptLookup(BaseModel):
     missing: list[int]
 
 
+class ConceptFacet(BaseModel):
+    domain_id: str
+    vocabulary_id: str
+    concept_class_id: str
+
+
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1)
     k: int = Field(default=50, ge=1, le=200)
     domains: list[str] = []
-    vocabulary_id: str | None = None
+    # Athena-style filters: concepts in any of these vocabularies / concept classes
+    vocabularies: list[str] = []
+    concept_classes: list[str] = []
+    vocabulary_id: str | None = Field(default=None, description="Deprecated: use vocabularies")
     atc7_codes: list[str] = []
 
     @field_validator("atc7_codes")

@@ -44,6 +44,15 @@ export function invalidateVocabulary(qc: QueryClient, id?: number) {
 export const useMeta = () =>
   useQuery({ queryKey: keys.meta, queryFn: async () => unwrap(await api.GET("/api/meta")), staleTime: 5 * 60_000 });
 
+/** Domain / vocabulary / concept class combinations of standard concepts (changes only with a
+ *  vocabulary import), for the Athena-style search filters. */
+export const useConceptFacets = () =>
+  useQuery({
+    queryKey: ["concept-facets"],
+    queryFn: async () => unwrap(await api.GET("/api/concept-facets")),
+    staleTime: 30 * 60_000,
+  });
+
 export const useConfig = () =>
   useQuery({ queryKey: keys.config, queryFn: async () => unwrap(await api.GET("/api/config")) });
 

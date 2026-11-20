@@ -68,6 +68,20 @@ def test_search_filters(client, user_headers, embedded):
     ).json()["results"]
     assert {r["vocabulary_id"] for r in vocab} == {"LOINC"}
 
+    # Athena-style filters: any of several vocabularies, concept classes
+    several = client.post(
+        "/api/search",
+        json={"query": "metformin", "vocabularies": ["RxNorm", "LOINC"], "k": 50},
+        headers=user_headers,
+    ).json()["results"]
+    assert several and {r["vocabulary_id"] for r in several} <= {"RxNorm", "LOINC"}
+    classes = client.post(
+        "/api/search",
+        json={"query": "metformin", "concept_classes": ["Ingredient"], "k": 50},
+        headers=user_headers,
+    ).json()["results"]
+    assert classes and {r["concept_class_id"] for r in classes} == {"Ingredient"}
+
     bad = client.post(
         "/api/search", json={"query": "x", "atc7_codes": ["A10"]}, headers=user_headers
     )
@@ -199,3 +213,15 @@ def test_task_params_per_provider():
     params = Embedder("gemini/gemini-embedding-2", 768, task_types=True)._params(["x"], "query")
     assert params["extra_body"] == {"task_type": "RETRIEVAL_QUERY"}
     assert "extra_body" not in Embedder("gemini/gemini-embedding-2", 768)._params(["x"], "query")
+
+
+def test_concept_facets(client, user_headers, embedded):
+    facets = client.get("/api/concept-facets", headers=user_headers).json()
+    combos = {(f["domain_id"], f["vocabulary_id"], f["concept_class_id"]) for f in facets}
+    assert ("Drug", "RxNorm", "Clinical Drug") in combos
+    assert ("Measurement", "LOINC", "Lab Test") in combos
+    # Only what search can find: embedded standard concepts, no classification (ATC),
+    # non-standard (ICD10), box or marketed concepts
+    vocabularies = {f["vocabulary_id"] for f in facets}
+    assert "ATC" not in vocabularies and "ICD10" not in vocabularies
+    assert not {f["concept_class_id"] for f in facets} & {"Clinical Drug Box", "Marketed Product"}

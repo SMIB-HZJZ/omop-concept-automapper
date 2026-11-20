@@ -22,6 +22,7 @@ export type ConceptDetails = S["ConceptDetails"];
 export type RelatedConcept = S["RelatedConcept"];
 export type ConceptExplanation = S["ConceptExplanation"];
 export type SearchRequest = S["SearchRequest"];
+export type ConceptFacet = S["ConceptFacet"];
 export type SearchResult = S["SearchResult"];
 export type SearchResponse = S["SearchResponse"];
 export type EmbeddingStatus = S["EmbeddingStatus"];

@@ -10,7 +10,8 @@ export function defaultSearchRequest(concept: UnmappedItem, isDrug: boolean, dom
     query: concept.source_concept_name.trim(),
     k: DEFAULT_LIMIT,
     domains,
-    vocabulary_id: null,
+    vocabularies: [],
+    concept_classes: [],
     atc7_codes: isDrug && detected ? [detected] : [],
   };
 }

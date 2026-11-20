@@ -179,9 +179,7 @@ def keyword_search(
     if filters.domains:
         where.append("c.domain_id = ANY(:domains)")
         params["domains"] = list(filters.domains)
-    if filters.vocabulary_id:
-        where.append("c.vocabulary_id = :voc")
-        params["voc"] = filters.vocabulary_id
+    where += filters.where(params)
     if filters.atc7_codes:
         where.append(
             "EXISTS (SELECT 1 FROM concept_atc7 a WHERE a.concept_id = c.concept_id "
