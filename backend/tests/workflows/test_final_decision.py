@@ -40,7 +40,8 @@ async def test_final_decision_sees_all_evidence_and_can_settle_the_term():
     async def agent(model, term, deps, candidates, translation=None):
         from app.llm.schemas import MappingDecision
 
-        deps.seen[2] = CONCEPTS[2]  # something only the agent found
+        # Found only through a details lookup: no rank or score
+        deps.seen[2] = {k: v for k, v in CONCEPTS[2].items() if k not in ("rank", "score")}
         return MappingDecision(concept_id=2, confidence=5, rationale="agent thinks 850 mg")
 
     judge = Judge()
@@ -57,6 +58,22 @@ async def test_final_decision_sees_all_evidence_and_can_settle_the_term():
     assert "AI pick:" in text and "confidence 4" in text and "first guess" in text
     assert "agent retry: metformin 850 MG Oral Tablet (ID 2) [confidence 5]" in text
     assert judge.candidates[:2] == [result["attempts"][0]["concept"]["concept_id"], 2]
+    # A concept found only through the agent's lookups has no search score: it still gets one
+    from app.schemas.api import SuggestResponse
+
+    SuggestResponse.model_validate(
+        {
+            "source_id": 5,
+            "query": "x",
+            "pipeline": "automap",
+            "outcome": result["outcome"],
+            "selected": {"rank": 0, "score": 0.0, **result["selected"]},
+            "confidence": result["confidence"],
+            "rationale": result["rationale"],
+            "candidates": result["candidates"],
+            "trace": result["trace"],
+        }
+    )
     assert [t["node"] for t in result["trace"]][-3:] == ["final_gate", "decide", "last_gate"]
 
 

@@ -69,7 +69,12 @@ def all_candidates(state: AutomapState, limit: int) -> list[dict]:
     picked = [a["concept"] for a in state.get("attempts") or [] if a.get("concept")]
     for c in [*picked, *(state.get("candidates") or []), *(state.get("agent_candidates") or [])]:
         merged.setdefault(c["concept_id"], c)
-    return list(merged.values())[:limit]
+    # Concepts the agent looked up (parents, children) have no search score; every candidate
+    # gets a rank and a score, as the API's candidate list requires
+    return [
+        {**c, "rank": i + 1, "score": float(c.get("score") or 0.0)}
+        for i, c in enumerate(list(merged.values())[:limit])
+    ]
 
 
 @node(
