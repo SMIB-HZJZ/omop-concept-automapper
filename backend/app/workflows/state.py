@@ -27,6 +27,8 @@ class AutomapState(TypedDict, total=False):
     drug_specific: bool
     atc7_codes: list[str] | None
     vocabulary_id: str | None
+    # Name and description of the source vocabulary, given to the LLM steps
+    vocabulary_context: str | None
     threshold: int
     # Decision
     candidates: list[dict]

@@ -19,6 +19,7 @@ from app.llm.prompts import (
     INPUT_PROMPT,
     TRANSLATE_SYSTEM_PROMPT,
     TRANSLATION_LINE,
+    VOCABULARY_LINE,
 )
 from app.llm.schemas import RerankerResponse, TranslationResponse
 
@@ -98,6 +99,7 @@ class Reranker:
         translation: str | None = None,
         notes: list[str] | None = None,
         examples: list[dict] | None = None,
+        context: str | None = None,
     ) -> RerankResult:
         if not candidates:
             return RerankResult(None, None)
@@ -118,6 +120,7 @@ class Reranker:
                         if examples
                         else ""
                     ),
+                    vocabulary_line=VOCABULARY_LINE.format(context=context) if context else "",
                     input_term=term,
                     translation_line=(
                         TRANSLATION_LINE.format(translation=translation)
@@ -206,10 +209,16 @@ class EscalatingReranker:
         translation: str | None = None,
         notes: list[str] | None = None,
         examples: list[dict] | None = None,
+        context: str | None = None,
     ) -> RerankResult:
         if not candidates:
             return RerankResult(None, None)
-        kwargs = {"translation": translation, "notes": notes, "examples": examples}
+        kwargs = {
+            "translation": translation,
+            "notes": notes,
+            "examples": examples,
+            "context": context,
+        }
         first: RerankResult | None = None
         try:
             first = await self.first.rerank(term, candidates, drug_specific, **kwargs)
@@ -265,10 +274,16 @@ class CascadeReranker:
         translation: str | None = None,
         notes: list[str] | None = None,
         examples: list[dict] | None = None,
+        context: str | None = None,
     ) -> RerankResult:
         if not candidates:
             return RerankResult(None, None)
-        kwargs = {"translation": translation, "notes": notes, "examples": examples}
+        kwargs = {
+            "translation": translation,
+            "notes": notes,
+            "examples": examples,
+            "context": context,
+        }
         answers = await asyncio.gather(
             *(v.rerank(term, candidates, drug_specific, **kwargs) for v in self.voters),
             return_exceptions=True,
@@ -300,6 +315,7 @@ class CascadeReranker:
             translation=translation,
             notes=[*(notes or []), votes_note(votes, candidates)],
             examples=examples,
+            context=context,
         )
         return dataclasses.replace(result, route="judge", votes=votes)
 
@@ -327,12 +343,15 @@ class Translator:
         self.effort = effort or None
         self._client = client
 
-    def _key(self, term: str) -> str:
-        digest = hashlib.sha1(term.strip().encode()).hexdigest()
+    def _key(self, term: str, context: str | None = None) -> str:
+        ident = term.strip() if not context else f"{term.strip()}\n{context}"
+        digest = hashlib.sha1(ident.encode()).hexdigest()
         return f"translate:{model_label(self.model, self.effort)}:{digest}"
 
-    async def translate(self, term: str) -> TranslationResult:
-        key = self._key(term)
+    async def translate(self, term: str, context: str | None = None) -> TranslationResult:
+        """``context``: the source vocabulary (name and description), which can settle what an
+        abbreviation means."""
+        key = self._key(term, context)
         try:
             hit = await asyncio.to_thread(get_redis().get, key)
             if hit:
@@ -346,7 +365,11 @@ class Translator:
             response_model=TranslationResponse,
             messages=[
                 {"role": "system", "content": TRANSLATE_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Term: {term}"},
+                {
+                    "role": "user",
+                    "content": (VOCABULARY_LINE.format(context=context) if context else "")
+                    + f"Term: {term}",
+                },
             ],
             max_retries=get_settings().llm_max_retries,
             **chat_model_settings(self.model, self.effort),

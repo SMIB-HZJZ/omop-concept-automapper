@@ -55,16 +55,30 @@ def list_source_vocabularies(session: Session) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_or_create_vocabulary(
-    session: Session, vocabulary_id: int, name: str | None = None
+def create_vocabulary(
+    session: Session,
+    name: str,
+    *,
+    vocabulary_id: int | None = None,
+    description: str | None = None,
+    is_drug: bool = False,
 ) -> SourceVocabulary:
-    vocab = session.get(SourceVocabulary, vocabulary_id)
-    if vocab is None:
-        vocab = SourceVocabulary(id=vocabulary_id, name=name or f"Vocabulary {vocabulary_id}")
-        session.add(vocab)
-        session.commit()
-        session.refresh(vocab)
-        invalidate_vocabulary(vocabulary_id)
+    """Create a source vocabulary; without ``vocabulary_id`` it gets the next free id.
+
+    The ids are small numbers people refer to (and that appear in the OMOP export), so they are
+    allocated as max + 1 under a transaction lock rather than from a sequence."""
+    if vocabulary_id is None:
+        session.execute(text("SELECT pg_advisory_xact_lock(hashtext('source_vocabulary_id'))"))
+        vocabulary_id = session.execute(
+            text("SELECT COALESCE(MAX(id), 0) + 1 FROM source_vocabulary")
+        ).scalar_one()
+    vocab = SourceVocabulary(
+        id=vocabulary_id, name=name, description=description or None, is_drug=is_drug
+    )
+    session.add(vocab)
+    session.commit()
+    session.refresh(vocab)
+    invalidate_vocabulary(vocabulary_id)
     return vocab
 
 
@@ -211,7 +225,8 @@ def get_source_concept(session: Session, source_id: int) -> dict | None:
                 """
             SELECT sc.source_id, sc.source_value, sc.source_concept_name,
                    sc.source_vocabulary_id, sc.freq, v.is_drug, sc.drug_structure,
-                   v.code_vocabularies
+                   v.code_vocabularies, v.name AS vocabulary_name,
+                   v.description AS vocabulary_description
             FROM source_concepts sc JOIN source_vocabulary v ON v.id = sc.source_vocabulary_id
             WHERE sc.source_id = :s
             """

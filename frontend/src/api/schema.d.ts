@@ -315,6 +315,26 @@ export interface paths {
         patch: operations["update_vocabulary_api_source_vocabularies__vocabulary_id__patch"];
         trace?: never;
     };
+    "/api/source-vocabularies/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import New Vocabulary
+         * @description Import source concepts into a new vocabulary, which gets the next free id.
+         */
+        post: operations["import_new_vocabulary_api_source_vocabularies_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/source-vocabularies/{vocabulary_id}/concepts/import": {
         parameters: {
             query?: never;
@@ -324,7 +344,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import Concepts */
+        /**
+         * Import Concepts
+         * @description Add source concepts to a vocabulary (created with this id when it does not exist).
+         */
         post: operations["import_concepts_api_source_vocabularies__vocabulary_id__concepts_import_post"];
         delete?: never;
         options?: never;
@@ -989,8 +1012,30 @@ export interface components {
             file: string;
             /** Name */
             name?: string | null;
+            /**
+             * Description
+             * @description What the terms denote, in 1-2 sentences; sent (empty) to clear it
+             */
+            description?: string | null;
             /** Is Drug */
             is_drug?: boolean | null;
+        };
+        /** Body_import_new_vocabulary_api_source_vocabularies_import_post */
+        Body_import_new_vocabulary_api_source_vocabularies_import_post: {
+            /** File */
+            file: string;
+            /** Name */
+            name: string;
+            /**
+             * Description
+             * @description What the terms denote, in 1-2 sentences; sent (empty) to clear it
+             */
+            description?: string | null;
+            /**
+             * Is Drug
+             * @default false
+             */
+            is_drug: boolean;
         };
         /** Calibration */
         Calibration: {
@@ -1459,9 +1504,9 @@ export interface components {
         /** SourceVocabularyCreate */
         SourceVocabularyCreate: {
             /** Id */
-            id: number;
+            id?: number | null;
             /** Name */
-            name?: string | null;
+            name: string;
             /** Description */
             description?: string | null;
             /**
@@ -2716,6 +2761,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceVocabularyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_new_vocabulary_api_source_vocabularies_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_new_vocabulary_api_source_vocabularies_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskRef"];
                 };
             };
             /** @description Validation Error */

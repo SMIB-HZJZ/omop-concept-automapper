@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.core.db import session_scope
+from app.llm import prompts
 from app.llm.gateway import aclose_async_client
 from app.models import SourceVocabulary
 from app.services import mapping
@@ -114,6 +115,7 @@ async def automap_concepts(
     compiled: tuple | None = None,
     domain_mode: str = "prefer",
     code_vocabularies: list[str] | None = None,
+    vocabulary_context: str | None = None,
 ) -> dict:
     compiled = compiled or get_pipeline(pipeline)
     counts = {"processed": 0, "mapped": 0, "queued": 0, "skipped": 0, "errors": 0, "reused": 0}
@@ -139,6 +141,7 @@ async def automap_concepts(
                 drug_structure=concept.get("drug_structure"),
                 domain_mode=domain_mode,
                 code_vocabularies=code_vocabularies,
+                vocabulary_context=vocabulary_context,
             ),
             ctx,
             compiled=compiled,
@@ -215,6 +218,11 @@ def run_automap(
         concepts = mapping.get_unmapped_concepts_for_automap(session, vocabulary_id, limit)
         vocabulary = session.get(SourceVocabulary, vocabulary_id)
         code_vocabularies = list(vocabulary.code_vocabularies or []) if vocabulary else []
+        context = (
+            prompts.vocabulary_context(vocabulary.name, vocabulary.description)
+            if vocabulary
+            else None
+        )
     self.progress.phase(
         f"Auto-mapping {len(concepts):,} concepts with '{pipeline}'", total=len(concepts)
     )
@@ -244,6 +252,7 @@ def run_automap(
                 compiled=compiled,
                 domain_mode=domain_mode,
                 code_vocabularies=code_vocabularies,
+                vocabulary_context=context,
             )
         finally:
             await aclose_async_client()

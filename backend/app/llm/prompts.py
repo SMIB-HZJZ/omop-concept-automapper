@@ -13,6 +13,8 @@ Rewritten from the Streamlit-era prompts:
 - Static text comes first and the variable part last, so providers can cache the prefix.
 """
 
+import re
+
 CONFIDENCE_SCALE = """\
 Confidence scale (integer 1-10):
 - 10: same concept, every stated attribute matches; no reasonable doubt.
@@ -70,12 +72,30 @@ DRUG_SYSTEM_PROMPT = f"{_RERANK_TASK}\n\n{DRUG_CRITERIA}\n\n{CONFIDENCE_SCALE}\n
 CONCEPT_SYSTEM_PROMPT = f"{_RERANK_TASK}\n\n{CONCEPT_CRITERIA}\n\n{CONFIDENCE_SCALE}\n"
 
 INPUT_PROMPT = """\
-{examples}Source term: {input_term}
+{examples}{vocabulary_line}Source term: {input_term}
 {translation_line}
 Candidates:
 {candidate_list}"""
 
 EXAMPLES_BLOCK = "Reviewed mappings of similar source terms:\n{lines}\n\n"
+
+# Name and description of the source vocabulary: what all its terms denote (e.g. tests ordered,
+# not their results). Kept out of the system prompt so runs without it reuse the cached answers.
+VOCABULARY_LINE = "Source vocabulary (applies to every term in it): {context}\n"
+
+_DEFAULT_NAME = re.compile(r"^Vocabulary \d+$")
+
+
+def vocabulary_context(name: str | None, description: str | None) -> str | None:
+    """``"<name> - <description>"`` for the LLM prompts; None when there is nothing useful
+    (no description and only the generated "Vocabulary <id>" name)."""
+    name = (name or "").strip()
+    if _DEFAULT_NAME.match(name):
+        name = ""
+    description = " ".join((description or "").split())
+    parts = [p for p in (name, description) if p]
+    return " - ".join(parts) or None
+
 
 TRANSLATION_LINE = "English rendering (machine translation, may be imperfect): {translation}\n"
 

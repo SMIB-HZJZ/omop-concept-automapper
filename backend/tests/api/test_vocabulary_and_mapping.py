@@ -166,7 +166,9 @@ def test_vocabulary_crud(client, admin_headers, user_headers):
     )
     assert resp.status_code == 201
     assert (
-        client.post("/api/source-vocabularies", json={"id": 42}, headers=admin_headers).status_code
+        client.post(
+            "/api/source-vocabularies", json={"id": 42, "name": "Labs"}, headers=admin_headers
+        ).status_code
         == 409
     )
     resp = client.patch(

@@ -849,12 +849,60 @@
         }
       }
     },
+    "/api/source-vocabularies/import": {
+      "post": {
+        "tags": [
+          "source vocabularies"
+        ],
+        "summary": "Import New Vocabulary",
+        "description": "Import source concepts into a new vocabulary, which gets the next free id.",
+        "operationId": "import_new_vocabulary_api_source_vocabularies_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_new_vocabulary_api_source_vocabularies_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRef"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/source-vocabularies/{vocabulary_id}/concepts/import": {
       "post": {
         "tags": [
           "source vocabularies"
         ],
         "summary": "Import Concepts",
+        "description": "Add source concepts to a vocabulary (created with this id when it does not exist).",
         "operationId": "import_concepts_api_source_vocabularies__vocabulary_id__concepts_import_post",
         "security": [
           {
@@ -3014,13 +3062,27 @@
           "name": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 100
               },
               {
                 "type": "null"
               }
             ],
             "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "What the terms denote, in 1-2 sentences; sent (empty) to clear it"
           },
           "is_drug": {
             "anyOf": [
@@ -3039,6 +3101,44 @@
           "file"
         ],
         "title": "Body_import_concepts_api_source_vocabularies__vocabulary_id__concepts_import_post"
+      },
+      "Body_import_new_vocabulary_api_source_vocabularies_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "What the terms denote, in 1-2 sentences; sent (empty) to clear it"
+          },
+          "is_drug": {
+            "type": "boolean",
+            "title": "Is Drug",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "name"
+        ],
+        "title": "Body_import_new_vocabulary_api_source_vocabularies_import_post"
       },
       "Calibration": {
         "properties": {
@@ -4440,25 +4540,28 @@
       "SourceVocabularyCreate": {
         "properties": {
           "id": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Id"
-          },
-          "name": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer",
+                "minimum": 1.0
               },
               {
                 "type": "null"
               }
             ],
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
             "title": "Name"
           },
           "description": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 500
               },
               {
                 "type": "null"
@@ -4482,7 +4585,7 @@
         },
         "type": "object",
         "required": [
-          "id"
+          "name"
         ],
         "title": "SourceVocabularyCreate"
       },
@@ -4555,7 +4658,9 @@
           "name": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -4566,7 +4671,8 @@
           "description": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 500
               },
               {
                 "type": "null"

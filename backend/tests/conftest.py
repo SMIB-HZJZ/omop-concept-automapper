@@ -206,6 +206,9 @@ def import_source_csv(
     client, headers, vocabulary_id: int, content: bytes | None = None, **form
 ) -> dict:
     content = content if content is not None else (FIXTURES / "source_concepts.csv").read_bytes()
+    existing = client.get("/api/source-vocabularies", headers=headers).json()
+    if all(v["id"] != vocabulary_id for v in existing):
+        form.setdefault("name", f"Test vocabulary {vocabulary_id}")  # a new vocabulary needs a name
     resp = client.post(
         f"/api/source-vocabularies/{vocabulary_id}/concepts/import",
         files={"file": ("source.csv", content, "text/csv")},

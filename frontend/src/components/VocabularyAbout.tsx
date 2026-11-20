@@ -1,0 +1,91 @@
+import { Info, Pencil, Plus } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+
+import { errorMessage } from "@/api/client";
+import { useUpdateVocabulary } from "@/api/queries";
+import type { SourceVocabulary } from "@/api/types";
+import { useAuth } from "@/auth/useAuth";
+import { VocabularyDescriptionField } from "@/components/VocabularyDescriptionField";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { VOCABULARY_NAME_MAX } from "@/lib/vocabularyText";
+
+/** What the selected vocabulary contains, as the AI is told; admins can edit it. */
+export function VocabularyAbout({ vocabulary }: { vocabulary: SourceVocabulary }) {
+  const { isAdmin } = useAuth();
+  const description = vocabulary.description?.trim();
+  if (!description && !isAdmin) return null;
+  return (
+    <div className="text-muted-foreground flex min-w-0 basis-full items-start gap-2 text-sm">
+      <Info className="mt-0.5 size-4 shrink-0" />
+      {description ? (
+        <p className="min-w-0 leading-relaxed">
+          <span className="text-foreground font-medium">About this list: </span>
+          {description}
+        </p>
+      ) : (
+        <p className="min-w-0">No description yet. A sentence on what these terms denote helps the AI choose.</p>
+      )}
+      {isAdmin && <EditVocabulary vocabulary={vocabulary} hasDescription={!!description} />}
+    </div>
+  );
+}
+
+function EditVocabulary({ vocabulary, hasDescription }: { vocabulary: SourceVocabulary; hasDescription: boolean }) {
+  const update = useUpdateVocabulary();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(vocabulary.name);
+  const [description, setDescription] = useState(vocabulary.description ?? "");
+
+  const onOpenChange = (next: boolean) => {
+    if (next) {
+      // Start from the saved values each time
+      setName(vocabulary.name);
+      setDescription(vocabulary.description ?? "");
+    }
+    setOpen(next);
+  };
+
+  const save = () =>
+    update.mutate(
+      { id: vocabulary.id, name: name.trim(), description: description.trim() },
+      {
+        onSuccess: () => {
+          toast.success("Vocabulary saved", {
+            description: "New AI suggestions use it; earlier ones are not redone.",
+          });
+          setOpen(false);
+        },
+        onError: (err) => toast.error(errorMessage(err)),
+      },
+    );
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="ghost" className="-my-1 h-7 shrink-0 gap-1">
+          {hasDescription ? <Pencil className="size-3.5" /> : <Plus className="size-3.5" />}
+          {hasDescription ? "Edit" : "Add description"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[28rem] max-w-[calc(100vw-2rem)] space-y-3">
+        <div className="grid gap-1.5">
+          <Label htmlFor="vocab-edit-name">Name</Label>
+          <Input
+            id="vocab-edit-name"
+            value={name}
+            maxLength={VOCABULARY_NAME_MAX}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <VocabularyDescriptionField id="vocab-edit-description" value={description} onChange={setDescription} />
+        <Button className="w-full" onClick={save} disabled={!name.trim() || update.isPending}>
+          Save
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
+}

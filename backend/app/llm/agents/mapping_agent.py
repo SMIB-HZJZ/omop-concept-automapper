@@ -22,6 +22,8 @@ class AgentDeps:
     atc7_codes: list[str] = field(default_factory=list)
     seen: dict[int, dict] = field(default_factory=dict)
     max_results: int = 20
+    # Name and description of the source vocabulary
+    context: str | None = None
 
 
 def _brief(c: dict) -> dict:
@@ -123,6 +125,9 @@ async def run_mapping_agent(
         f"- {c['concept_id']}: {c['concept_name']} ({c.get('domain_id')}, {c.get('concept_class_id')})"
         for c in initial_candidates[:15]
     )
-    prompt = f"Source term: {term}\n\nInitial candidates from vector search:\n{listing or '(none)'}"
+    vocabulary = (
+        f"Source vocabulary (applies to every term in it): {deps.context}\n" if deps.context else ""
+    )
+    prompt = f"{vocabulary}Source term: {term}\n\nInitial candidates from vector search:\n{listing or '(none)'}"
     result = await mapping_agent.run(prompt, deps=deps, model=model)
     return result.output

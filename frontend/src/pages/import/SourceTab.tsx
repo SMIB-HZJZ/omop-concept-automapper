@@ -1,4 +1,4 @@
-import { Info } from "lucide-react";
+import { Info, Plus } from "lucide-react";
 import Papa from "papaparse";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -9,6 +9,7 @@ import { taskResult } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 import { ErrorAlert } from "@/components/common";
 import { TaskProgress } from "@/components/TaskProgress";
+import { VocabularyDescriptionField } from "@/components/VocabularyDescriptionField";
 import { VocabularyTypeSwitch } from "@/components/VocabularyTypeSwitch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -16,11 +17,13 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useStartTask } from "@/hooks/useStartTask";
 import { useLatestTask } from "@/hooks/useTasks";
 import { missingSourceColumns } from "@/lib/csv";
 import { formatNumber } from "@/lib/format";
+import { VOCABULARY_NAME_MAX } from "@/lib/vocabularyText";
 
 type Preview = { columns: string[]; rows: Record<string, string>[] };
 
@@ -87,11 +90,23 @@ export function SourceTab() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [vocabularyId, setVocabularyId] = useState(1);
+  // "new" creates a vocabulary (the next free id); a number adds concepts to that vocabulary
+  const [target, setTarget] = useState<"new" | number>("new");
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [isDrug, setIsDrug] = useState(false);
 
-  const existing = vocabularies.data?.find((v) => v.id === vocabularyId);
+  const existing = target === "new" ? undefined : vocabularies.data?.find((v) => v.id === target);
+  // Appending to an existing vocabulary starts from its saved name, description and type
+  const [loadedFor, setLoadedFor] = useState<number | null>(null);
+  const existingId = existing?.id ?? null;
+  if (existingId !== loadedFor) {
+    setLoadedFor(existingId);
+    setName(existing?.name ?? "");
+    setDescription(existing?.description ?? "");
+    setIsDrug(existing?.is_drug ?? false);
+  }
+  const nameMissing = !name.trim();
   const missing = preview ? missingSourceColumns(preview.columns) : [];
   const active = latest.data && !latest.data.is_terminal;
 
@@ -112,25 +127,36 @@ export function SourceTab() {
     });
   };
 
-  const submit = (upload: File) =>
-    run(
+  const submit = (upload: File) => {
+    const fields = { name: name.trim(), description: description.trim(), is_drug: isDrug };
+    // The schema types the file part as a string; the serializer sends the real File
+    const bodySerializer = (body: { name?: string | null; description?: string | null; is_drug?: boolean | null }) => {
+      const fd = new FormData();
+      fd.append("file", upload);
+      if (body.name) fd.append("name", body.name);
+      fd.append("description", body.description ?? "");
+      fd.append("is_drug", body.is_drug ? "true" : "false");
+      return fd;
+    };
+    return run(
       async () =>
-        unwrap(
-          await api.POST("/api/source-vocabularies/{vocabulary_id}/concepts/import", {
-            params: { path: { vocabulary_id: vocabularyId } },
-            // The schema types the file part as a string; the serializer sends the real File
-            body: { file: upload.name, name: name.trim() || null, is_drug: isDrug },
-            bodySerializer: (body) => {
-              const fd = new FormData();
-              fd.append("file", upload);
-              if (body.name) fd.append("name", body.name);
-              fd.append("is_drug", body.is_drug ? "true" : "false");
-              return fd;
-            },
-          }),
-        ),
-      "Source concept import",
+        existing
+          ? unwrap(
+              await api.POST("/api/source-vocabularies/{vocabulary_id}/concepts/import", {
+                params: { path: { vocabulary_id: existing.id } },
+                body: { file: upload.name, ...fields },
+                bodySerializer,
+              }),
+            )
+          : unwrap(
+              await api.POST("/api/source-vocabularies/import", {
+                body: { file: upload.name, ...fields },
+                bodySerializer,
+              }),
+            ),
+      existing ? `Add concepts to ${existing.name}` : "Source concept import",
     );
+  };
 
   return (
     <div className="space-y-6">
@@ -188,32 +214,48 @@ export function SourceTab() {
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="source-vocab-id">Source vocabulary ID</Label>
-          <Input
-            id="source-vocab-id"
-            type="number"
-            min={1}
-            value={vocabularyId}
-            onChange={(e) => setVocabularyId(Math.max(1, Number(e.target.value) || 1))}
-          />
+          <Label htmlFor="source-vocab-target">Import into</Label>
+          <Select value={String(target)} onValueChange={(v) => setTarget(v === "new" ? "new" : Number(v))}>
+            <SelectTrigger id="source-vocab-target" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="new">
+                <Plus className="size-4" /> New vocabulary
+              </SelectItem>
+              {(vocabularies.data ?? []).map((v) => (
+                <SelectItem key={v.id} value={String(v.id)}>
+                  {v.name} <span className="text-muted-foreground">· {formatNumber(v.concept_count)} terms</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <p className="text-muted-foreground text-xs">
             {existing
-              ? `Vocabulary ${existing.id} ("${existing.name}") already exists with ${formatNumber(existing.concept_count)} concepts — the import appends to it.`
-              : vocabularies.data && vocabularies.data.length > 0
-                ? `Existing IDs: ${vocabularies.data.map((v) => v.id).join(", ")}. A new ID creates a new vocabulary.`
-                : "Unique identifier for this source vocabulary."}
+              ? `The file's concepts are added to "${existing.name}" (ID ${existing.id}); its name and description below are updated.`
+              : "Creates a new source vocabulary; it gets the next free ID."}
           </p>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="source-vocab-name">Name (optional)</Label>
+          <Label htmlFor="source-vocab-name">Name</Label>
           <Input
             id="source-vocab-name"
             value={name}
-            placeholder={`Vocabulary ${vocabularyId}`}
+            required
+            maxLength={VOCABULARY_NAME_MAX}
+            aria-invalid={!!file && nameMissing}
+            placeholder="e.g. Lab orders, primary care"
             onChange={(e) => setName(e.target.value)}
           />
+          {!!file && nameMissing && <p className="text-destructive text-xs">Give the vocabulary a name.</p>}
         </div>
         <VocabularyTypeSwitch isDrug={isDrug} onChange={setIsDrug} />
+        <VocabularyDescriptionField
+          id="source-vocab-description"
+          className="md:col-span-2"
+          value={description}
+          onChange={setDescription}
+        />
       </div>
 
       {parseError && <ErrorAlert error={parseError} title="Could not read the file" />}
@@ -233,7 +275,7 @@ export function SourceTab() {
 
       <Button
         variant="cta"
-        disabled={!file || !preview || missing.length > 0 || busy || !!active}
+        disabled={!file || !preview || missing.length > 0 || nameMissing || busy || !!active}
         onClick={() => file && void submit(file)}
       >
         Import source concepts

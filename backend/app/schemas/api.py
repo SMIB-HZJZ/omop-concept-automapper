@@ -166,20 +166,56 @@ class SourceVocabularyOut(BaseModel):
     mapped_count: int = 0
 
 
+VOCABULARY_NAME_MAX = 100
+VOCABULARY_DESCRIPTION_MAX = 500
+
+
+def _clean_text(value: str | None) -> str | None:
+    value = " ".join((value or "").split())
+    return value or None
+
+
 class SourceVocabularyCreate(BaseModel):
-    id: int = Field(ge=1)
-    name: str | None = None
-    description: str | None = None
+    # Empty: the next free id
+    id: int | None = Field(default=None, ge=1)
+    name: str = Field(min_length=1, max_length=VOCABULARY_NAME_MAX)
+    # One or two sentences on what the terms denote; given to the LLM with every term
+    description: str | None = Field(default=None, max_length=VOCABULARY_DESCRIPTION_MAX)
     is_drug: bool = False
     code_vocabularies: list[str] = []
 
+    @field_validator("description")
+    @classmethod
+    def _clean_description(cls, value: str | None) -> str | None:
+        return _clean_text(value)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("Name is required")
+        return value
+
 
 class SourceVocabularyUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=VOCABULARY_NAME_MAX)
+    description: str | None = Field(default=None, max_length=VOCABULARY_DESCRIPTION_MAX)
     is_drug: bool | None = None
     # OMOP vocabulary_ids of the codes in source_value, e.g. ["ICD10"] for MKB-10 codes
     code_vocabularies: list[str] | None = None
+
+    @field_validator("description")
+    @classmethod
+    def _clean_description(cls, value: str | None) -> str | None:
+        return _clean_text(value)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Name cannot be empty")
+        return " ".join(value.split()) if value else value
 
 
 class UnmappedItem(BaseModel):

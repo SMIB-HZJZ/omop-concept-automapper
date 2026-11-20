@@ -9,6 +9,8 @@ from app.api.routes._tasks import start_task
 from app.core.config import get_settings
 from app.models import SourceVocabulary
 from app.schemas.api import (
+    VOCABULARY_DESCRIPTION_MAX,
+    VOCABULARY_NAME_MAX,
     AuditEntry,
     AuditStat,
     CountResult,
@@ -59,18 +61,15 @@ def list_vocabularies(_: CurrentUser, session: SessionDep):
 
 @router.post("", response_model=SourceVocabularyOut, status_code=status.HTTP_201_CREATED)
 def create_vocabulary(body: SourceVocabularyCreate, _: AdminUser, session: SessionDep):
-    if session.get(SourceVocabulary, body.id):
+    if body.id is not None and session.get(SourceVocabulary, body.id):
         raise HTTPException(status.HTTP_409_CONFLICT, f"Source vocabulary {body.id} already exists")
-    vocab = SourceVocabulary(
-        id=body.id,
-        name=body.name or f"Vocabulary {body.id}",
+    vocab = mapping.create_vocabulary(
+        session,
+        body.name,
+        vocabulary_id=body.id,
         description=body.description,
         is_drug=body.is_drug,
     )
-    session.add(vocab)
-    session.commit()
-    session.refresh(vocab)
-    mapping.invalidate_vocabulary(body.id)
     return SourceVocabularyOut(**vocab.model_dump())
 
 
@@ -95,6 +94,26 @@ def delete_vocabulary(vocabulary_id: int, _: AdminUser, session: SessionDep):
     return CountResult(count=mapping.delete_vocabulary(session, vocabulary_id))
 
 
+_DESCRIPTION_FORM = Form(
+    None,
+    max_length=VOCABULARY_DESCRIPTION_MAX,
+    description="What the terms denote, in 1-2 sentences; sent (empty) to clear it",
+)
+
+
+@router.post("/import", response_model=TaskRef, status_code=status.HTTP_202_ACCEPTED)
+def import_new_vocabulary(
+    user: AdminUser,
+    session: SessionDep,
+    file: UploadFile = File(...),
+    name: str = Form(..., max_length=VOCABULARY_NAME_MAX),
+    description: str | None = _DESCRIPTION_FORM,
+    is_drug: bool = Form(False),
+):
+    """Import source concepts into a new vocabulary, which gets the next free id."""
+    return _start_import(session, user, file, None, name, description, is_drug)
+
+
 @router.post(
     "/{vocabulary_id}/concepts/import", response_model=TaskRef, status_code=status.HTTP_202_ACCEPTED
 )
@@ -103,11 +122,27 @@ def import_concepts(
     user: AdminUser,
     session: SessionDep,
     file: UploadFile = File(...),
-    name: str | None = Form(None),
+    name: str | None = Form(None, max_length=VOCABULARY_NAME_MAX),
+    description: str | None = _DESCRIPTION_FORM,
     is_drug: bool | None = Form(None),
 ):
+    """Add source concepts to a vocabulary (created with this id when it does not exist)."""
     if vocabulary_id < 1:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Vocabulary id must be a positive integer")
+    return _start_import(session, user, file, vocabulary_id, name, description, is_drug)
+
+
+def _start_import(
+    session,
+    user,
+    file: UploadFile,
+    vocabulary_id: int | None,
+    name: str | None,
+    description: str | None,
+    is_drug: bool | None,
+):
+    name = " ".join((name or "").split()) or None
+    description = None if description is None else (" ".join(description.split()) or "")
     upload_dir = get_settings().upload_dir
     os.makedirs(upload_dir, exist_ok=True)
     path = os.path.join(upload_dir, f"{uuid.uuid4()}.csv")
@@ -118,19 +153,32 @@ def import_concepts(
         except (SourceImportError, UnicodeDecodeError, StopIteration) as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-        vocab = mapping.get_or_create_vocabulary(session, vocabulary_id, name)
-        if name or is_drug is not None:
+        vocab = session.get(SourceVocabulary, vocabulary_id) if vocabulary_id else None
+        if vocab is None:
+            if name is None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "A new vocabulary needs a name")
+            vocab = mapping.create_vocabulary(
+                session,
+                name,
+                vocabulary_id=vocabulary_id,
+                description=description,
+                is_drug=bool(is_drug),
+            )
+        elif name or is_drug is not None or description is not None:
             if name:
                 vocab.name = name
+            if description is not None:
+                vocab.description = description or None
             if is_drug is not None:
                 vocab.is_drug = is_drug
             session.add(vocab)
             session.commit()
+            mapping.invalidate_vocabulary(vocab.id)
         return start_task(
             session,
             "source.import",
             import_source_concepts,
-            {"path": path, "vocabulary_id": vocabulary_id, "filename": file.filename},
+            {"path": path, "vocabulary_id": vocab.id, "filename": file.filename},
             user,
         )
     except BaseException:

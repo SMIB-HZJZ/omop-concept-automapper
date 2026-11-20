@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.api.routes._tasks import start_task
 from app.core.db import session_scope
+from app.llm.prompts import vocabulary_context
 from app.models import SourceVocabulary
 from app.schemas.api import (
     AutomapRequest,
@@ -113,6 +114,9 @@ async def suggest(source_id: int, body: SuggestRequest, _: CurrentUser):
         drug_structure=source.get("drug_structure"),
         domain_mode=body.domain_mode,
         code_vocabularies=source.get("code_vocabularies") or [],
+        vocabulary_context=vocabulary_context(
+            source.get("vocabulary_name"), source.get("vocabulary_description")
+        ),
     )
     if body.query:
         # An edited search name is both the search query and the term the LLM judges

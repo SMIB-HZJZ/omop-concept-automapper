@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/MultiSelect";
+import { VocabularyAbout } from "@/components/VocabularyAbout";
 import { VocabularyTypeSwitch } from "@/components/VocabularyTypeSwitch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
@@ -82,6 +83,7 @@ export function VocabularySelector({ selection, showDrug = true }: { selection: 
           />
         </div>
       )}
+      {vocabulary && <VocabularyAbout vocabulary={vocabulary} />}
     </div>
   );
 }

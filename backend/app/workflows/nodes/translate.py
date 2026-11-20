@@ -24,7 +24,10 @@ async def translate(state: AutomapState, ctx: NodeContext, params: TranslatePara
         ctx.llm_model, effort=ctx.settings.llm_reasoning_effort
     )
     try:
-        result = await translator.translate(term)
+        context = state.get("vocabulary_context")
+        result = await (
+            translator.translate(term, context) if context else translator.translate(term)
+        )
     except Exception as exc:
         # A failed translation must not lose the concept: continue with the original term
         ctx.logger.warning("Translation failed for %r: %s", term, exc)

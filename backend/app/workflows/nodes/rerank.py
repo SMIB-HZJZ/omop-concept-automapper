@@ -27,6 +27,8 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
     try:
         translation = state.get("translated_query")
         extra: dict = {"translation": translation} if translation else {}
+        if state.get("vocabulary_context"):
+            extra["context"] = state["vocabulary_context"]
         if state.get("notes"):
             extra["notes"] = state["notes"]
         if params.examples and ctx.lexical is not None:
