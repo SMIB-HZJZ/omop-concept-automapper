@@ -102,8 +102,8 @@ def delete_vocabulary(session: Session, vocabulary_id: int) -> int:
 
 
 UNMAPPED_VIEWS = {
-    # Default: what is left to do (flagged terms are out of the way)
-    "todo": "sc.flag IS NULL",
+    # Default: what is left to do (flagged terms and terms waiting in Review are out of the way)
+    "todo": "sc.flag IS NULL AND ms.id IS NULL",
     "suggested": "sc.flag IS NULL AND ms.id IS NOT NULL",
     "flagged": "sc.flag IS NOT NULL",
     "all": "TRUE",

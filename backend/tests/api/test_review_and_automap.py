@@ -64,9 +64,12 @@ def test_automap_review_mode_then_accept_and_reject(
     assert by_name["metformin 500 mg tableta"]["method"] == "auto_drug"
     assert by_name["type 2 diabetes"]["concept_id"] == 201
 
-    # Pending suggestions are shown on the unmapped list and skipped by a second run
-    unmapped = client.get("/api/source-vocabularies/21/unmapped", headers=user_headers).json()
-    assert any(i["suggestion_concept_id"] == 1 for i in unmapped["items"])
+    # Terms waiting in Review are under "AI suggested", not "To do", and a second run skips them
+    url = "/api/source-vocabularies/21/unmapped"
+    suggested = client.get(url, params={"view": "suggested"}, headers=user_headers).json()
+    assert any(i["suggestion_concept_id"] == 1 for i in suggested["items"])
+    todo = client.get(url, headers=user_headers).json()
+    assert all(i["suggestion_id"] is None for i in todo["items"]) and todo["items"]
     again = _run(client, admin_headers, 21, drug_specific=True)
     assert again["result"]["processed"] == 2
 
@@ -134,7 +137,9 @@ def test_automap_keeps_the_latest_pick_below_the_threshold(
     # A confident pick queues it for review and drops the hint
     fake_reranker.overrides = {}
     _run(client, admin_headers, 24)
-    unmapped = client.get("/api/source-vocabularies/24/unmapped", headers=user_headers).json()
+    unmapped = client.get(
+        "/api/source-vocabularies/24/unmapped", params={"view": "all"}, headers=user_headers
+    ).json()
     item = next(i for i in unmapped["items"] if i["source_concept_name"] == "headache")
     assert item["low_concept_id"] is None and item["suggestion_id"] is not None
 
