@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.services.atc7 import is_valid_atc7
 from app.workflows.state import DEFAULT_CONFIDENCE_THRESHOLD
@@ -541,13 +541,22 @@ DomainMode = Literal["restrict", "prefer", "all"]
 
 
 class AutomapRequest(BaseModel):
-    domains: list[str] = Field(min_length=1)
+    # Required unless domain_mode is "all", which searches every domain
+    domains: list[str] = []
     threshold: int = Field(default=DEFAULT_CONFIDENCE_THRESHOLD, ge=1, le=10)
     drug_specific: bool = False
     mode: Literal["review", "commit"] = "review"
     pipeline: str | None = None
     limit: int | None = Field(default=None, ge=1)
     domain_mode: DomainMode = "prefer"
+
+    @model_validator(mode="after")
+    def _domains_unless_all(self):
+        if self.domain_mode == "all":
+            self.domains = []  # ignored by the search; stored suggestions show no target domains
+        elif not self.domains:
+            raise ValueError('Select at least one target domain, or use domain_mode "all"')
+        return self
 
 
 class SuggestRequest(BaseModel):

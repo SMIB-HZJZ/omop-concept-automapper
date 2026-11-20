@@ -2979,8 +2979,8 @@
               "type": "string"
             },
             "type": "array",
-            "minItems": 1,
-            "title": "Domains"
+            "title": "Domains",
+            "default": []
           },
           "threshold": {
             "type": "integer",
@@ -3038,9 +3038,6 @@
           }
         },
         "type": "object",
-        "required": [
-          "domains"
-        ],
         "title": "AutomapRequest"
       },
       "Body_import_concepts_api_source_vocabularies__vocabulary_id__concepts_import_post": {

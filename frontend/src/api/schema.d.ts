@@ -948,7 +948,10 @@ export interface components {
         };
         /** AutomapRequest */
         AutomapRequest: {
-            /** Domains */
+            /**
+             * Domains
+             * @default []
+             */
             domains: string[];
             /**
              * Threshold

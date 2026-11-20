@@ -18,6 +18,13 @@ def test_automap_validation(client, admin_headers, user_headers, embedded):
         ).status_code
         == 422
     )
+    # "All domains" needs no domain list
+    all_domains = client.post(
+        "/api/source-vocabularies/20/automap",
+        json={"domains": [], "domain_mode": "all", "pipeline": "nope"},
+        headers=admin_headers,
+    )
+    assert all_domains.status_code == 400, all_domains.text  # past validation, stopped at pipeline
     assert (
         client.post(
             "/api/source-vocabularies/20/automap",

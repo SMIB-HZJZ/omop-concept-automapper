@@ -49,8 +49,9 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
   const latest = useLatestTask("automap.run", (t: Task) => taskVocabularyId(t) === vocabularyId);
 
   const submit = async () => {
-    if (domains.length === 0) {
-      toast.warning("Please select at least one target domain for auto-mapping.");
+    const allDomains = domainMode === "all";
+    if (!allDomains && domains.length === 0) {
+      toast.warning("Select at least one target domain, or choose “All domains”.");
       return;
     }
     const started = await run(
@@ -59,7 +60,7 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
           await api.POST("/api/source-vocabularies/{vocabulary_id}/automap", {
             params: { path: { vocabulary_id: vocabularyId } },
             body: {
-              domains,
+              domains: allDomains ? [] : domains,
               domain_mode: domainMode,
               threshold,
               drug_specific: drugSpecific,
@@ -98,7 +99,11 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
               value={domains}
               onChange={setDomains}
               placeholder="Select domains…"
+              disabled={domainMode === "all"}
             />
+            {domainMode === "all" && (
+              <p className="text-muted-foreground text-xs">Not used: every domain is searched.</p>
+            )}
           </div>
           <div className="grid gap-1.5">
             <Label id="domain-mode-label">Domains are</Label>

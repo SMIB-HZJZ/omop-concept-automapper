@@ -13,9 +13,10 @@ type Props = {
   placeholder?: string;
   className?: string;
   id?: string;
+  disabled?: boolean;
 };
 
-export function MultiSelect({ options, value, onChange, placeholder = "Select…", className, id }: Props) {
+export function MultiSelect({ options, value, onChange, placeholder = "Select…", className, id, disabled }: Props) {
   const toggle = (option: string) =>
     onChange(value.includes(option) ? value.filter((v) => v !== option) : [...value, option]);
 
@@ -26,6 +27,7 @@ export function MultiSelect({ options, value, onChange, placeholder = "Select…
           id={id}
           variant="outline"
           role="combobox"
+          disabled={disabled}
           className={cn("h-auto min-h-9 w-full justify-between font-normal", className)}
         >
           <span className="flex flex-wrap gap-1">
