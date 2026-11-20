@@ -197,7 +197,7 @@ def test_ai_suggest_single_concept(
 def test_workflow_catalog(client, user_headers):
     catalog = client.get("/api/workflows", headers=user_headers).json()
     names = [p["name"] for p in catalog["pipelines"]]
-    assert names[0] == "automap" and "automap_refine" in names
+    assert names == ["automap", "automap_drug"]
     assert {"retrieve", "llm_rerank", "confidence_gate", "agentic_refine"} <= {
         n["name"] for n in catalog["nodes"]
     }

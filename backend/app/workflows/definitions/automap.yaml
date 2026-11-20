@@ -8,11 +8,15 @@
 #                    (keyword fusion optional: params { keyword: true })
 # 7. rerank          the LLM picks the best candidate, seeing both terms (similar reviewed
 #                    mappings as examples)
-# 8. gate            accept if the confidence reaches the threshold
+# 8. gate            accept if the confidence reaches the threshold; otherwise
+# 9. refine          an agent searches again with its own wording (English, synonyms, other
+#                    domains) and walks the hierarchy; its pick replaces the first one only when
+#                    it is more confident, then
+# 10. final_gate     the same threshold decides
 # Searching original + English was the largest gain in the retrieval evaluation (noisy Croatian:
 # R@1 0.42 -> 0.66, R@30 0.90 -> 0.97); see docs/retrieval-evaluation-2026-11.md.
 name: automap
-description: earlier mappings → source code → translate → exact name/synonym → vector search (original + English) → LLM rerank → confidence gate
+description: earlier mappings → source code → translate → exact name/synonym → vector search (original + English) → LLM rerank → confidence gate → agent retry when not confident
 entry: extract_atc7
 nodes:
   extract_atc7:
@@ -35,9 +39,15 @@ nodes:
     uses: llm_rerank
   gate:
     uses: confidence_gate
+    routes: { accept: END, reject: refine }
+  refine:
+    uses: agentic_refine
+  final_gate:
+    uses: confidence_gate
     routes: { accept: END, reject: END }
 edges:
   - [extract_atc7, match_previous]
   - [translate, match_name]
   - [retrieve, rerank]
   - [rerank, gate]
+  - [refine, final_gate]

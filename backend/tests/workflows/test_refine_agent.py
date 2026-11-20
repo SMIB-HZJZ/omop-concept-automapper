@@ -1,4 +1,4 @@
-"""The `automap_refine` pipeline: a Pydantic AI agent retries rejected concepts with tools."""
+"""The refine stage of every pipeline: a Pydantic AI agent retries unsure concepts with tools."""
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -54,7 +54,7 @@ async def test_agent_refines_rejected_mapping():
             {"concept_id": 3, "confidence": 9, "rationale": "paracetamol = acetaminophen"}
         ),
     )
-    result = await run_pipeline(_state(), ctx, "automap_refine")
+    result = await run_pipeline(_state(), ctx, "automap")
 
     assert result["outcome"] == "accepted"
     assert result["selected"]["concept_id"] == 3
@@ -83,9 +83,62 @@ async def test_agent_cannot_invent_concepts():
             {"concept_id": 424242, "confidence": 10, "rationale": "made up"}
         ),
     )
-    result = await run_pipeline(_state(), ctx, "automap_refine")
+    result = await run_pipeline(_state(), ctx, "automap")
     assert result["outcome"] in ("error", "rejected")
     assert result.get("selected") is None or result["selected"]["concept_id"] != 424242
+
+
+async def test_a_less_sure_or_failing_agent_keeps_the_first_pick():
+    def answer(confidence):
+        def respond(messages, info):
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        info.output_tools[0].name,
+                        {"concept_id": 1, "confidence": confidence, "rationale": "agent"},
+                    )
+                ]
+            )
+
+        return FunctionModel(respond)
+
+    def first_pick(result):
+        return result["selected"]["concept_id"], result["confidence"], result.get("method")
+
+    # The reranker's pick (candidate 0, confidence 3) stays when the agent is no surer
+    kept = await run_pipeline(
+        _state(), make_context(LowConfidenceReranker(), agent_model=answer(3)), "automap"
+    )
+    assert kept["confidence"] == 3 and kept.get("method") != "auto_agentic"
+    assert kept["outcome"] == "rejected"
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("gateway down")
+
+    failed = await run_pipeline(
+        _state(), make_context(LowConfidenceReranker(), run_agent=broken), "automap"
+    )
+    assert first_pick(failed) == first_pick(kept) and failed["outcome"] == "rejected"
+
+
+async def test_agent_sees_the_translation():
+    seen = {}
+
+    async def runner(model, term, deps, candidates, translation=None):
+        from app.llm.schemas import MappingDecision
+
+        seen["translation"] = translation
+        return MappingDecision(concept_id=None, rationale="-")
+
+    from tests.workflows.test_translate import FakeTranslator
+
+    ctx = make_context(
+        LowConfidenceReranker(),
+        translator=FakeTranslator({"paracetamol 500 mg tablete": "paracetamol 500 mg tablet"}),
+        run_agent=runner,
+    )
+    await run_pipeline(_state(), ctx, "automap")
+    assert seen["translation"] == "paracetamol 500 mg tablet"
 
 
 async def test_agent_no_match():
@@ -98,8 +151,12 @@ async def test_agent_no_match():
             ]
         )
 
-    ctx = make_context(LowConfidenceReranker(), agent_model=FunctionModel(respond))
-    result = await run_pipeline(_state(), ctx, "automap_refine")
+    class NoPickReranker:
+        async def rerank(self, term, candidates, drug_specific, **kwargs):
+            return RerankResult(None, None)
+
+    ctx = make_context(NoPickReranker(), agent_model=FunctionModel(respond))
+    result = await run_pipeline(_state(), ctx, "automap")
     assert result["outcome"] == "no_match" and result["rationale"] == "nothing fits"
 
 

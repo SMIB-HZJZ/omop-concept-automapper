@@ -131,6 +131,11 @@ def fake_reranker(monkeypatch):
     monkeypatch.setattr(service, "Reranker", lambda model, effort=None: reranker)
     # The default pipeline translates; the fixture's terms are treated as English already
     monkeypatch.setattr(service, "Translator", lambda model, effort=None: FakeTranslator())
+    # Unsure terms end with the refine agent; here it finds nothing (no real LLM call)
+    from app.workflows.nodes import agentic
+    from tests.workflows.helpers import no_match_agent
+
+    monkeypatch.setattr(agentic, "run_mapping_agent", no_match_agent)
     # One fake answers every term; escalation to a second model would only call it twice
     monkeypatch.setattr(service.get_settings(), "rerank_escalate_model", "")
     return reranker

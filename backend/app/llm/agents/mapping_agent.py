@@ -117,7 +117,11 @@ def _validate_choice(ctx: RunContext[AgentDeps], output: MappingDecision) -> Map
 
 
 async def run_mapping_agent(
-    model: Model | str, term: str, deps: AgentDeps, initial_candidates: list[dict]
+    model: Model | str,
+    term: str,
+    deps: AgentDeps,
+    initial_candidates: list[dict],
+    translation: str | None = None,
 ) -> MappingDecision:
     for c in initial_candidates:
         deps.seen[c["concept_id"]] = c
@@ -128,6 +132,10 @@ async def run_mapping_agent(
     vocabulary = (
         f"Source vocabulary (applies to every term in it): {deps.context}\n" if deps.context else ""
     )
-    prompt = f"{vocabulary}Source term: {term}\n\nInitial candidates from vector search:\n{listing or '(none)'}"
+    english = f"English rendering of the term: {translation}\n" if translation else ""
+    prompt = (
+        f"{vocabulary}Source term: {term}\n{english}\n"
+        f"Initial candidates from vector search:\n{listing or '(none)'}"
+    )
     result = await mapping_agent.run(prompt, deps=deps, model=model)
     return result.output

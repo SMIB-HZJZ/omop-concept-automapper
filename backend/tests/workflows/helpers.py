@@ -79,8 +79,17 @@ class IdentityTranslator:
         return TranslationResult(term, "en")
 
 
+async def no_match_agent(model, term, deps, candidates, translation=None):
+    """Every pipeline ends with the refine agent for unsure terms; by default it finds nothing."""
+    from app.llm.schemas import MappingDecision
+
+    return MappingDecision(concept_id=None, rationale="test agent: no match")
+
+
 def make_context(reranker, **kwargs) -> NodeContext:
     kwargs.setdefault("translator", IdentityTranslator())
+    if "agent_model" not in kwargs:
+        kwargs.setdefault("run_agent", no_match_agent)
     return NodeContext(
         searcher=kwargs.pop("searcher", FakeSearcher()),
         reranker=reranker,

@@ -126,12 +126,3 @@ def test_embed_many_splits_into_parallel_requests_in_order(monkeypatch):
 
     monkeypatch.setattr(get_settings(), "embedding_request_size", 40)
     assert request_size("gemini/gemini-embedding-2") == 40
-
-
-async def test_automap_original_does_not_translate():
-    searcher = FakeSearcher()
-    translator = FakeTranslator({"šećerna bolest tip 2": "type 2 diabetes mellitus"})
-    ctx = make_context(RecordingReranker(), searcher=searcher, translator=translator)
-    result = await run_pipeline(_state("šećerna bolest tip 2"), ctx, "automap_original")
-    assert translator.calls == [] and len(searcher.calls) == 1
-    assert "translate" not in [t["node"] for t in result["trace"]]

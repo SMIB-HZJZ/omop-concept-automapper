@@ -5,8 +5,10 @@
 #                    drug_strength (brand, ingredients, strengths, dose form). A unique match is
 #                    accepted with confidence 10; ties go to the reranker as the first candidates.
 # 4. fallback        translate → exact name/synonym → vector search → LLM rerank → gate
+# 5. refine          when not confident: an agent searches again (it may filter by ATC7) and walks
+#                    the hierarchy; its pick replaces the first one only when it is more confident
 name: automap_drug
-description: drugs - earlier mappings → source code → structured drug_strength match (brand, ingredients, strength, form), else translated search + LLM rerank
+description: drugs - earlier mappings → source code → structured drug_strength match (brand, ingredients, strength, form), else translated search + LLM rerank, agent retry when not confident
 entry: extract_atc7
 nodes:
   extract_atc7:
@@ -32,9 +34,15 @@ nodes:
     uses: llm_rerank
   gate:
     uses: confidence_gate
+    routes: { accept: END, reject: refine }
+  refine:
+    uses: agentic_refine
+  final_gate:
+    uses: confidence_gate
     routes: { accept: END, reject: END }
 edges:
   - [extract_atc7, match_previous]
   - [translate, match_name]
   - [retrieve, rerank]
   - [rerank, gate]
+  - [refine, final_gate]

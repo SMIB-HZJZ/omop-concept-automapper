@@ -158,7 +158,7 @@ EMBEDDING_DIMS=1024
 OLLAMA_API_BASE=http://host.docker.internal:11434
 ```
 
-**Languages and translation.** The default `automap` pipeline has a `translate` step: the term is rendered in English OMOP wording (cached per term and model; skipped when it is already English), retrieval searches both the original and the English term and merges the results, and the reranker sees both. In the evaluation this was the largest single gain for noisy Croatian terms (R@1 0.42 → 0.66, R@30 0.90 → 0.97; [report](docs/retrieval-evaluation-2026-11.md)). `automap_original` leaves translation out, for source lists that are already in English. `automap_refine` also lets an agent reformulate and translate when the first pass is not confident.
+**Languages and translation.** The default `automap` pipeline has a `translate` step: the term is rendered in English OMOP wording (cached per term and model; skipped when it is already English), retrieval searches both the original and the English term and merges the results, and the reranker sees both. In the evaluation this was the largest single gain for noisy Croatian terms (R@1 0.42 → 0.66, R@30 0.90 → 0.97; [report](docs/retrieval-evaluation-2026-11.md)). When the first pass is not confident, an agent searches again with its own wording (see *Mapping pipelines*).
 
 There is no published OMOP-specific benchmark for these models. Before relying on a model choice, run auto-mapping in review mode on a sample with known correct mappings and compare.
 
@@ -203,11 +203,11 @@ Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workfl
   5. `match_name`: exact name or synonym (CONCEPT_SYNONYM) of the original or English term, followed through `Maps to`. Confidence 9, `auto_exact_name`.
   6. `retrieve`: vector search for up to 30 candidates (`k`), for the original and the English term. Keyword (trigram) search on names and synonyms, fused by reciprocal rank, can be turned on with `keyword: true`; it is off by default because it lowered search accuracy in the evaluation ([report](docs/retrieval-evaluation-2026-11.md)).
   7. `llm_rerank`: the LLM picks a candidate, seeing the original and the English term, with reviewed mappings of similar source terms as examples. It also states the match type (exact / broader / narrower / related) and may map a combined term to several concepts.
-  8. `confidence_gate`.
-  Ambiguous deterministic hits (different targets) go to the reranker as the first candidates.
-- **`automap_original`**: the same without the `translate` step; the term is searched as is (for source lists already in English).
-- **`automap_drug`**: the same, with the structured drug match (see [Drug mapping](#drug-mapping)) before translation.
-- **`automap_refine`**: like `automap`, but rejected concepts go to a Pydantic AI agent. The agent reformulates the query (translations, synonyms, ingredient splits) using search and hierarchy tools, and a second gate decides.
+  8. `confidence_gate`: accepted at or above the threshold; otherwise
+  9. `agentic_refine`: a Pydantic AI agent gets the term, its English rendering and the first candidates, and searches again with its own wording (synonyms, other domains, ingredient splits; the ATC7 filter for drugs) and the concept hierarchy. Its pick (method `auto_agentic`) replaces the first one only when it is more confident; if it finds nothing or fails, the first result stands.
+  10. a second `confidence_gate` with the same threshold.
+  Ambiguous deterministic hits (different targets) go to the reranker as the first candidates. The agent runs only for terms that do not pass the first gate, but it makes several LLM calls each.
+- **`automap_drug`** (default for drug vocabularies): the same, with the structured drug match (see [Drug mapping](#drug-mapping)) before translation.
 
 **Domains** (Auto map settings, also used by AI suggest): *only these domains*, *prefer these domains* (default: a few candidates from other domains are added and the reranker is told the preference) or *all domains*.
 
