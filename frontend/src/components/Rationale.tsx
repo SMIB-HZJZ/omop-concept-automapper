@@ -1,8 +1,8 @@
-import { ShieldCheck, Users } from "lucide-react";
+import { Scale, ShieldCheck, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-// Tags the reranker puts at the start of a rationale (see backend workflows/nodes/rerank.py)
+// Tags put at the start of a rationale (backend workflows/nodes/rerank.py and decide.py)
 const TAGS: Record<string, { label: string; icon: typeof ShieldCheck; title: string }> = {
   "unsure first answer, decided by the stronger model": {
     label: "checked by a stronger model",
@@ -15,6 +15,12 @@ const TAGS: Record<string, { label: string; icon: typeof ShieldCheck; title: str
     title: "The cheaper models disagreed, so the judge model decided",
   },
   "voters agreed": { label: "models agreed", icon: Users, title: "Two models picked the same concept" },
+  "final decision on all evidence": {
+    label: "final decision",
+    icon: Scale,
+    title:
+      "No earlier step was confident, so the stronger model chose from every candidate found (first search, rewritten searches, the agent's) and saw every earlier verdict",
+  },
 };
 
 /** The AI's reason, with the internal "[route]" tag shown as a small chip instead of text. */

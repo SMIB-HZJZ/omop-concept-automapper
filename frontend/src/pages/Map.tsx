@@ -46,6 +46,7 @@ import { ConceptDetail } from "./map/ConceptDetail";
 import { TeamStatus } from "./map/Team";
 import { UserAvatar } from "@/components/UserAvatar";
 import { defaultSearchRequest } from "./map/searchRequest";
+import { methodLabel } from "@/lib/methods";
 
 /** Columns of the term list; ``othersOn`` maps a source term to colleagues who have it open. */
 const unmappedColumns = (othersOn: Map<number, string[]>): ColumnDef<UnmappedItem, unknown>[] => [
@@ -124,7 +125,11 @@ const RECENT_COLUMNS: ColumnDef<AuditEntry, unknown>[] = [
   { accessorKey: "source_concept_name", header: "Source concept" },
   { accessorKey: "mapped_concept_name", header: "Mapped concept" },
   { accessorKey: "confidence_score", header: "Confidence" },
-  { accessorKey: "mapping_method", header: "Method" },
+  {
+    accessorKey: "mapping_method",
+    header: "Method",
+    cell: ({ row }) => methodLabel(row.original.mapping_method),
+  },
   { accessorKey: "created_by", header: "By", cell: ({ row }) => row.original.created_by ?? "—" },
   { accessorKey: "created_at", header: "Created", cell: ({ row }) => formatDate(row.original.created_at) },
 ];
@@ -147,7 +152,7 @@ function AuditTrail({ vocabularyId }: { vocabularyId: number }) {
             {stats.data?.map((s) => (
               <StatCard
                 key={s.mapping_method}
-                label={`${s.mapping_method} mappings`}
+                label={`${methodLabel(s.mapping_method)} mappings`}
                 value={formatNumber(s.mapping_count)}
                 hint={s.avg_confidence != null ? `Avg confidence ${s.avg_confidence.toFixed(2)}` : undefined}
               />

@@ -47,24 +47,40 @@ async def agentic_refine(state: AutomapState, ctx: NodeContext, params: AgenticP
         # The agent is a second chance: its failure leaves the first result as it was
         ctx.logger.warning("Mapping agent failed for %r: %s", term, exc)
         return {"_summary": f"agent error ({type(exc).__name__}){'; ' + keep if keep else ''}"}
+    found_by_agent = [
+        c
+        for c in deps.seen.values()
+        if "concept_name" in c and c.get("standard_concept") in (None, "S")
+    ]
+    attempt = {
+        "step": "agent retry",
+        "concept": deps.seen.get(decision.concept_id) if decision.concept_id else None,
+        "confidence": decision.confidence,
+        "match_type": None,
+        "rationale": decision.rationale,
+    }
+    evidence = {"attempts": [attempt], "agent_candidates": found_by_agent}
     if decision.concept_id is None:
         if first:
-            return {"_summary": f"agent found no match; {keep}"}
+            return {**evidence, "_summary": f"agent found no match; {keep}"}
         # The first pass's outcome (no_match, no_candidates or error) stands
         return {
+            **evidence,
             "rationale": decision.rationale,
             "_summary": f"agent found no match: {decision.rationale}",
         }
     if first and (decision.confidence or 0) <= first_confidence:
         return {
+            **evidence,
             "_summary": f"agent picked concept {decision.concept_id} ({decision.confidence}), "
-            f"no surer; {keep}"
+            f"no surer; {keep}",
         }
     selected = deps.seen.get(decision.concept_id)
     if selected is None or "concept_name" not in selected:
         found = await asyncio.to_thread(ctx.get_concepts, [decision.concept_id])
         selected = found[0] if found else {"concept_id": decision.concept_id, "concept_name": "?"}
     return {
+        **evidence,
         "selected": selected,
         # One concept replaces a combined first pick; the agent states no match type
         "selected_concepts": [],

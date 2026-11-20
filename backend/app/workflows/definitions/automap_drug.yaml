@@ -6,9 +6,10 @@
 #                    accepted with confidence 10; ties go to the reranker as the first candidates.
 # 4. fallback        translate → exact name/synonym → vector search → LLM rerank → gate
 # 5. when not confident: rewritten searches + a second LLM pick, then an agent retry (it may filter
-#    by ATC7 and walks the hierarchy); each replaces the pick only when it is more confident
+#    by ATC7 and walks the hierarchy); each replaces the pick only when it is more confident;
+#    last, the stronger model decides once more on every candidate and verdict gathered
 name: automap_drug
-description: drugs - earlier mappings → source code → structured drug_strength match (brand, ingredients, strength, form), else translated search + LLM rerank, when not confident, rewritten searches + second LLM pick, then agent retry
+description: drugs - earlier mappings → source code → structured drug_strength match (brand, ingredients, strength, form), else translated search + LLM rerank, when not confident, rewritten searches + second LLM pick, then agent retry, then a final decision on all evidence
 entry: extract_atc7
 nodes:
   extract_atc7:
@@ -48,6 +49,11 @@ nodes:
     uses: agentic_refine
   final_gate:
     uses: confidence_gate
+    routes: { accept: END, reject: decide }
+  decide:
+    uses: decide_with_evidence
+  last_gate:
+    uses: confidence_gate
     routes: { accept: END, reject: END }
 edges:
   - [extract_atc7, match_previous]
@@ -56,3 +62,4 @@ edges:
   - [rerank, gate]
   - [rerank_again, gate_again]
   - [refine, final_gate]
+  - [decide, last_gate]

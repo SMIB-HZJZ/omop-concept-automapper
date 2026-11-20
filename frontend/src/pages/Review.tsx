@@ -22,6 +22,7 @@ import { ConfidenceMeter } from "./review/ConfidenceMeter";
 import { SuggestionDetail, type DetailPosition } from "./review/SuggestionDetail";
 import { ConceptLink } from "@/components/ConceptLink";
 import { Rationale } from "@/components/Rationale";
+import { methodLabel } from "@/lib/methods";
 
 type Status = SuggestionFilters["status"];
 
@@ -221,7 +222,7 @@ export function ReviewPage() {
                 "—"
               )}
               <span className="text-muted-foreground text-[11px]">
-                {row.original.method}
+                {methodLabel(row.original.method)}
                 {row.original.pipeline ? ` · ${row.original.pipeline}` : ""}
               </span>
             </div>

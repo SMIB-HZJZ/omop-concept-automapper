@@ -207,8 +207,10 @@ Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workfl
   9. `rewrite_search`: the LLM writes up to three other searches (abbreviations spelled out, synonyms, OMOP wording; cached), and their new candidates go to
   10. a second `llm_rerank`, whose pick replaces the first only when it is more confident, and a second gate; still not confident:
   11. `agentic_refine`: a Pydantic AI agent gets the term, its English rendering and the candidates, and searches again with its own wording (synonyms, other domains, ingredient splits; the ATC7 filter for drugs) and the concept hierarchy. At most `AGENT_REQUEST_LIMIT` model requests (default 6; each tool use is one) and `AGENT_OUTPUT_RETRIES` retries of an invalid answer (default 1). Its pick (method `auto_agentic`) replaces the first one only when it is more confident; if it finds nothing, fails or reaches a limit, the earlier result stands.
-  12. a last `confidence_gate` with the same threshold.
-  Ambiguous deterministic hits (different targets) go to the reranker as the first candidates. Steps 9–12 run only for terms that do not pass the first gate, but they add several LLM calls each.
+  12. a `confidence_gate` with the same threshold; still not confident:
+  13. `decide_with_evidence`: the stronger model (`RERANK_ESCALATE_MODEL`) gets every candidate found on the way (first search, rewritten searches, the agent's finds; earlier picks first) and every earlier verdict with its confidence, match type and reason, and makes one final choice (method `auto_final`, shown as *final decision*). If it finds nothing or fails, the earlier result stands.
+  14. a last `confidence_gate`.
+  Ambiguous deterministic hits (different targets) go to the reranker as the first candidates. Steps 9–14 run only for terms that do not pass the first gate, but they add several LLM calls each. Method codes and steps have readable names in the UI (e.g. `auto_agentic` *Agent retry*, `auto_final` *Final decision*).
 - **`automap_drug`** (default for drug vocabularies): the same, with the structured drug match (see [Drug mapping](#drug-mapping)) before translation.
 
 **Domains** (Auto map settings, also used by AI suggest): *only these domains*, *prefer these domains* (default: a few candidates from other domains are added and the reranker is told the preference) or *all domains*.

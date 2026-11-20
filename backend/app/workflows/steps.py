@@ -10,6 +10,7 @@ STEP_LABELS = {
     "llm_rerank": "AI pick",
     "rewrite_search": "Rewriting the search",
     "agentic_refine": "Agent retry",
+    "decide_with_evidence": "Final decision on all evidence",
 }
 # Steps that take no noticeable time are not shown
 QUIET_STEPS = {"extract_atc7", "confidence_gate"}

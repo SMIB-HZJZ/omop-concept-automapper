@@ -14,11 +14,15 @@
 # 10. rerank_again   a second LLM pick, kept only when more confident than the first; gate_again
 # 11. refine         still not confident: an agent searches with its own wording and walks the
 #                    hierarchy (limited by AGENT_REQUEST_LIMIT); kept only when more confident
-# 12. final_gate     the same threshold decides
+# 12. final_gate     the same threshold; still not confident:
+# 13. decide         the stronger model gets every candidate found (first search, rewritten
+#                    searches, the agent's finds) and every earlier verdict, and makes one final
+#                    choice (method auto_final); then
+# 14. last_gate      the same threshold decides
 # Searching original + English was the largest gain in the retrieval evaluation (noisy Croatian:
 # R@1 0.42 -> 0.66, R@30 0.90 -> 0.97); see docs/retrieval-evaluation-2026-11.md.
 name: automap
-description: earlier mappings → source code → translate → exact name/synonym → vector search (original + English) → LLM rerank → confidence gate; when not confident, rewritten searches + second LLM pick, then agent retry
+description: earlier mappings → source code → translate → exact name/synonym → vector search (original + English) → LLM rerank → confidence gate; when not confident, rewritten searches + second LLM pick, then agent retry, then a final decision on all evidence
 entry: extract_atc7
 nodes:
   extract_atc7:
@@ -55,6 +59,11 @@ nodes:
     uses: agentic_refine
   final_gate:
     uses: confidence_gate
+    routes: { accept: END, reject: decide }
+  decide:
+    uses: decide_with_evidence
+  last_gate:
+    uses: confidence_gate
     routes: { accept: END, reject: END }
 edges:
   - [extract_atc7, match_previous]
@@ -63,3 +72,4 @@ edges:
   - [rerank, gate]
   - [rerank_again, gate_again]
   - [refine, final_gate]
+  - [decide, last_gate]

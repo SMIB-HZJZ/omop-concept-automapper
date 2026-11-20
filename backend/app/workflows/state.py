@@ -41,6 +41,10 @@ class AutomapState(TypedDict, total=False):
     match_type: str | None
     # Queries written by the rewrite_search step
     rewritten_queries: list[str]
+    # Evidence for the final decision: every pick made so far (step, concept, confidence,
+    # match type, rationale), and concepts the agent found with its own searches
+    attempts: Annotated[list[dict], operator.add]
+    agent_candidates: list[dict]
     method: str
     outcome: str  # accepted | rejected | no_candidates | no_match | error
     route: str

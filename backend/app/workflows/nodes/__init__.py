@@ -3,6 +3,7 @@
 from app.workflows.nodes import (  # noqa: F401
     agentic,
     atc7,
+    decide,
     drug,
     gates,
     rerank,

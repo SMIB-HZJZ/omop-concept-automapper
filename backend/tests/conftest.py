@@ -144,6 +144,10 @@ def fake_reranker(monkeypatch):
     from app.workflows.nodes import rewrite
 
     monkeypatch.setattr(rewrite, "QueryRewriter", lambda model, effort=None: _NoRewrites())
+    from app.workflows.nodes import decide
+    from tests.workflows.helpers import NoFinalPick
+
+    monkeypatch.setattr(decide, "Reranker", lambda model, effort=None: NoFinalPick())
     # One fake answers every term; escalation to a second model would only call it twice
     monkeypatch.setattr(service.get_settings(), "rerank_escalate_model", "")
     return reranker

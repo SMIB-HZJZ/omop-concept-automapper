@@ -93,8 +93,18 @@ class NoRewrites:
         return []
 
 
+class NoFinalPick:
+    """The final decision on all evidence; by default it finds nothing (earlier result stands)."""
+
+    async def rerank(self, term, candidates, drug_specific, **kwargs):
+        from app.llm.structured import RerankResult
+
+        return RerankResult(None, None)
+
+
 def make_context(reranker, **kwargs) -> NodeContext:
     kwargs.setdefault("translator", IdentityTranslator())
+    kwargs.setdefault("extras", {}).setdefault("final_reranker", NoFinalPick())
     kwargs.setdefault("rewriter", NoRewrites())
     if "agent_model" not in kwargs:
         kwargs.setdefault("run_agent", no_match_agent)

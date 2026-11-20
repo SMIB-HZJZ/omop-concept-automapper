@@ -6,6 +6,7 @@ import { api, unwrap } from "@/api/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAutomapThreshold } from "@/hooks/useAutomapThreshold";
+import { methodLabel } from "@/lib/methods";
 
 const percent = (x: number | null | undefined) => (x == null ? "—" : `${Math.round(x * 100)}%`);
 
@@ -57,7 +58,9 @@ export function CalibrationPanel({ vocabularyId }: { vocabularyId: number | null
         </div>
         <div className="text-muted-foreground text-xs">
           Precision by method:{" "}
-          {data.methods.map((m) => `${m.method} ${percent(m.precision)} (${m.accepted + m.rejected})`).join(" · ")}
+          {data.methods
+            .map((m) => `${methodLabel(m.method)} ${percent(m.precision)} (${m.accepted + m.rejected})`)
+            .join(" · ")}
         </div>
       </AlertDescription>
     </Alert>

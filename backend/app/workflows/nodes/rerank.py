@@ -64,6 +64,15 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
         }
     route = getattr(result, "route", None)
     rationale = result.rationale
+    attempt = {
+        "step": "second AI pick, after rewritten searches" if params.keep_better else "AI pick",
+        "concept": candidates[result.index] if result.index is not None else None,
+        "confidence": result.confidence,
+        "match_type": getattr(result, "match_type", None),
+        "rationale": result.rationale,
+        "route": route,
+        "votes": getattr(result, "votes", None),
+    }
     meta: dict = {}
     if route:
         # Kept with the mapping: terms the judge decided are the ones to review first
@@ -77,9 +86,10 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
         meta = {"rerank_route": route, "rerank_votes": result.votes}
     if first and (result.index is None or (result.confidence or 0) <= first_confidence):
         found = "no match" if result.index is None else f"confidence {result.confidence}"
-        return {"_summary": f"{found}, no surer; {keep}"}
+        return {"attempts": [attempt], "_summary": f"{found}, no surer; {keep}"}
     if result.index is None:
         return {
+            "attempts": [attempt],
             **({"meta": meta} if meta else {}),
             "selected": None,
             "confidence": None,
@@ -90,6 +100,7 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
     selected = candidates[result.index]
     additional = [candidates[i] for i in getattr(result, "additional", None) or []]
     return {
+        "attempts": [attempt],
         **({"meta": meta} if meta else {}),
         "selected": selected,
         "selected_concepts": [selected, *additional] if additional else [],

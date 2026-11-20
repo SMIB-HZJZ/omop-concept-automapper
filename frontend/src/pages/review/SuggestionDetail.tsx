@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/format";
 import { ConfidenceMeter } from "./ConfidenceMeter";
+import { methodLabel } from "@/lib/methods";
 
 export type DetailPosition = { id: number; index: number };
 
@@ -117,7 +118,7 @@ export function SuggestionDetail({
             </section>
 
             <div className="text-muted-foreground text-xs">
-              {s.method}
+              {methodLabel(s.method)}
               {s.pipeline ? ` · ${s.pipeline}` : ""} · suggested {formatDate(s.created_at)}
               {s.decided_at && (
                 <>

@@ -8,6 +8,7 @@ import { useConceptModal } from "@/hooks/useConceptModal";
 import { Rationale } from "@/components/Rationale";
 import { outcomeLabel } from "@/lib/outcome";
 import type { ConceptLike } from "./types";
+import { stepName } from "@/lib/methods";
 
 /** Result of "AI suggest": the pick, its confidence and rationale, and the workflow trace. */
 export function SuggestionAlert({
@@ -79,7 +80,9 @@ export function SuggestionAlert({
             <ol className="mt-1 space-y-0.5 text-xs">
               {suggestion.trace.map((t, i) => (
                 <li key={i}>
-                  <span className="font-mono">{t.node}</span>{" "}
+                  <span className="font-medium" title={t.node}>
+                    {stepName(t.node)}
+                  </span>{" "}
                   <span className="text-muted-foreground tabular-nums">{t.ms} ms</span> — {t.summary}
                 </li>
               ))}
