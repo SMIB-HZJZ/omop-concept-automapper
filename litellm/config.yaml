@@ -12,6 +12,13 @@ model_list:
   - model_name: "anthropic/*"          # ANTHROPIC_API_KEY
     litellm_params:
       model: "anthropic/*"
+      # Prompt caching: mark the end of the system message, so the shared part of every call
+      # (answer-format tool + system prompt) is read from Anthropic's cache instead of billed in
+      # full. The prompt itself is unchanged, so answers are the same. Prefixes under the model's
+      # minimum (512 tokens on Claude 5.5) are simply not cached.
+      cache_control_injection_points:
+        - location: message
+          role: system
   - model_name: "openai/*"             # OPENAI_API_KEY
     litellm_params:
       model: "openai/*"
