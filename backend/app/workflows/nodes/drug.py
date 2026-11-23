@@ -97,12 +97,19 @@ async def _match(
         form_choice = await _pick_forms(ctx, form, product)
         if form_choice:
             match = await asyncio.to_thread(ctx.drug_matcher, structure, False, form_choice)
-    ingredients = [n for n in match.unresolved if n != form]
+    ingredients = [n for n in match.unresolved if n != form and n not in match.unresolved_units]
     if ingredients and translate:
         structure = await _translate_names(ctx, structure, ingredients)
         match = await asyncio.to_thread(ctx.drug_matcher, structure, False, form_choice)
     if match.unresolved:
         match = await asyncio.to_thread(ctx.drug_matcher, structure, True, form_choice)
+    if match.level is None and not match.unresolved and form and form_choice is None:
+        # A generic RxNorm form (Tablet, Syrup) that products rarely use: ask for the usual ones
+        choice = await _pick_forms(ctx, form, product)
+        if choice and {c.lower() for c in choice} != {form.strip().lower()}:
+            retry = await asyncio.to_thread(ctx.drug_matcher, structure, True, choice)
+            if retry.level is not None:
+                match = retry
     match.structure = structure
     return match
 

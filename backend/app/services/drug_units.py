@@ -26,15 +26,15 @@ _UCUM: dict[str, tuple[str, float]] = {
     # equivalents, base mEq
     "meq": ("equivalents", 1.0),
     "eq": ("equivalents", 1e3),
-    # international units, base IU
-    "[iU]": ("iu", 1.0),
-    "[IU]": ("iu", 1.0),
-    "k[iU]": ("iu", 1e3),
-    "M[iU]": ("iu", 1e6),
+    # units: RxNorm writes international units and units alike (UNT), so they compare as equal
+    "[iU]": ("units", 1.0),
+    "[IU]": ("units", 1.0),
+    "k[iU]": ("units", 1e3),
+    "M[iU]": ("units", 1e6),
     "[U]": ("units", 1.0),
-    # dose-form units used as denominators
+    # dose-form units used as denominators; RxNorm states metered doses per actuation
     "{actuat}": ("actuation", 1.0),
-    "{dose}": ("dose", 1.0),
+    "{dose}": ("actuation", 1.0),
     "cm2": ("area", 1.0),
     "h": ("time", 1.0),
     "%": ("percent", 1.0),
@@ -76,6 +76,7 @@ _ALIASES: dict[str, str] = {
     "mol": "mol",
     "meq": "meq",
     "actuation": "{actuat}",
+    "actuat": "{actuat}",
     "puff": "{actuat}",
     "dose": "{dose}",
     "doza": "{dose}",

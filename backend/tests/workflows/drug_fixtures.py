@@ -99,6 +99,19 @@ CONCEPTS = [
         "9037",
     ),
     (9038, "diazepam 5 MG/ML Injectable Solution", "Drug", "RxNorm", "Clinical Drug", "S", "9038"),
+    # A branded drug without a quantity, next to the Quant Clinical Drug 9037
+    (9045, "Normabel", "Drug", "RxNorm Extension", "Brand Name", None, "OMOP9045"),
+    (
+        9046,
+        "diazepam 5 MG/ML Injectable Solution [Normabel]",
+        "Drug",
+        "RxNorm Extension",
+        "Branded Drug",
+        "S",
+        "OMOP9046",
+    ),
+    # A generic RxNorm form that products rarely use
+    (9015, "Tablet", "Drug", "RxNorm", "Dose Form", None, "317541x"),
 ]
 HAS_FORM = [
     (3, 9010),
@@ -113,12 +126,13 @@ HAS_FORM = [
     (9036, 9013),
     (9037, 9014),
     (9038, 9014),
+    (9046, 9014),
 ]
 HAS_ING = [(9033, 9001), (9044, 9002), (9044, 9003)]
 MAPS_TO = [(9100, 9001), (9101, 9002), (9101, 9003), (9102, 9002)]
 IS_A = [(9010, 9012), (9013, 9012)]
 SYNONYMS = [(9001, "APAP")]
-HAS_BRAND = [(9041, 9040), (9043, 9042)]
+HAS_BRAND = [(9041, 9040), (9043, 9042), (9046, 9045)]
 STRENGTHS = [
     # drug, ingredient, amount, amount unit, numerator, numerator unit, denominator unit
     (3, 9001, 500, 9020, None, None, None),
@@ -133,6 +147,7 @@ STRENGTHS = [
     (9043, 9001, 500, 9020, None, None, None),
     (9036, 9002, 250, 9020, None, None, None),
     (9038, 9004, None, None, 5, 9020, 9021),
+    (9046, 9004, None, None, 5, 9020, 9021),
 ]
 # Quant drugs: numerator is the total amount in denominator_value
 QUANT_STRENGTHS = [(9037, 9004, 10, 9020, 2, 9021)]

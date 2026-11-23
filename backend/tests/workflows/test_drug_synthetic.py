@@ -31,6 +31,7 @@ FORMS = {
     "Injektionslösung": ["Injectable Solution", "Injection"],
     "soluzione orale": ["Oral Solution"],
     "Kautablette": ["Chewable Tablet"],
+    "Tablet": ["Oral Tablet"],
 }
 ENGLISH = {
     "paracetamolo": "acetaminophen",
@@ -88,6 +89,23 @@ PARSED = {
             "denominator_unit": "mL",
         },
         form="Injectable Solution",
+        quantity=2,
+    ),
+    # The parser rewrites a unit the matcher cannot read
+    "Paracetamol 500 Milligramm Tabletten": _parsed(
+        {"ingredient": "acetaminophen", "amount_value": 500, "amount_unit": "mg"},
+        form="Oral Tablet",
+    ),
+    "Normabel 10 mg/2 ml Injektionslösung": _parsed(
+        {
+            "ingredient": "diazepam",
+            "numerator_value": 10,
+            "numerator_unit": "mg",
+            "denominator_value": 2,
+            "denominator_unit": "mL",
+        },
+        form="Injectable Solution",
+        brand="Normabel",
         quantity=2,
     ),
     "Paracetamol 650 mg tbl": _parsed(
@@ -208,6 +226,24 @@ CASES = [
         _cols("diazepam", "Injektionslösung", amount_value=10, amount_unit="mg"),
         first_candidate=9037,
         approximate=True,
+    ),
+    Case(
+        "en: acetaminophen 500 mg Tablet (generic RxNorm form)",
+        _cols("acetaminophen", "Tablet", amount_value=500, amount_unit="mg"),
+        accepted=[3],
+        picker_used=True,
+        note="chosen by the LLM",
+    ),
+    Case(
+        "de: Paracetamol 500 Milligramm Tabletten (unit unknown to the matcher)",
+        _cols("acetaminophen", "Oral Tablet", amount_value=500, amount_unit="Milligramm"),
+        accepted=[3],
+        parser_used=True,
+    ),
+    Case(
+        "de: Normabel 10 mg/2 ml Injektionslösung (brand without the quantity)",
+        first_candidate=9037,
+        note="branded drug without the quantity or clinical drug with it",
     ),
     # --- names parsed by the LLM
     Case("en: Augmentin 875 mg/125 mg film-coated tablets", accepted=[9041], parser_used=True),

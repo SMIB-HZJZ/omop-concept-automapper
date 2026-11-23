@@ -40,7 +40,7 @@ from sqlmodel import Session
 
 from app.core.cache import cached
 from app.llm.schemas import DrugComponent, DrugStructure
-from app.services.drug_units import close, concentration, quantity
+from app.services.drug_units import close, concentration, normalise_unit, quantity
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,8 @@ class DrugMatch:
     approximate: list[str] = field(default_factory=list)
     # How source names were read when not by their exact name, e.g. "paracetamol → acetaminophen"
     resolved: list[str] = field(default_factory=list)
+    # Units the matcher cannot read (also in ``unresolved``); the LLM parser rewrites them
+    unresolved_units: list[str] = field(default_factory=list)
     # The structure as finally matched (ingredients translated), set by the workflow step
     structure: DrugStructure | None = None
 
@@ -655,14 +657,27 @@ def _match_levels(
     forms: list[int],
     brand_id: int | None,
 ) -> DrugMatch | None:
-    """Branded first (when the brand is known), then clinical."""
-    for level_brand in ([brand_id] if brand_id else []) + [None]:
-        found = _match_level(session, structure, ingredient_ids, forms, level_brand)
-        if found is not None:
-            if level_brand is None and brand_id is not None:
-                found.reason += "; no branded match, used the clinical level"
-            return found
-    return None
+    """Branded first (when the brand is known), then clinical. When the branded drug lacks the
+    stated quantity but a clinical one has it, neither keeps every attribute: both are returned as
+    alternatives for the reranker."""
+    branded = (
+        _match_level(session, structure, ingredient_ids, forms, brand_id) if brand_id else None
+    )
+    if branded is not None and "used the one without" not in branded.reason:
+        return branded
+    clinical = _match_level(session, structure, ingredient_ids, forms, None)
+    if branded is None:
+        if clinical is not None and brand_id is not None:
+            clinical.reason += "; no branded match, used the clinical level"
+        return clinical
+    if clinical is not None and clinical.level and clinical.level.startswith("quant_"):
+        return DrugMatch(
+            branded.level,
+            sorted(set(branded.concept_ids + clinical.concept_ids)),
+            "branded drug without the quantity or clinical drug with it",
+            approximate=branded.approximate + clinical.approximate,
+        )
+    return branded
 
 
 def match_structure(
@@ -688,6 +703,16 @@ def match_structure(
             update={"components": [DrugComponent(ingredient=str(i)) for i in ids]}
         )
 
+    units = [
+        u
+        for c in structure.components
+        for u in (c.amount_unit, c.numerator_unit, c.denominator_unit)
+        if u and u.strip() and normalise_unit(u) is None
+    ]
+    if structure.quantity_unit and normalise_unit(structure.quantity_unit) is None:
+        units.append(structure.quantity_unit)
+    units = list(dict.fromkeys(units))
+
     names = [c.ingredient for c in structure.components]
     resolved = resolve_ingredients(session, names, fuzzy=fuzzy)
     unresolved = [n for n in names if n.strip().lower() not in resolved]
@@ -695,8 +720,17 @@ def match_structure(
     forms = resolve_dose_form(session, form_names) if structure.dose_form else []
     if structure.dose_form and not forms:
         unresolved.append(structure.dose_form)
-    if unresolved:
-        return DrugMatch(reason="unknown ingredient or dose form", unresolved=unresolved)
+    if unresolved or units:
+        return DrugMatch(
+            reason="unknown "
+            + ", ".join(
+                w
+                for w, found in (("ingredient or dose form", unresolved), ("unit", units))
+                if found
+            ),
+            unresolved=unresolved + units,
+            unresolved_units=units,
+        )
 
     readings = [resolved[n.strip().lower()] for n in names]
     resolved_notes = [

@@ -36,8 +36,11 @@ Rules:
   numerator 10 mg, denominator 2 mL, quantity 2 mL. A concentration alone (syrup 100 mg/5 mL) has
   no quantity. Never use the pack size (20 tablets, 5 x 2 mL) as the quantity; for "5 x 2 mL" the
   quantity is 2 mL.
-- Units as written in labels: mg, g, mcg, mL, IU, mmol, %. Never invent a strength that is not in
-  the name; leave the fields empty instead.
+- Strengths per dose, actuation or puff (inhalers, sprays): numerator per denominator unit
+  "actuation" (200 micrograms/dose -> numerator 200 mcg, denominator unit actuation).
+- Units in English abbreviations, whatever the source language: mg, g, mcg, mL, IU, mmol, %,
+  actuation (Einheiten, jedinice, unités -> IU). Never invent a strength that is not in the name;
+  leave the fields empty instead.
 - dose_form: the RxNorm dose form from the list below that means the same as the form in the
   name (in any language or abbreviation), copied exactly, or null if the name gives no form.
   RxNorm does not record coatings: a film-coated tablet is an Oral Tablet. Keep the route and the
@@ -48,6 +51,9 @@ Rules:
 
 Dose forms:
 {dose_forms}"""
+
+
+_PARSE_VERSION = hashlib.sha1(DRUG_PARSE_PROMPT.encode()).hexdigest()[:8]
 
 
 class DrugParser:
@@ -66,7 +72,8 @@ class DrugParser:
         self._client = client
 
     def _key(self, term: str) -> str:
-        digest = hashlib.sha1(term.strip().encode()).hexdigest()
+        # The prompt is part of the key: a changed prompt must not reuse old answers
+        digest = hashlib.sha1(f"{_PARSE_VERSION}\n{term.strip()}".encode()).hexdigest()
         label = f"{self.model}@{self.effort}" if self.effort else self.model
         return f"drugparse:{label}:{digest}"
 
@@ -114,10 +121,16 @@ Rules:
   Suspension, a cream for the skin a Topical Cream.
 - Where RxNorm uses two names for the same thing (Injectable Solution and Injection for a
   solution for injection or infusion), return both; at most three.
+- RxNorm products mostly use the specific forms (Oral Tablet, Oral Capsule, Oral Solution,
+  Topical Cream, Injectable Solution), rarely the generic ones (Tablet, Capsule, Syrup, Cream,
+  Injection): for a generic term return the specific form(s) it usually stands for.
 - Return an empty list if no listed form means the same; never a merely similar one.
 
 Dose forms:
 {dose_forms}"""
+
+
+_FORM_VERSION = hashlib.sha1(DOSE_FORM_PROMPT.encode()).hexdigest()[:8]
 
 
 class DoseFormPicker:
@@ -138,7 +151,7 @@ class DoseFormPicker:
         self._client = client
 
     def _key(self, text: str) -> str:
-        digest = hashlib.sha1(text.encode()).hexdigest()
+        digest = hashlib.sha1(f"{_FORM_VERSION}\n{text}".encode()).hexdigest()
         label = f"{self.model}@{self.effort}" if self.effort else self.model
         return f"doseform:{label}:{digest}"
 

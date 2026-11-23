@@ -26,12 +26,15 @@ def _match(structure):
 def test_units_normalise():
     assert quantity(0.5, "g") == quantity(500, "mg")
     assert quantity(500, "mcg") == quantity(0.5, "mg")
-    assert quantity(5, "I.U.").dimension == "iu"
+    assert quantity(5, "I.U.").dimension == "units"
     # 500 mcg / 5 mL = 0.1 mg/mL
     assert close(concentration(500, "mcg", 5, "ml")[0], 0.1)
     # 1 % = 10 mg per g (creams) or per mL
     assert concentration(1, "%", None, None) == concentration(10, "mg", 1, "g")
     assert quantity(5, "furlongs") is None
+    # RxNorm writes IU and units alike (UNT); metered doses are per actuation
+    assert quantity(1000, "IU") == quantity(1000, "[U]")
+    assert concentration(100, "mcg", None, "dose") == concentration(100, "mcg", None, "{actuat}")
 
 
 # --------------------------------------------------------------------------- CSV columns
@@ -449,3 +452,32 @@ async def test_approximate_match_goes_to_the_reranker_first(drug_vocabulary):
     assert "approximate" in drug_step["summary"]
     assert Recording.candidates[0] == 9035
     assert any(n.startswith("Structured match is approximate") for n in Recording.notes)
+
+
+def test_unknown_unit_is_unresolved(drug_vocabulary):
+    match = _match(
+        _structure({"ingredient": "acetaminophen", "amount_value": 500, "amount_unit": "Gran"})
+    )
+    assert match.unresolved == ["Gran"] and match.unresolved_units == ["Gran"]
+
+
+def test_brand_without_the_quantity_ties_with_the_quant_clinical_drug(drug_vocabulary):
+    structure = DrugStructure(
+        components=[
+            DrugComponent(
+                ingredient="diazepam",
+                numerator_value=10,
+                numerator_unit="mg",
+                denominator_value=2,
+                denominator_unit="mL",
+            )
+        ],
+        dose_form="Injectable Solution",
+        brand_name="Normabel",
+        quantity_value=2,
+        quantity_unit="mL",
+    )
+    match = _match(structure)
+    assert match.concept_ids == [9037, 9046] and not match.unique
+    # Without a quantity the brand decides
+    assert _match(structure.model_copy(update={"quantity_value": None})).concept_ids == [9046]
