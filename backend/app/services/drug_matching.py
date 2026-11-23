@@ -18,7 +18,8 @@ Names are resolved in tiers, most reliable first: the standard Ingredient's name
 non-standard Ingredients and Precise Ingredients (salts) through ``Maps to``, then the INN names of
 single-ingredient ATC codes (paracetamol, salbutamol). With ``fuzzy=True`` a name still unknown is
 read as the most similar Ingredient name (trigram similarity), when that one is clearly the best.
-Dose forms: the RxNorm name itself plus the aliases in ``app.services.drug_forms``.
+Dose forms: the RxNorm name itself (case, accents and punctuation ignored); a form in another
+language is first rendered as RxNorm forms by the LLM (``form_choice``).
 
 A brand without ingredients takes its ingredients from its branded products, when they all share
 one ingredient set. The ingredient set must be identical (no extra or missing ingredients),
@@ -39,7 +40,6 @@ from sqlmodel import Session
 
 from app.core.cache import cached
 from app.llm.schemas import DrugComponent, DrugStructure
-from app.services.drug_forms import alias_targets
 from app.services.drug_units import close, concentration, quantity
 
 logger = logging.getLogger(__name__)
@@ -71,6 +71,8 @@ class DrugMatch:
     approximate: list[str] = field(default_factory=list)
     # How source names were read when not by their exact name, e.g. "paracetamol → acetaminophen"
     resolved: list[str] = field(default_factory=list)
+    # The structure as finally matched (ingredients translated), set by the workflow step
+    structure: DrugStructure | None = None
 
     @property
     def unique(self) -> bool:
@@ -257,11 +259,11 @@ def _fuzzy_ingredient(session: Session, name: str) -> Resolved | None:
     return Resolved(cid, "fuzzy", lowered, round(score, 2))
 
 
-def resolve_dose_form(session: Session, name: str | None) -> list[int]:
-    """Valid RxNorm/RxNorm Extension dose forms for a source form: its own name and its aliases."""
-    if not name or not name.strip():
+def resolve_dose_form(session: Session, names: list[str]) -> list[int]:
+    """Valid RxNorm/RxNorm Extension dose forms with one of these names."""
+    names = [n.strip() for n in names if n and n.strip()]
+    if not names:
         return []
-    names = [name.strip(), *alias_targets(name)]
     return list(
         session.execute(
             text(
@@ -663,7 +665,14 @@ def _match_levels(
     return None
 
 
-def match_structure(session: Session, structure: DrugStructure, fuzzy: bool = False) -> DrugMatch:
+def match_structure(
+    session: Session,
+    structure: DrugStructure,
+    fuzzy: bool = False,
+    form_choice: list[str] | None = None,
+) -> DrugMatch:
+    """``form_choice``: RxNorm dose forms the LLM chose for ``structure.dose_form``, used instead
+    of its own name."""
     brand_id = resolve_brand(session, structure.brand_name)
     notes = []
     if structure.brand_name and brand_id is None:
@@ -682,7 +691,8 @@ def match_structure(session: Session, structure: DrugStructure, fuzzy: bool = Fa
     names = [c.ingredient for c in structure.components]
     resolved = resolve_ingredients(session, names, fuzzy=fuzzy)
     unresolved = [n for n in names if n.strip().lower() not in resolved]
-    forms = resolve_dose_form(session, structure.dose_form)
+    form_names = form_choice if form_choice else [structure.dose_form or ""]
+    forms = resolve_dose_form(session, form_names) if structure.dose_form else []
     if structure.dose_form and not forms:
         unresolved.append(structure.dose_form)
     if unresolved:
@@ -694,6 +704,10 @@ def match_structure(session: Session, structure: DrugStructure, fuzzy: bool = Fa
         for n, r in zip(names, readings, strict=True)
         if r.via in VIA
     ]
+    if form_choice:
+        resolved_notes.append(
+            f"{structure.dose_form} → {' / '.join(form_choice)} (dose form chosen by the LLM)"
+        )
     approximate = [
         f"ingredient {n!r} read as {r.found!r} by similarity {r.score:.2f}"
         for n, r in zip(names, readings, strict=True)

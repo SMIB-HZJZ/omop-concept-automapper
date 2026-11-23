@@ -58,7 +58,7 @@ def describe(structure: DrugStructure) -> str:
 async def _translate_names(
     ctx: NodeContext, structure: DrugStructure, names: list[str]
 ) -> DrugStructure:
-    """Provided structures may use local names (paracetamol, tableta): render them in English."""
+    """Provided ingredients may use local names (paracetamolo): render them in English."""
     if ctx.translator is None:
         return structure
     english: dict[str, str] = {}
@@ -71,8 +71,40 @@ async def _translate_names(
         c.model_copy(update={"ingredient": english.get(c.ingredient, c.ingredient)})
         for c in structure.components
     ]
-    form = english.get(structure.dose_form or "", structure.dose_form)
-    return structure.model_copy(update={"components": components, "dose_form": form})
+    return structure.model_copy(update={"components": components})
+
+
+async def _pick_forms(ctx: NodeContext, form: str, product: str | None) -> list[str] | None:
+    """RxNorm dose forms for a form term the vocabulary does not know (any language)."""
+    if ctx.dose_form_picker is None:
+        return None
+    try:
+        return await ctx.dose_form_picker.pick(form, product) or None
+    except Exception as exc:
+        ctx.logger.warning("Could not choose a dose form for %r: %s", form, exc)
+        return None
+
+
+async def _match(
+    ctx: NodeContext, structure: DrugStructure, product: str | None, translate: bool
+) -> DrugMatch:
+    """Exact names first; an unknown dose form is rendered as RxNorm forms by the LLM, unknown
+    ingredients are translated (``translate``); similar ingredient names last."""
+    match = await asyncio.to_thread(ctx.drug_matcher, structure, False, None)
+    form_choice = None
+    form = structure.dose_form
+    if form and form in match.unresolved:
+        form_choice = await _pick_forms(ctx, form, product)
+        if form_choice:
+            match = await asyncio.to_thread(ctx.drug_matcher, structure, False, form_choice)
+    ingredients = [n for n in match.unresolved if n != form]
+    if ingredients and translate:
+        structure = await _translate_names(ctx, structure, ingredients)
+        match = await asyncio.to_thread(ctx.drug_matcher, structure, False, form_choice)
+    if match.unresolved:
+        match = await asyncio.to_thread(ctx.drug_matcher, structure, True, form_choice)
+    match.structure = structure
+    return match
 
 
 @router(
@@ -97,13 +129,8 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
         except ValidationError as exc:
             ctx.logger.warning("Invalid drug structure for %s: %s", state.get("source_id"), exc)
         if structure is not None:
-            # Exact names first, then the English rendering of unknown ones, similar names last
-            match = await asyncio.to_thread(ctx.drug_matcher, structure, False)
-            if match.unresolved:
-                structure = await _translate_names(ctx, structure, match.unresolved)
-                match = await asyncio.to_thread(ctx.drug_matcher, structure, False)
-            if match.unresolved:
-                match = await asyncio.to_thread(ctx.drug_matcher, structure, True)
+            match = await _match(ctx, structure, state.get("source_name"), translate=True)
+            structure = match.structure
 
     if (structure is None or (match.level is None and match.unresolved)) and params.parse_free_text:
         if ctx.drug_parser is None:
@@ -118,7 +145,8 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
             return "fallback", {"_summary": "not a drug product according to the parser"}
         structure = DrugStructure.model_validate(parsed.model_dump(exclude={"is_drug"}))
         origin = "parsed"
-        match = await asyncio.to_thread(ctx.drug_matcher, structure, True)
+        # The parser already writes English INNs; its form is checked like a provided one
+        match = await _match(ctx, structure, state.get("source_name"), translate=False)
 
     if structure is None:
         return "fallback", {"_summary": "no structure"}

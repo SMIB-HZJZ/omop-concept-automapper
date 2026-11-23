@@ -170,8 +170,8 @@ For drug vocabularies (the vocabulary's drug flag) the default pipeline is `auto
 
 1. **Structure.** Taken from the optional CSV columns when present, otherwise extracted from the name by the LLM (ingredients as English INN, strengths, RxNorm dose form, quantity). Names are read in this order:
    - ingredients: the standard Ingredient's name, its RxNorm synonyms, non-standard Ingredients and Precise Ingredients (salts, e.g. *amoxicillin trihydrate*) through `Maps to`, and the INN names of single-ingredient ATC codes (*paracetamol*, *salbutamol*). Accents, case and punctuation are ignored;
-   - dose forms: the RxNorm name, plus the EDQM and Croatian terms in [`drug_forms.py`](backend/app/services/drug_forms.py) (*Film-coated tablet*, *filmom obložena tableta* → Oral Tablet). That list is curated and should be reviewed by a pharmacist;
-   - a column name still unknown is translated; one still unknown after that is read as the most similar Ingredient name (trigram similarity ≥ 0.6 and at least 0.1 ahead of the next one).
+   - dose forms: the RxNorm name itself; a form in any other language or abbreviation (*Filmtablette*, *filmom obložena tableta*, *comprimé pelliculé*) is given to the LLM with the list of RxNorm dose forms, and it picks the ones that mean the same (cached; the choice is shown in the rationale). If it finds none, the name is parsed as free text;
+   - an ingredient still unknown is translated; one still unknown after that is read as the most similar Ingredient name (trigram similarity ≥ 0.6 and at least 0.1 ahead of the next one).
    - `quantity_value`/`quantity_unit` is the total volume of one unit (a 2 mL ampoule), as the `denominator_value` of an OMOP Quant drug; a component's denominator only expresses its concentration (100 mg per 5 mL).
 2. **Deterministic match** on `drug_strength` in RxNorm and RxNorm Extension, at the level of detail the source has. With a brand name the branded level is tried first, then the clinical one:
 
@@ -200,6 +200,8 @@ J01CR02-3,Amoksiklav 875/125,amoxicillin;clavulanate,875;125,mg,,,,,Oral Tablet,
 N02BE01-7,Paracetamol sirup 120 mg/5 ml,paracetamol,,,120,mg,5,mL,Oral Solution,,
 N05BA01-2,Diazepam 10 mg/2 ml amp,diazepam,,,10,mg,2,mL,otopina za injekciju,2,mL
 ```
+
+**Evaluation.** [`backend/eval/drug_synthetic_cases.csv`](backend/eval/drug_synthetic_cases.csv) is a synthetic drug list (10 languages; CSV structure, free text, typos, brands, Quant drugs, non-drugs) with the expected RxNorm concepts. `docker compose -f docker-compose.dev.yaml exec -T backend python scripts/eval_drug_pipeline.py` runs it through the real pipeline and LLMs and prints accuracy, wrong auto-accepts and results by kind, method and language. The same logic with fake LLMs runs in the test suite (`tests/workflows/test_drug_synthetic.py`).
 
 With an ATC7 code in the source value, the drug's similarity search is filtered by it; when the filter leaves no candidates (a wrong or outdated code), the search runs again without it (`atc7_fallback`, on by default).
 

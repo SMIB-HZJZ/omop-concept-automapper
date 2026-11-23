@@ -8,7 +8,7 @@ from sqlmodel import Session
 from app.core.cache import cached
 from app.core.config import get_settings
 from app.core.db import get_engine
-from app.llm.drug_parser import DrugParser
+from app.llm.drug_parser import DoseFormPicker, DrugParser
 from app.llm.embeddings import Embedder
 from app.llm.structured import CascadeReranker, EscalatingReranker, Reranker, Translator
 from app.services import concepts as concept_service
@@ -53,9 +53,11 @@ def _agent_details(concept_id: int) -> dict | None:
         return concept_service.agent_details(session, concept_id)
 
 
-def _match_drug(structure, fuzzy: bool = False):
+def _match_drug(structure, fuzzy: bool = False, form_choice: list[str] | None = None):
     with Session(get_engine()) as session:
-        return drug_matching.match_structure(session, structure, fuzzy=fuzzy)
+        return drug_matching.match_structure(
+            session, structure, fuzzy=fuzzy, form_choice=form_choice
+        )
 
 
 @cached("vocab")
@@ -73,6 +75,14 @@ def _drug_parser(llm_model: str) -> DrugParser | None:
     if not info["has_drug_strength"]:
         return None
     return DrugParser(llm_model, info["dose_forms"], effort=get_settings().llm_reasoning_effort)
+
+
+def _dose_form_picker(llm_model: str) -> DoseFormPicker | None:
+    with Session(get_engine()) as session:
+        info = _drug_vocabulary_info(session)
+    if not info["has_drug_strength"]:
+        return None
+    return DoseFormPicker(llm_model, info["dose_forms"], effort=get_settings().llm_reasoning_effort)
 
 
 def default_pipeline(drug_specific: bool) -> str:
@@ -129,6 +139,7 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
         reranker=build_reranker(cfg.llm_model),
         translator=Translator(cfg.llm_model, effort=get_settings().llm_reasoning_effort),
         drug_parser=drug_parser,
+        dose_form_picker=_dose_form_picker(cfg.llm_model) if drug_parser is not None else None,
         # Both need drug_strength; without it the drug step falls back immediately
         drug_matcher=_match_drug if drug_parser is not None else None,
         lexical=lexical,

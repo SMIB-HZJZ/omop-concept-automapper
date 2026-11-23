@@ -1,6 +1,7 @@
-"""LLM extraction of a drug's structure (ingredients, strengths, dose form) from free text.
+"""LLM steps of drug mapping: the structure of a drug name (ingredients, strengths, dose form)
+and the RxNorm dose forms a source dose form term stands for, in any language.
 
-Only the extraction uses the LLM; units and numbers are validated afterwards and the matching
+Only reading the source uses the LLM; units and numbers are validated afterwards and the matching
 itself is deterministic SQL (``app.services.drug_matching``). Results are cached per model+term.
 """
 
@@ -13,20 +14,20 @@ import instructor
 from app.core.config import get_settings
 from app.core.redis import get_redis
 from app.llm.gateway import chat_model_settings
-from app.llm.schemas import ParsedDrug
+from app.llm.schemas import DoseFormChoice, ParsedDrug
 from app.llm.structured import get_instructor
 
 logger = logging.getLogger(__name__)
 
 DRUG_PARSE_PROMPT = """\
-You extract the structure of a medicinal product from its name, as written in a European
-(often Croatian) drug list, into the fields of the OMOP drug_strength table.
+You extract the structure of a medicinal product from its name, as written in a drug list in
+any language, into the fields of the OMOP drug_strength table.
 
 Rules:
 - One component per active ingredient, named by its English INN as used in RxNorm
   (paracetamol -> acetaminophen, adrenaline -> epinephrine, salbutamol -> albuterol,
-  amoxicilin + klavulanska kiselina -> amoxicillin + clavulanate). Salts: keep the salt only if the
-  strength refers to it.
+  amoxicillin + clavulanic acid -> amoxicillin + clavulanate), whatever the source language.
+  Salts: keep the salt only if the strength refers to it.
 - Solid forms: amount_value + amount_unit per unit (tablet, capsule, suppository).
 - Liquids, creams and concentrations: numerator_value/unit per denominator_value/unit
   (100 mg/5 mL -> numerator 100 mg, denominator 5 mL; 1 % -> numerator 1 %).
@@ -37,10 +38,11 @@ Rules:
   quantity is 2 mL.
 - Units as written in labels: mg, g, mcg, mL, IU, mmol, %. Never invent a strength that is not in
   the name; leave the fields empty instead.
-- dose_form: the closest RxNorm dose form name from the list below, or null if the name gives no
-  form. Map local abbreviations: tbl/tableta -> Oral Tablet, film tbl -> Film Coated Oral Tablet
-  (if listed), caps/kapsula -> Oral Capsule, sirup -> Oral Solution or Oral Suspension as stated,
-  inj./otopina za injekciju -> Injectable Solution, krema -> Topical Cream, mast -> Topical Ointment.
+- dose_form: the RxNorm dose form from the list below that means the same as the form in the
+  name (in any language or abbreviation), copied exactly, or null if the name gives no form.
+  RxNorm does not record coatings: a film-coated tablet is an Oral Tablet. Keep the route and the
+  release: a prolonged-release tablet is an Extended Release Oral Tablet, a gastro-resistant one a
+  Delayed Release Oral Tablet; a cream for the skin is a Topical Cream.
 - brand_name: only if the name contains a trade name.
 - is_drug=false if the term is not a medicinal product (e.g. a device or a diagnosis).
 
@@ -98,3 +100,77 @@ class DrugParser:
         except Exception:
             logger.debug("Drug parse cache write failed", exc_info=True)
         return parsed
+
+
+DOSE_FORM_PROMPT = """\
+You map the dose form of a medicinal product, as written in a drug list in any language or
+abbreviation, to RxNorm dose forms.
+
+Rules:
+- Choose only forms from the list below that mean the same as the source form, copied exactly.
+- RxNorm does not record coatings: a film-coated or coated tablet is an Oral Tablet.
+- Keep the route and the release: a prolonged-release tablet is an Extended Release Oral Tablet,
+  a gastro-resistant one a Delayed Release Oral Tablet, an eye drop an Ophthalmic Solution or
+  Suspension, a cream for the skin a Topical Cream.
+- Where RxNorm uses two names for the same thing (Injectable Solution and Injection for a
+  solution for injection or infusion), return both; at most three.
+- Return an empty list if no listed form means the same; never a merely similar one.
+
+Dose forms:
+{dose_forms}"""
+
+
+class DoseFormPicker:
+    """Source dose form term (any language) -> RxNorm dose form names, chosen by the LLM."""
+
+    CACHE_TTL = 90 * 24 * 3600
+
+    def __init__(
+        self,
+        model: str,
+        dose_forms: list[str],
+        client: instructor.AsyncInstructor | None = None,
+        effort: str | None = None,
+    ):
+        self.model = model
+        self.dose_forms = dose_forms
+        self.effort = effort or None
+        self._client = client
+
+    def _key(self, text: str) -> str:
+        digest = hashlib.sha1(text.encode()).hexdigest()
+        label = f"{self.model}@{self.effort}" if self.effort else self.model
+        return f"doseform:{label}:{digest}"
+
+    async def pick(self, form: str, product: str | None = None) -> list[str]:
+        """``product``: the source name, which can settle an ambiguous form (drops: eye or oral)."""
+        text = f"Dose form: {form.strip()}" + (f"\nProduct: {product.strip()}" if product else "")
+        key = self._key(text)
+        try:
+            hit = await asyncio.to_thread(get_redis().get, key)
+            if hit:
+                return DoseFormChoice.model_validate_json(hit).forms
+        except Exception:
+            logger.debug("Dose form cache read failed", exc_info=True)
+        client = self._client or get_instructor(self.model)
+        choice: DoseFormChoice = await client.chat.completions.create(
+            model=self.model,
+            response_model=DoseFormChoice,
+            messages=[
+                {
+                    "role": "system",
+                    "content": DOSE_FORM_PROMPT.format(dose_forms="\n".join(self.dose_forms)),
+                },
+                {"role": "user", "content": text},
+            ],
+            context={"dose_forms": self.dose_forms},
+            max_retries=get_settings().llm_max_retries,
+            **chat_model_settings(self.model, self.effort),
+        )
+        try:
+            await asyncio.to_thread(
+                get_redis().set, key, choice.model_dump_json(), ex=self.CACHE_TTL
+            )
+        except Exception:
+            logger.debug("Dose form cache write failed", exc_info=True)
+        return choice.forms

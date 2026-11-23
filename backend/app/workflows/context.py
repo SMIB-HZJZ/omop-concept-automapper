@@ -28,8 +28,10 @@ class NodeContext:
     rewriter: Any = None
     # Drug steps: LLM structure extraction and the deterministic drug_strength matcher
     drug_parser: Any = None
-    # (structure, fuzzy) -> DrugMatch
-    drug_matcher: Callable[[Any, bool], Any] | None = None
+    # Source dose form term (any language) -> RxNorm dose form names
+    dose_form_picker: Any = None
+    # (structure, fuzzy, form_choice) -> DrugMatch
+    drug_matcher: Callable[..., Any] | None = None
     # Text-based aids (app.services.lexical); None in tests without a database
     lexical: Any = None
     # Runs the Pydantic AI mapping agent: (term, deps, initial candidates) -> decision

@@ -140,6 +140,27 @@ class DrugStructure(BaseModel):
         return self
 
 
+class DoseFormChoice(BaseModel):
+    """RxNorm dose forms that mean the same as a source dose form term (any language)."""
+
+    forms: list[str] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Names copied exactly from the list; empty if none means the same",
+    )
+
+    @field_validator("forms")
+    @classmethod
+    def _listed(cls, value: list[str], info: ValidationInfo) -> list[str]:
+        allowed = {f.lower(): f for f in (info.context or {}).get("dose_forms", [])}
+        if not allowed:
+            return value
+        bad = [v for v in value if v.strip().lower() not in allowed]
+        if bad:
+            raise ValueError(f"not in the list of dose forms: {bad}; copy names exactly")
+        return list(dict.fromkeys(allowed[v.strip().lower()] for v in value))
+
+
 class ParsedDrug(DrugStructure):
     """LLM output: the structure, or ``is_drug=false`` for terms that are not a drug product."""
 
