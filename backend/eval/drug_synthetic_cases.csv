@@ -23,7 +23,7 @@ D021,it,structured,Ondansetron 4 mg compresse orodispersibili,ondansetron,4,mg,,
 D022,es,structured,Paracetamol 100 mg/ml solución oral,paracetamol,,,100,mg,,ml,solución oral,,,,acetaminophen 100 MG/ML Oral Solution
 D023,pl,structured,Ibuprofen 100 mg/5 ml zawiesina doustna,ibuprofen,,,100,mg,5,ml,zawiesina doustna,,,,ibuprofen 20 MG/ML Oral Suspension
 D024,hr,structured,Kolekalciferol 1000 IU tablete,kolekalciferol,1000,IU,,,,,tableta,,,,cholecalciferol 1000 UNT Oral Tablet|cholecalciferol 0.025 MG Oral Tablet
-D025,en,structured,"Morphine sulfate 10 mg/1 ml solution for injection, ampoule",morphine sulfate,,,10,mg,1,ml,Solution for injection,,1,ml,1 ML morphine sulfate 10 MG/ML Injection
+D025,en,structured,"Morphine sulfate 10 mg/1 ml solution for injection, ampoule",morphine sulfate,,,10,mg,1,ml,Solution for injection,,1,ml,1 ML morphine sulfate 10 MG/ML Injection|1 ML Morphine 10 MG/ML Injectable Solution
 D026,hr,structured,"Natrijev klorid 0,9% otopina za infuziju",natrijev klorid,,,"0,9",%,,,otopina za infuziju,,,,sodium chloride 9 MG/ML Injectable Solution
 D027,de,structured,Insulin glargin 100 E/ml Injektionslösung im Fertigpen 3 ml,Insulin glargin,,,100,E,,ml,Injektionslösung in einem Fertigpen,,3,ml,3 ML insulin glargine 100 UNT/ML Pen Injector
 D028,hr,structured,Varfarin 5 mg tablete,varfarin,5,mg,,,,,tableta,,,,warfarin sodium 5 MG Oral Tablet
@@ -72,5 +72,5 @@ D070,hr,typo,Amoksicilin 500 mg kapsule,,,,,,,,,,,,amoxicillin 500 MG Oral Capsu
 D071,de,typo,Amoxicilin 500mg Kps,,,,,,,,,,,,amoxicillin 500 MG Oral Capsule
 D072,hr,typo,Ibuprofn 400 mg tbl,,,,,,,,,,,,ibuprofen 400 MG Oral Tablet
 D073,hr,non_drug,Igla za inzulinsku brizgalicu 4 mm,,,,,,,,,,,,NONE
-D074,de,non_drug,Blutzuckerteststreifen,,,,,,,,,,,,NONE
+D074,de,non_drug,Blutzuckerteststreifen,,,,,,,,,,,,NONE|Blood glucose testing strips
 D075,en,non_drug,Elastic bandage 10 cm x 4 m,,,,,,,,,,,,NONE

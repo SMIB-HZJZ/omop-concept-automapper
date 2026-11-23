@@ -11,7 +11,9 @@ Run inside the dev stack:
 Cases (CSV): ``source_name``, optional drug columns as in a source import (``ingredient``,
 ``amount_value``, ..., ``quantity_unit``), and ``expected``: acceptable answers separated by ``|``,
 each a concept name, or several joined by `` + `` for a combined mapping, or ``NONE`` when nothing
-should be accepted (not a drug). A case is correct when the final selection is one of them.
+should be accepted (not a drug). A case is correct when the final selection is one of them;
+``NONE`` may be combined with alternatives (``NONE|Blood glucose testing strips``) when either
+leaving the term unmapped or a non-drug concept (a device) is right.
 """
 
 import argparse
@@ -59,7 +61,7 @@ def _norm(name: str) -> str:
 
 
 def check_expected(cases: list[dict]) -> list[str]:
-    """Expected concept names that are not standard RxNorm/RxNorm Extension concepts."""
+    """Expected concept names that are not standard concepts (any vocabulary: devices too)."""
     names = {
         _norm(part)
         for c in cases
@@ -73,8 +75,7 @@ def check_expected(cases: list[dict]) -> list[str]:
                 text(
                     """
                     SELECT lower(concept_name) FROM concept
-                    WHERE standard_concept = 'S' AND vocabulary_id IN ('RxNorm', 'RxNorm Extension')
-                      AND lower(concept_name) = ANY(:names)
+                    WHERE standard_concept = 'S' AND lower(concept_name) = ANY(:names)
                     """
                 ),
                 {"names": sorted(names)},
@@ -90,11 +91,9 @@ def score(case: dict, result: dict) -> dict:
     picked = sorted(_norm(c["concept_name"]) for c in selected)
     accepted = result.get("outcome") == "accepted"
     alternatives = [a.strip() for a in case["expected"].split("|")]
-    if alternatives == ["NONE"]:
-        correct = not accepted
-    else:
-        wanted = [sorted(_norm(p) for p in a.split(" + ")) for a in alternatives]
-        correct = picked in wanted
+    wanted = [sorted(_norm(p) for p in a.split(" + ")) for a in alternatives if a != "NONE"]
+    # NONE: correct when nothing was accepted; otherwise the selection must be listed
+    correct = picked in wanted or (not accepted and "NONE" in alternatives)
     drug_step = next((t for t in result.get("trace", []) if t["node"] == "match_drug"), {})
     return {
         "picked": " + ".join(c["concept_name"] for c in selected),
