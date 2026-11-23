@@ -40,13 +40,19 @@ async def translate(state: AutomapState, ctx: NodeContext, params: TranslatePara
         ctx.logger.warning("Translation failed for %r: %s", term, exc)
         return {"_summary": f"translation failed ({type(exc).__name__}), kept original"}
     english = result.english or term
-    # The vocabulary's setting wins over what the model reports
-    detected = language or result.language
+    # What the model detected for this term; a vocabulary set to "hr" may still hold Latin terms
+    detected = (result.language or "").lower() or language
+    label = detected or "?"
+    meta: dict = {"source_language": detected, "translation_cached": result.cached}
+    if language:
+        meta["vocabulary_language"] = language
+        if detected != language:
+            label = f"{detected or '?'}, vocabulary: {language}"
     same = english.strip().lower() == term.strip().lower()
     update: dict = {
         "translated_query": None if same else english,
-        "meta": {"source_language": detected, "translation_cached": result.cached},
-        "_summary": "already English" if same else f"'{term}' → '{english}' ({detected})",
+        "meta": meta,
+        "_summary": "already English" if same else f"'{term}' → '{english}' ({label})",
     }
     if params.replace_query and not same:
         update["query"] = english

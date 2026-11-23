@@ -194,8 +194,11 @@ async def test_the_vocabulary_language_is_given_to_the_translator():
     state["source_language"] = "hr"
     result = await run_pipeline(state, ctx, "automap")
     assert translator.calls == [("šećerna bolest tip 2", "hr")]
-    # The vocabulary's setting wins over what the model reports
-    assert result["meta"]["source_language"] == "hr"
+    # The trace keeps what the model detected next to the vocabulary's setting
+    assert result["meta"]["source_language"] == "sl"
+    assert result["meta"]["vocabulary_language"] == "hr"
+    step = next(t for t in result["trace"] if t["node"] == "translate")
+    assert "(sl, vocabulary: hr)" in str(step)
 
 
 async def test_an_english_vocabulary_is_not_translated():
