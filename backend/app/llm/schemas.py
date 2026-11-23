@@ -115,13 +115,29 @@ class DrugComponent(BaseModel):
 
 
 class DrugStructure(BaseModel):
-    """A drug product broken into ingredients, strengths and dose form."""
+    """A drug product broken into ingredients, strengths and dose form.
+
+    ``quantity_*`` is the total volume or mass of one unit of the product (a 2 mL ampoule, a
+    0.4 mL prefilled syringe), as in the ``denominator_value`` of an OMOP Quant drug. A component's
+    ``denominator_*`` only expresses its concentration (100 mg per 5 mL)."""
 
     components: list[DrugComponent] = Field(default_factory=list, max_length=20)
     dose_form: str | None = Field(
         default=None, max_length=100, description="RxNorm dose form name, e.g. 'Oral Tablet'"
     )
     brand_name: str | None = Field(default=None, max_length=100)
+    quantity_value: float | None = Field(
+        default=None,
+        gt=0,
+        description="Total volume or mass of one unit (ampoule 2 mL), not the pack size",
+    )
+    quantity_unit: str | None = Field(default=None, max_length=20)
+
+    @model_validator(mode="after")
+    def _quantity_has_unit(self):
+        if self.quantity_value is not None and not (self.quantity_unit or "").strip():
+            raise ValueError("quantity_value needs a quantity_unit")
+        return self
 
 
 class ParsedDrug(DrugStructure):

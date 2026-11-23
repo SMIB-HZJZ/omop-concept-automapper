@@ -30,6 +30,11 @@ Rules:
 - Solid forms: amount_value + amount_unit per unit (tablet, capsule, suppository).
 - Liquids, creams and concentrations: numerator_value/unit per denominator_value/unit
   (100 mg/5 mL -> numerator 100 mg, denominator 5 mL; 1 % -> numerator 1 %).
+- quantity_value/unit: the total volume or mass of ONE unit of the product, only when the name
+  states it (ampoule 2 mL, vial 10 mL, prefilled syringe 0.4 mL): "diazepam 10 mg/2 mL ampule" ->
+  numerator 10 mg, denominator 2 mL, quantity 2 mL. A concentration alone (syrup 100 mg/5 mL) has
+  no quantity. Never use the pack size (20 tablets, 5 x 2 mL) as the quantity; for "5 x 2 mL" the
+  quantity is 2 mL.
 - Units as written in labels: mg, g, mcg, mL, IU, mmol, %. Never invent a strength that is not in
   the name; leave the fields empty instead.
 - dose_form: the closest RxNorm dose form name from the list below, or null if the name gives no

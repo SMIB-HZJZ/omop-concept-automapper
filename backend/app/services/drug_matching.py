@@ -6,6 +6,7 @@ branded level is tried first, then the clinical one:
 | source has                          | branded (brand given)  | clinical                                  |
 |-------------------------------------|------------------------|-------------------------------------------|
 | ingredients + strengths + form      | Branded Drug           | Clinical Drug, else Quant Clinical Drug   |
+| ... + quantity (2 mL ampoule)       | Quant Branded Drug     | Quant Clinical Drug, else Clinical Drug   |
 | ingredient(s) + strengths, no form  | Branded Drug Comp      | Clinical Drug Comp (one per ingredient)   |
 | ingredients + form, no strengths    | Branded Drug Form      | Clinical Drug Form                        |
 | ingredients only                    | Branded Drug Form (*)  | Clinical Drug Form (*), else the Ingredients |
@@ -13,11 +14,21 @@ branded level is tried first, then the clinical one:
 (*) only when exactly one exists for that ingredient set (any dose form). "One per ingredient" and
 "the Ingredients" are combined matches: the source is mapped to all of them together.
 
+Names are resolved in tiers, most reliable first: the standard Ingredient's name, its synonyms,
+non-standard Ingredients and Precise Ingredients (salts) through ``Maps to``, then the INN names of
+single-ingredient ATC codes (paracetamol, salbutamol). With ``fuzzy=True`` a name still unknown is
+read as the most similar Ingredient name (trigram similarity), when that one is clearly the best.
+Dose forms: the RxNorm name itself plus the aliases in ``app.services.drug_forms``.
+
 A brand without ingredients takes its ingredients from its branded products, when they all share
 one ingredient set. The ingredient set must be identical (no extra or missing ingredients),
-strengths equal after unit conversion (1 % tolerance) and the dose form identical. Box and marketed
-products are never targets. Relationship names follow the OMOP RxNorm conventions
-(``RxNorm has dose form``, ``RxNorm has ing``, ``Has brand name``).
+strengths equal after unit conversion (1 % tolerance) and the dose form one of the resolved forms.
+Box and marketed products are never targets. Relationship names follow the OMOP RxNorm conventions
+(``RxNorm has dose form``, ``RxNorm has ing``, ``Has brand name``, ``RxNorm is a``).
+
+A match is *approximate* when it needed a fuzzy name, a related dose form (same RxNorm Dose Form
+Group) or compared an amount with the total amount of a Quant drug. Approximate matches are never
+accepted on their own: the workflow passes them to the reranker as its first candidates.
 """
 
 import logging
@@ -26,12 +37,26 @@ from dataclasses import dataclass, field
 from sqlalchemy import text
 from sqlmodel import Session
 
+from app.core.cache import cached
 from app.llm.schemas import DrugComponent, DrugStructure
+from app.services.drug_forms import alias_targets
 from app.services.drug_units import close, concentration, quantity
 
 logger = logging.getLogger(__name__)
 
 DRUG_VOCABULARIES = ("RxNorm", "RxNorm Extension")
+
+# Fuzzy names: the best Ingredient needs this trigram similarity and this lead over the next one.
+# Look-alike drugs score high (prednisone/prednisolone ~0.7), hence the lead and the review.
+FUZZY_MIN_SIMILARITY = 0.6
+FUZZY_MIN_LEAD = 0.1
+
+VIA = {
+    "synonym": "RxNorm synonym",
+    "maps_to": "non-standard ingredient, Maps to",
+    "atc": "ATC name",
+    "fuzzy": "similar name",
+}
 
 
 @dataclass
@@ -42,56 +67,237 @@ class DrugMatch:
     unresolved: list[str] = field(default_factory=list)  # names that matched no concept
     # True: concept_ids belong together (one mapping per ingredient), not alternatives
     combined: bool = False
+    # Why the match is not exact; such matches go to the reranker instead of being accepted
+    approximate: list[str] = field(default_factory=list)
+    # How source names were read when not by their exact name, e.g. "paracetamol → acetaminophen"
+    resolved: list[str] = field(default_factory=list)
 
     @property
     def unique(self) -> bool:
         return len(self.concept_ids) == 1 or (self.combined and bool(self.concept_ids))
 
 
+@dataclass(frozen=True)
+class Resolved:
+    concept_id: int
+    via: str  # name | id | synonym | maps_to | atc | fuzzy
+    found: str  # name of the standard ingredient it was read as
+    score: float | None = None
+
+
 # --------------------------------------------------------------------------- resolution
 
 
-def resolve_ingredients(session: Session, names: list[str]) -> dict[str, int]:
-    """Ingredient name (or concept id as text) -> standard RxNorm/RxNorm Extension ingredient."""
-    wanted = {n.strip().lower() for n in names if n and n.strip()}
-    ids = [int(n) for n in wanted if n.isdigit()]
+@cached("vocab")
+def atc_ingredient_names(session: Session) -> dict[str, int]:
+    """Normalised INN names of ATC 5th level codes that map to exactly one standard Ingredient."""
     rows = session.execute(
         text(
             """
-            SELECT DISTINCT ON (key) key, concept_id FROM (
-                SELECT lower(concept_name) AS key, concept_id, vocabulary_id
-                FROM concept
-                WHERE concept_class_id = 'Ingredient' AND standard_concept = 'S'
-                  AND vocabulary_id = ANY(:vocabs) AND lower(concept_name) = ANY(:names)
-                UNION ALL
-                SELECT concept_id::text, concept_id, vocabulary_id
-                FROM concept
+            SELECT norm_text(split_part(a.concept_name, ';', 1)) AS name,
+                   min(t.concept_id) AS target, count(DISTINCT t.concept_id) AS n
+            FROM concept a
+            JOIN concept_relationship r ON r.concept_id_1 = a.concept_id
+             AND r.relationship_id = 'Maps to' AND r.invalid_reason IS NULL
+            JOIN concept t ON t.concept_id = r.concept_id_2
+            WHERE a.vocabulary_id = 'ATC' AND a.concept_class_id = 'ATC 5th'
+              AND t.concept_class_id = 'Ingredient' AND t.standard_concept = 'S'
+              AND t.vocabulary_id = ANY(:vocabs)
+              AND NOT EXISTS (  -- combinations map to several ingredients
+                  SELECT 1 FROM concept_relationship r2
+                  WHERE r2.concept_id_1 = a.concept_id AND r2.relationship_id = 'Maps to'
+                    AND r2.invalid_reason IS NULL AND r2.concept_id_2 <> r.concept_id_2)
+            GROUP BY 1
+            """
+        ),
+        {"vocabs": list(DRUG_VOCABULARIES)},
+    ).all()
+    # One name used by several codes (salbutamol R03AC02, R03CC02) must mean one ingredient
+    return {name: target for name, target, n in rows if n == 1 and name}
+
+
+def _pick(rows: list[tuple[int, str, str]]) -> tuple[int, str] | None:
+    """One target among (concept_id, vocabulary, found name) hits, RxNorm before its Extension."""
+    targets = {cid: (voc, found) for cid, voc, found in rows}
+    if len(targets) == 1:
+        cid = next(iter(targets))
+        return cid, targets[cid][1]
+    rxnorm = [cid for cid, (voc, _) in targets.items() if voc == "RxNorm"]
+    if len(rxnorm) == 1:
+        return rxnorm[0], targets[rxnorm[0]][1]
+    return None  # ambiguous
+
+
+def resolve_ingredients(
+    session: Session, names: list[str], fuzzy: bool = False
+) -> dict[str, Resolved]:
+    """Ingredient name (or concept id as text) -> standard RxNorm/RxNorm Extension ingredient.
+
+    Keys are the lower-cased, stripped names."""
+    wanted = list(dict.fromkeys(n.strip().lower() for n in names if n and n.strip()))
+    if not wanted:
+        return {}
+    found: dict[str, Resolved] = {}
+    ids = [int(n) for n in wanted if n.isdigit()]
+    if ids:
+        for cid, name in session.execute(
+            text(
+                """
+                SELECT concept_id, concept_name FROM concept
                 WHERE concept_class_id = 'Ingredient' AND standard_concept = 'S'
                   AND vocabulary_id = ANY(:vocabs) AND concept_id = ANY(:ids)
-            ) found
-            ORDER BY key, vocabulary_id = 'RxNorm' DESC, concept_id
-            """
-        ),
-        {"names": list(wanted), "ids": ids, "vocabs": list(DRUG_VOCABULARIES)},
-    ).all()
-    return {key: cid for key, cid in rows}
+                """
+            ),
+            {"ids": ids, "vocabs": list(DRUG_VOCABULARIES)},
+        ).all():
+            found[str(cid)] = Resolved(cid, "id", name)
 
-
-def resolve_dose_form(session: Session, name: str | None) -> int | None:
-    if not name or not name.strip():
-        return None
-    return session.execute(
+    rows = session.execute(
         text(
             """
-            SELECT concept_id FROM concept
-            WHERE concept_class_id = 'Dose Form' AND vocabulary_id = ANY(:vocabs)
-              AND invalid_reason IS NULL AND lower(concept_name) = lower(:name)
-            ORDER BY vocabulary_id = 'RxNorm' DESC, concept_id
-            LIMIT 1
+            WITH wanted AS (
+                SELECT w AS key, norm_text(w) AS n FROM unnest(CAST(:names AS text[])) w
+            )
+            SELECT w.key, 1 AS tier, c.concept_id, c.vocabulary_id, c.concept_name AS found
+            FROM wanted w JOIN concept c ON norm_text(c.concept_name) = w.n
+            WHERE c.concept_class_id = 'Ingredient' AND c.standard_concept = 'S'
+              AND c.vocabulary_id = ANY(:vocabs)
+            UNION ALL
+            SELECT w.key, 2, c.concept_id, c.vocabulary_id, c.concept_name
+            FROM wanted w JOIN concept_synonym s ON norm_text(s.concept_synonym_name) = w.n
+            JOIN concept c ON c.concept_id = s.concept_id
+            WHERE c.concept_class_id = 'Ingredient' AND c.standard_concept = 'S'
+              AND c.vocabulary_id = ANY(:vocabs)
+            UNION ALL
+            -- Deprecated ingredients and Precise Ingredients (salts) map to the standard one
+            SELECT w.key, 3, t.concept_id, t.vocabulary_id, t.concept_name
+            FROM wanted w JOIN concept src ON norm_text(src.concept_name) = w.n
+            JOIN concept_relationship r ON r.concept_id_1 = src.concept_id
+             AND r.relationship_id = 'Maps to' AND r.invalid_reason IS NULL
+            JOIN concept t ON t.concept_id = r.concept_id_2
+            WHERE src.concept_class_id IN ('Ingredient', 'Precise Ingredient')
+              AND src.standard_concept IS NULL AND src.vocabulary_id = ANY(:vocabs)
+              AND t.concept_class_id = 'Ingredient' AND t.standard_concept = 'S'
+              AND t.vocabulary_id = ANY(:vocabs)
             """
         ),
-        {"name": name.strip(), "vocabs": list(DRUG_VOCABULARIES)},
-    ).scalar()
+        {"names": [n for n in wanted if n not in found], "vocabs": list(DRUG_VOCABULARIES)},
+    ).all()
+    tiers: dict[str, dict[int, list[tuple[int, str, str]]]] = {}
+    for key, tier, cid, voc, name in rows:
+        tiers.setdefault(key, {}).setdefault(tier, []).append((cid, voc, name))
+    tier_via = {1: "name", 2: "synonym", 3: "maps_to"}
+    for key, by_tier in tiers.items():
+        for tier in sorted(by_tier):
+            picked = _pick(by_tier[tier])
+            if picked:
+                found[key] = Resolved(picked[0], tier_via[tier], picked[1])
+                break
+
+    missing = [n for n in wanted if n not in found]
+    if missing:
+        atc = atc_ingredient_names(session)
+        norms = dict(
+            session.execute(
+                text("SELECT w, norm_text(w) FROM unnest(CAST(:names AS text[])) w"),
+                {"names": missing},
+            ).all()
+        )
+        hits = {n: atc[norms[n]] for n in missing if norms.get(n) in atc}
+        if hits:
+            name_of = dict(
+                session.execute(
+                    text(
+                        "SELECT concept_id, concept_name FROM concept WHERE concept_id = ANY(:ids)"
+                    ),
+                    {"ids": list(set(hits.values()))},
+                ).all()
+            )
+            for n, cid in hits.items():
+                found[n] = Resolved(cid, "atc", name_of.get(cid, str(cid)))
+
+    if fuzzy:
+        for n in [n for n in wanted if n not in found and not n.isdigit()]:
+            hit = _fuzzy_ingredient(session, n)
+            if hit:
+                found[n] = hit
+    return found
+
+
+def _fuzzy_ingredient(session: Session, name: str) -> Resolved | None:
+    """The clearly most similar standard Ingredient name (typos, spelling variants)."""
+    session.execute(
+        text("SELECT set_config('pg_trgm.similarity_threshold', :t, true)"),
+        {"t": str(FUZZY_MIN_SIMILARITY - FUZZY_MIN_LEAD)},
+    )
+    rows = session.execute(
+        text(
+            """
+            SELECT lower(c.concept_name) AS name, c.concept_id, c.vocabulary_id,
+                   similarity(lower(c.concept_name), :q) AS score
+            FROM concept c
+            WHERE c.standard_concept = 'S' AND lower(c.concept_name) % :q
+              AND c.concept_class_id = 'Ingredient' AND c.vocabulary_id = ANY(:vocabs)
+            ORDER BY score DESC, c.vocabulary_id = 'RxNorm' DESC, c.concept_id
+            LIMIT 10
+            """
+        ),
+        {"q": name, "vocabs": list(DRUG_VOCABULARIES)},
+    ).all()
+    # The same name in RxNorm and its Extension counts once (the first row: RxNorm)
+    best: dict[str, tuple[int, float]] = {}
+    for lowered, cid, _voc, score in rows:
+        best.setdefault(lowered, (cid, float(score)))
+    ranked = sorted(best.items(), key=lambda kv: -kv[1][1])
+    if not ranked or ranked[0][1][1] < FUZZY_MIN_SIMILARITY:
+        return None
+    if len(ranked) > 1 and ranked[0][1][1] - ranked[1][1][1] < FUZZY_MIN_LEAD:
+        return None
+    lowered, (cid, score) = ranked[0]
+    return Resolved(cid, "fuzzy", lowered, round(score, 2))
+
+
+def resolve_dose_form(session: Session, name: str | None) -> list[int]:
+    """Valid RxNorm/RxNorm Extension dose forms for a source form: its own name and its aliases."""
+    if not name or not name.strip():
+        return []
+    names = [name.strip(), *alias_targets(name)]
+    return list(
+        session.execute(
+            text(
+                """
+                SELECT concept_id FROM concept
+                WHERE concept_class_id = 'Dose Form' AND vocabulary_id = ANY(:vocabs)
+                  AND invalid_reason IS NULL
+                  AND norm_text(concept_name) IN (
+                      SELECT norm_text(n) FROM unnest(CAST(:names AS text[])) n)
+                ORDER BY vocabulary_id = 'RxNorm' DESC, concept_id
+                """
+            ),
+            {"names": names, "vocabs": list(DRUG_VOCABULARIES)},
+        ).scalars()
+    )
+
+
+def dose_form_groups(session: Session, form_ids: list[int]) -> list[tuple[str, list[int]]]:
+    """RxNorm Dose Form Groups of these forms with their member forms, smallest group first."""
+    rows = session.execute(
+        text(
+            """
+            SELECT g.concept_name, array_agg(DISTINCT m.concept_id_1) AS members
+            FROM concept_relationship r
+            JOIN concept g ON g.concept_id = r.concept_id_2 AND g.concept_class_id = 'Dose Form Group'
+            JOIN concept_relationship m ON m.concept_id_2 = g.concept_id
+             AND m.relationship_id = 'RxNorm is a' AND m.invalid_reason IS NULL
+            WHERE r.concept_id_1 = ANY(:forms) AND r.relationship_id = 'RxNorm is a'
+              AND r.invalid_reason IS NULL
+            GROUP BY g.concept_id, g.concept_name
+            ORDER BY count(DISTINCT m.concept_id_1), g.concept_name
+            """
+        ),
+        {"forms": form_ids},
+    ).all()
+    return [(name, [m for m in members if m not in form_ids]) for name, members in rows]
 
 
 def dose_form_names(session: Session) -> list[str]:
@@ -117,21 +323,24 @@ def has_drug_strength(session: Session) -> bool:
 # --------------------------------------------------------------------------- strengths
 
 
-def _strength_matches(component: DrugComponent, row: dict) -> bool:
-    """Source component vs one drug_strength row (unit codes already joined in)."""
+def _component_quality(component: DrugComponent, row: dict) -> str | None:
+    """Source component vs one drug_strength row: "exact", "total" (an amount compared with the
+    total amount of a Quant drug) or None."""
     if component.amount_value is not None:
         source = quantity(component.amount_value, component.amount_unit)
         if source is None:
-            return False
+            return None
         if row["amount_value"] is not None:
             target = quantity(float(row["amount_value"]), row["amount_unit"])
-            return (
-                target is not None
-                and target.dimension == source.dimension
-                and close(target.value, source.value)
-            )
+            same = target is not None and target.dimension == source.dimension
+            return "exact" if same and close(target.value, source.value) else None
+        if row["numerator_value"] is not None and row["denominator_value"] is not None:
+            # Quant drug: numerator_value is the total amount in denominator_value (10 mg in 2 mL)
+            total = quantity(float(row["numerator_value"]), row["numerator_unit"])
+            same = total is not None and total.dimension == source.dimension
+            return "total" if same and close(total.value, source.value) else None
         # "500 mg" against a per-mL concentration cannot be compared
-        return False
+        return None
     source_c = concentration(
         component.numerator_value,
         component.numerator_unit,
@@ -139,14 +348,38 @@ def _strength_matches(component: DrugComponent, row: dict) -> bool:
         component.denominator_unit,
     )
     if source_c is None or row["numerator_value"] is None:
-        return False
+        return None
     target_c = concentration(
         float(row["numerator_value"]),
         row["numerator_unit"],
         float(row["denominator_value"]) if row["denominator_value"] is not None else None,
         row["denominator_unit"],
     )
-    return target_c is not None and target_c[1:] == source_c[1:] and close(target_c[0], source_c[0])
+    if target_c is not None and target_c[1:] == source_c[1:] and close(target_c[0], source_c[0]):
+        return "exact"
+    return None
+
+
+def _drug_quality(
+    structure: DrugStructure, component_of: dict[int, DrugComponent], rows: list[dict]
+) -> str | None:
+    """One drug's rows vs the source: "exact", "approx" or None."""
+    qualities = [_component_quality(component_of[r["ingredient_concept_id"]], r) for r in rows]
+    if None in qualities:
+        return None
+    quant = rows[0]["denominator_value"] is not None
+    quantity_matches = False
+    if structure.quantity_value is not None and quant:
+        source = quantity(structure.quantity_value, structure.quantity_unit)
+        target = quantity(float(rows[0]["denominator_value"]), rows[0]["denominator_unit"])
+        if source is None or target is None or source.dimension != target.dimension:
+            return None
+        if not close(source.value, target.value):
+            return None  # another volume
+        quantity_matches = True
+    if "total" in qualities and not quantity_matches:
+        return "approx"  # 10 mg could be in 1 mL or in 2 mL
+    return "exact"
 
 
 _BRAND_FILTER = """
@@ -156,10 +389,10 @@ _BRAND_FILTER = """
           AND rb.concept_id_2 = :brand AND rb.invalid_reason IS NULL))
 """
 _FORM_FILTER = """
-    AND (CAST(:form AS integer) IS NULL OR EXISTS (
+    AND (CAST(:forms AS integer[]) IS NULL OR EXISTS (
         SELECT 1 FROM concept_relationship rf
         WHERE rf.concept_id_1 = {drug} AND rf.relationship_id = 'RxNorm has dose form'
-          AND rf.concept_id_2 = :form AND rf.invalid_reason IS NULL))
+          AND rf.concept_id_2 = ANY(CAST(:forms AS integer[])) AND rf.invalid_reason IS NULL))
 """
 
 
@@ -167,7 +400,7 @@ def _strength_rows(
     session: Session,
     ingredient_ids: list[int],
     classes: list[str],
-    dose_form_id: int | None,
+    forms: list[int] | None,
     brand_id: int | None = None,
 ) -> dict[int, list[dict]]:
     """drug_strength rows of drugs with exactly these ingredients, by drug concept id."""
@@ -207,7 +440,7 @@ def _strength_rows(
             "ingredients": ingredient_ids,
             "vocabs": list(DRUG_VOCABULARIES),
             "classes": classes,
-            "form": dose_form_id,
+            "forms": forms or None,
             "brand": brand_id,
         },
     ).mappings()
@@ -227,7 +460,7 @@ def _drug_forms(
     session: Session,
     concept_class: str,
     ingredient_ids: list[int],
-    dose_form_id: int | None,
+    forms: list[int] | None,
     brand_id: int | None = None,
 ) -> list[int]:
     """Clinical/Branded Drug Forms with exactly these ingredients (and form/brand if given)."""
@@ -251,7 +484,7 @@ def _drug_forms(
         {
             "cls": concept_class,
             "vocabs": list(DRUG_VOCABULARIES),
-            "form": dose_form_id,
+            "forms": forms or None,
             "brand": brand_id,
             "ingredients": sorted(set(ingredient_ids)),
         },
@@ -267,7 +500,7 @@ def resolve_brand(session: Session, name: str | None) -> int | None:
             """
             SELECT concept_id FROM concept
             WHERE concept_class_id = 'Brand Name' AND vocabulary_id = ANY(:vocabs)
-              AND invalid_reason IS NULL AND lower(concept_name) = lower(:name)
+              AND invalid_reason IS NULL AND norm_text(concept_name) = norm_text(:name)
             ORDER BY vocabulary_id = 'RxNorm' DESC, concept_id
             LIMIT 1
             """
@@ -305,22 +538,37 @@ def _match_strengths(
     structure: DrugStructure,
     ingredient_ids: list[int],
     levels: list[tuple[str, list[str]]],
-    form_id: int | None,
+    forms: list[int] | None,
     brand_id: int | None,
 ) -> DrugMatch | None:
+    """The first level with exact matches; else the first level with approximate ones."""
     component_of = dict(zip(ingredient_ids, structure.components, strict=True))
+    rough: DrugMatch | None = None
     for level, class_ids in levels:
-        by_drug = _strength_rows(session, ingredient_ids, class_ids, form_id, brand_id)
-        matches = [
-            drug
-            for drug, rows in by_drug.items()
-            if all(_strength_matches(component_of[r["ingredient_concept_id"]], r) for r in rows)
-        ]
-        if matches:
-            vocabulary_of = {d: rows[0]["vocabulary_id"] for d, rows in by_drug.items()}
-            matches = _prefer_rxnorm(vocabulary_of, matches)
-            return DrugMatch(level, matches, f"{len(matches)} {class_ids[0]} match(es)")
-    return None
+        by_drug = _strength_rows(session, ingredient_ids, class_ids, forms, brand_id)
+        exact, approx = [], []
+        for drug, rows in by_drug.items():
+            quality = _drug_quality(structure, component_of, rows)
+            if quality == "exact":
+                exact.append(drug)
+            elif quality == "approx":
+                approx.append(drug)
+        vocabulary_of = {d: rows[0]["vocabulary_id"] for d, rows in by_drug.items()}
+        if exact:
+            exact = _prefer_rxnorm(vocabulary_of, exact)
+            return DrugMatch(level, exact, f"{len(exact)} {class_ids[0]} match(es)")
+        if approx and rough is None:
+            approx = _prefer_rxnorm(vocabulary_of, approx)
+            rough = DrugMatch(
+                level,
+                approx,
+                f"{len(approx)} {class_ids[0]} with the same total amount",
+                approximate=[
+                    "an amount without a quantity compared with the total amount of "
+                    "quantified drugs (the volume is unknown)"
+                ],
+            )
+    return rough
 
 
 def _match_comps(
@@ -331,21 +579,34 @@ def _match_comps(
     level: str,
     brand_id: int | None,
 ) -> DrugMatch | None:
-    """Strength without dose form: one Drug Comp per ingredient, combined."""
-    picked = []
+    """Strength without dose form: one Drug Comp per ingredient, combined. When an ingredient has
+    several equal Drug Comps, they are all returned as alternatives for the reranker."""
+    picked: list[list[int]] = []
+    approximate: list[str] = []
     for ingredient_id, component in zip(ingredient_ids, structure.components, strict=True):
         single = DrugStructure(components=[component])
         found = _match_strengths(
             session, single, [ingredient_id], [(level, [concept_class])], None, brand_id
         )
-        if found is None or len(found.concept_ids) != 1:
+        if found is None:
             return None
-        picked.append(found.concept_ids[0])
+        picked.append(found.concept_ids)
+        approximate += found.approximate
+    if all(len(ids) == 1 for ids in picked):
+        ids = [ids[0] for ids in picked]
+        return DrugMatch(
+            level,
+            ids,
+            f"{concept_class} per ingredient",
+            combined=len(ids) > 1,
+            approximate=approximate,
+        )
+    alternatives = sorted({i for ids in picked for i in ids})
     return DrugMatch(
         level,
-        picked,
-        f"{concept_class} per ingredient",
-        combined=len(picked) > 1,
+        alternatives,
+        f"several {concept_class} for one ingredient",
+        approximate=approximate,
     )
 
 
@@ -353,7 +614,7 @@ def _match_level(
     session: Session,
     structure: DrugStructure,
     ingredient_ids: list[int],
-    form_id: int | None,
+    forms: list[int],
     brand_id: int | None,
 ) -> DrugMatch | None:
     """One pass at the branded (brand_id set) or clinical level."""
@@ -361,26 +622,48 @@ def _match_level(
     prefix = "branded" if branded else "clinical"
     kind = "Branded" if branded else "Clinical"
     with_strength = all(c.has_strength for c in structure.components)
-    if with_strength and form_id:
-        levels = [
-            (f"{prefix}_drug", [f"{kind} Drug"]),
-            (f"quant_{prefix}_drug", [f"Quant {kind} Drug"]),
-        ]
-        return _match_strengths(session, structure, ingredient_ids, levels, form_id, brand_id)
+    if with_strength and forms:
+        plain = (f"{prefix}_drug", [f"{kind} Drug"])
+        quant = (f"quant_{prefix}_drug", [f"Quant {kind} Drug"])
+        with_quantity = structure.quantity_value is not None
+        levels = [quant, plain] if with_quantity else [plain, quant]
+        found = _match_strengths(session, structure, ingredient_ids, levels, forms, brand_id)
+        if found and with_quantity and found.level == plain[0]:
+            found.reason += "; no drug with this quantity, used the one without"
+        return found
     if with_strength:
         return _match_comps(
             session, structure, ingredient_ids, f"{kind} Drug Comp", f"{prefix}_drug_comp", brand_id
         )
-    forms = _drug_forms(session, f"{kind} Drug Form", ingredient_ids, form_id, brand_id)
-    if form_id and forms:
-        return DrugMatch(f"{prefix}_drug_form", forms, f"{len(forms)} {kind} Drug Form match(es)")
-    if not form_id and len(forms) == 1:
+    found_forms = _drug_forms(session, f"{kind} Drug Form", ingredient_ids, forms, brand_id)
+    if forms and found_forms:
+        return DrugMatch(
+            f"{prefix}_drug_form", found_forms, f"{len(found_forms)} {kind} Drug Form match(es)"
+        )
+    if not forms and len(found_forms) == 1:
         # No form in the source, but only one form exists for these ingredients
-        return DrugMatch(f"{prefix}_drug_form", forms, f"the only {kind} Drug Form")
+        return DrugMatch(f"{prefix}_drug_form", found_forms, f"the only {kind} Drug Form")
     return None
 
 
-def match_structure(session: Session, structure: DrugStructure) -> DrugMatch:
+def _match_levels(
+    session: Session,
+    structure: DrugStructure,
+    ingredient_ids: list[int],
+    forms: list[int],
+    brand_id: int | None,
+) -> DrugMatch | None:
+    """Branded first (when the brand is known), then clinical."""
+    for level_brand in ([brand_id] if brand_id else []) + [None]:
+        found = _match_level(session, structure, ingredient_ids, forms, level_brand)
+        if found is not None:
+            if level_brand is None and brand_id is not None:
+                found.reason += "; no branded match, used the clinical level"
+            return found
+    return None
+
+
+def match_structure(session: Session, structure: DrugStructure, fuzzy: bool = False) -> DrugMatch:
     brand_id = resolve_brand(session, structure.brand_name)
     notes = []
     if structure.brand_name and brand_id is None:
@@ -397,40 +680,60 @@ def match_structure(session: Session, structure: DrugStructure) -> DrugMatch:
         )
 
     names = [c.ingredient for c in structure.components]
-    resolved = resolve_ingredients(session, names)
+    resolved = resolve_ingredients(session, names, fuzzy=fuzzy)
     unresolved = [n for n in names if n.strip().lower() not in resolved]
-    form_id = resolve_dose_form(session, structure.dose_form)
-    if structure.dose_form and form_id is None:
+    forms = resolve_dose_form(session, structure.dose_form)
+    if structure.dose_form and not forms:
         unresolved.append(structure.dose_form)
     if unresolved:
         return DrugMatch(reason="unknown ingredient or dose form", unresolved=unresolved)
 
-    ingredient_ids = [resolved[n.strip().lower()] for n in names]
+    readings = [resolved[n.strip().lower()] for n in names]
+    resolved_notes = [
+        f"{n} → {r.found} ({VIA[r.via]}" + (f" {r.score:.2f})" if r.score is not None else ")")
+        for n, r in zip(names, readings, strict=True)
+        if r.via in VIA
+    ]
+    approximate = [
+        f"ingredient {n!r} read as {r.found!r} by similarity {r.score:.2f}"
+        for n, r in zip(names, readings, strict=True)
+        if r.via == "fuzzy"
+    ]
+    ingredient_ids = [r.concept_id for r in readings]
     if len(set(ingredient_ids)) != len(ingredient_ids):
-        return DrugMatch(reason="duplicate ingredient")
+        return DrugMatch(reason="duplicate ingredient", resolved=resolved_notes)
     with_strength = all(c.has_strength for c in structure.components)
 
-    # Branded first (when the brand is known), then clinical
-    for level_brand in ([brand_id] if brand_id else []) + [None]:
-        found = _match_level(session, structure, ingredient_ids, form_id, level_brand)
-        if found is not None:
-            if level_brand is None and brand_id is not None:
-                found.reason += "; no branded match, used the clinical level"
-            return found
-
-    if not with_strength and not form_id:
+    found = _match_levels(session, structure, ingredient_ids, forms, brand_id)
+    if found is None and forms:
+        # No drug in the stated form: try the related forms of its smallest Dose Form Group
+        for group, members in dose_form_groups(session, forms):
+            if not members:
+                continue
+            found = _match_levels(session, structure, ingredient_ids, members, brand_id)
+            if found is not None:
+                found.approximate.append(
+                    f"no drug in the form {structure.dose_form!r}; related forms ({group})"
+                )
+                break
+    if found is None and not with_strength and not forms:
         # Ingredients only: map to every ingredient together
-        return DrugMatch(
+        found = DrugMatch(
             "ingredient",
             ingredient_ids,
             "ingredient(s) only",
             combined=len(ingredient_ids) > 1,
         )
+    if found is not None:
+        found.approximate = approximate + found.approximate
+        found.resolved = resolved_notes
+        return found
     what = (
         "strengths and form"
-        if with_strength and form_id
+        if with_strength and forms
         else ("strengths" if with_strength else "form")
     )
     return DrugMatch(
-        reason=f"no drug with these ingredients and {what}" + (f"; {notes[0]}" if notes else "")
+        reason=f"no drug with these ingredients and {what}" + (f"; {notes[0]}" if notes else ""),
+        resolved=resolved_notes,
     )

@@ -53,9 +53,9 @@ def _agent_details(concept_id: int) -> dict | None:
         return concept_service.agent_details(session, concept_id)
 
 
-def _match_drug(structure):
+def _match_drug(structure, fuzzy: bool = False):
     with Session(get_engine()) as session:
-        return drug_matching.match_structure(session, structure)
+        return drug_matching.match_structure(session, structure, fuzzy=fuzzy)
 
 
 @cached("vocab")

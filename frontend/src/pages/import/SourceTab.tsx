@@ -209,9 +209,11 @@ export function SourceTab() {
                 Optional drug columns (shape of OMOP <code>drug_strength</code>, one value per ingredient separated by
                 semicolons): <code>ingredient</code>, <code>amount_value</code>, <code>amount_unit</code>,{" "}
                 <code>numerator_value</code>, <code>numerator_unit</code>, <code>denominator_value</code>,{" "}
-                <code>denominator_unit</code>, <code>dose_form</code>, <code>brand_name</code>. When present, drugs are
-                matched deterministically from these instead of parsing the name, e.g. ingredient
-                "amoxicillin;clavulanate", amount_value "875;125", amount_unit "mg", dose_form "Oral Tablet".
+                <code>denominator_unit</code>; once per row <code>dose_form</code>, <code>brand_name</code>,{" "}
+                <code>quantity_value</code>, <code>quantity_unit</code> (total volume of one unit, e.g. a 2 mL
+                ampoule). When present, drugs are matched deterministically from these instead of parsing the name,
+                e.g. ingredient "amoxicillin;clavulanate", amount_value "875;125", amount_unit "mg", dose_form
+                "Oral Tablet".
               </p>
             </div>
           </CardDescription>

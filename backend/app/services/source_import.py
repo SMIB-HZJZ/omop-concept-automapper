@@ -6,8 +6,10 @@ and ``concept_id`` (one or more OMOP concept ids separated by ';' used as existi
 Optional drug structure columns, in the shape of OMOP ``drug_strength`` (one value per
 ingredient separated by ';'; a single unit applies to every ingredient):
 ``ingredient`` (name or concept id), ``amount_value``, ``amount_unit``, ``numerator_value``,
-``numerator_unit``, ``denominator_value``, ``denominator_unit``, ``dose_form``, ``brand_name``.
-When present, drug mapping uses them instead of parsing the name.
+``numerator_unit``, ``denominator_value``, ``denominator_unit``; and once per row ``dose_form``,
+``brand_name``, ``quantity_value``, ``quantity_unit`` (total volume of one unit, e.g. a 2 mL
+ampoule, as in an OMOP Quant drug). When present, drug mapping uses them instead of parsing the
+name.
 """
 
 import csv
@@ -56,7 +58,14 @@ DRUG_COMPONENT_COLUMNS = (
     "denominator_value",
     "denominator_unit",
 )
-DRUG_COLUMNS = (*DRUG_COMPONENT_COLUMNS, "dose_form", "brand_name")
+# Product-level columns: one value per row, not per ingredient
+DRUG_COLUMNS = (
+    *DRUG_COMPONENT_COLUMNS,
+    "dose_form",
+    "brand_name",
+    "quantity_value",
+    "quantity_unit",
+)
 
 
 def _split(raw: str | None) -> list[str]:
@@ -100,6 +109,8 @@ def parse_drug_structure(row: dict) -> dict | None:
             components=components,
             dose_form=(row.get("dose_form") or "").strip() or None,
             brand_name=(row.get("brand_name") or "").strip() or None,
+            quantity_value=_number((row.get("quantity_value") or "").strip(), "quantity_value"),
+            quantity_unit=(row.get("quantity_unit") or "").strip() or None,
         )
     except ValidationError as exc:
         raise SourceImportError(f"invalid drug structure: {exc.errors()[0]['msg']}") from exc

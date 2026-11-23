@@ -2,8 +2,9 @@
 # 1. extract_atc7    ATC7 code from the source value (used by the fallback search)
 # 2. match_previous  reviewed mapping of the same name; match_code: source code -> Maps to
 # 3. match_drug      structure from the CSV columns, or parsed from the name by the LLM, matched on
-#                    drug_strength (brand, ingredients, strengths, dose form). A unique match is
-#                    accepted with confidence 10; ties go to the reranker as the first candidates.
+#                    drug_strength (brand, ingredients, strengths, dose form, quantity). A unique
+#                    exact match is accepted with confidence 10; ties and approximate matches
+#                    (similar name, related dose form) go to the reranker as the first candidates.
 # 4. fallback        exact name/synonym → translate (+ exact name of the English term) → vector
 #                    search → LLM rerank → gate
 # 5. when not confident: rewritten searches + a second LLM pick, then an agent retry (it may filter

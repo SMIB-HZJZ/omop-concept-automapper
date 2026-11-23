@@ -79,6 +79,27 @@ CONCEPTS = [
         "S",
         "9044",
     ),
+    # Name resolution beyond the exact Ingredient name
+    (9100, "paracetamol; oral, parenteral, rectal", "Drug", "ATC", "ATC 5th", "C", "N02BE01"),
+    (9101, "amoxicillin and enzyme inhibitor", "Drug", "ATC", "ATC 5th", "C", "J01CR02"),
+    (9102, "amoxicillin trihydrate", "Drug", "RxNorm", "Precise Ingredient", None, "9102"),
+    # Dose form group and a drug only in a related form
+    (9012, "Pill", "Drug", "RxNorm", "Dose Form Group", "C", "9012"),
+    (9013, "Chewable Tablet", "Drug", "RxNorm", "Dose Form", None, "317544"),
+    (9036, "amoxicillin 250 MG Chewable Tablet", "Drug", "RxNorm", "Clinical Drug", "S", "9036"),
+    # Quantified injectables
+    (9004, "diazepam", "Drug", "RxNorm", "Ingredient", "S", "3322"),
+    (9014, "Injectable Solution", "Drug", "RxNorm", "Dose Form", None, "316949"),
+    (
+        9037,
+        "2 ML diazepam 5 MG/ML Injectable Solution",
+        "Drug",
+        "RxNorm",
+        "Quant Clinical Drug",
+        "S",
+        "9037",
+    ),
+    (9038, "diazepam 5 MG/ML Injectable Solution", "Drug", "RxNorm", "Clinical Drug", "S", "9038"),
 ]
 HAS_FORM = [
     (3, 9010),
@@ -90,8 +111,14 @@ HAS_FORM = [
     (9041, 9010),
     (9043, 9010),
     (9044, 9010),
+    (9036, 9013),
+    (9037, 9014),
+    (9038, 9014),
 ]
 HAS_ING = [(9033, 9001), (9044, 9002), (9044, 9003)]
+MAPS_TO = [(9100, 9001), (9101, 9002), (9101, 9003), (9102, 9002)]
+IS_A = [(9010, 9012), (9013, 9012)]
+SYNONYMS = [(9001, "APAP")]
 HAS_BRAND = [(9041, 9040), (9043, 9042)]
 STRENGTHS = [
     # drug, ingredient, amount, amount unit, numerator, numerator unit, denominator unit
@@ -105,7 +132,11 @@ STRENGTHS = [
     (9041, 9002, 875, 9020, None, None, None),
     (9041, 9003, 125, 9020, None, None, None),
     (9043, 9001, 500, 9020, None, None, None),
+    (9036, 9002, 250, 9020, None, None, None),
+    (9038, 9004, None, None, 5, 9020, 9021),
 ]
+# Quant drugs: numerator is the total amount in denominator_value
+QUANT_STRENGTHS = [(9037, 9004, 10, 9020, 2, 9021)]
 IDS = [c[0] for c in CONCEPTS]
 
 
@@ -124,6 +155,8 @@ def drug_vocabulary(loaded_vocabulary):
             ("RxNorm has dose form", HAS_FORM),
             ("RxNorm has ing", HAS_ING),
             ("Has brand name", HAS_BRAND),
+            ("Maps to", MAPS_TO),
+            ("RxNorm is a", IS_A),
         ):
             for a, b in pairs:
                 conn.execute(
@@ -143,10 +176,25 @@ def drug_vocabulary(loaded_vocabulary):
                 ),
                 dict(zip(["d", "i", "a", "au", "n", "nu", "du"], s, strict=True)),
             )
+        for s in QUANT_STRENGTHS:
+            conn.execute(
+                text(
+                    "INSERT INTO drug_strength (drug_concept_id, ingredient_concept_id, "
+                    "numerator_value, numerator_unit_concept_id, denominator_value, "
+                    "denominator_unit_concept_id, valid_start_date, valid_end_date) "
+                    "VALUES (:d, :i, :n, :nu, :dv, :du, '1970-01-01', '2099-12-31')"
+                ),
+                dict(zip(["d", "i", "n", "nu", "dv", "du"], s, strict=True)),
+            )
+        for cid, name in SYNONYMS:
+            conn.execute(
+                text("INSERT INTO concept_synonym VALUES (:c, :n, 4180186)"), {"c": cid, "n": name}
+            )
     cache.invalidate("vocab")
     yield
     with get_engine().begin() as conn:
         conn.execute(text("DELETE FROM drug_strength"))
+        conn.execute(text("DELETE FROM concept_synonym WHERE concept_id = ANY(:ids)"), {"ids": IDS})
         conn.execute(
             text(
                 "DELETE FROM concept_relationship WHERE concept_id_1 = ANY(:ids) OR concept_id_1 = 3"
@@ -286,10 +334,10 @@ def test_wrong_strength_or_unknown_names_do_not_match(drug_vocabulary):
     )
     unknown = _match(
         _structure(
-            {"ingredient": "paracetamol", "amount_value": 500, "amount_unit": "mg"}, form="tableta"
+            {"ingredient": "paracetamolum", "amount_value": 500, "amount_unit": "mg"}, form="pilula"
         )
     )
-    assert unknown.unresolved == ["paracetamol", "tableta"]
+    assert unknown.unresolved == ["paracetamolum", "pilula"]
 
 
 # --------------------------------------------------------------------------- pipeline
@@ -310,7 +358,7 @@ class FakeTranslator:
         from app.llm.structured import TranslationResult
 
         return TranslationResult(
-            {"paracetamol": "acetaminophen", "tableta": "Oral Tablet"}.get(term, term), "hr"
+            {"paracetamolum": "acetaminophen", "tableta": "Oral Tablet"}.get(term, term), "hr"
         )
 
 
@@ -374,7 +422,7 @@ async def test_provided_structure_skips_the_parser_and_translates_local_names(dr
     parser = FakeParser(ParsedDrug(is_drug=False))
     structure = parse_drug_structure(
         {
-            "ingredient": "paracetamol",
+            "ingredient": "paracetamolum",
             "amount_value": "500",
             "amount_unit": "mg",
             "dose_form": "tableta",
@@ -518,3 +566,142 @@ def test_combined_match_goes_through_review(
     client.post("/api/suggestions/accept", json={"ids": [item["id"]]}, headers=user_headers)
     mapped = client.get("/api/source-vocabularies/51/mapped", headers=admin_headers).json()
     assert sorted(r["concept_id"] for r in mapped["items"]) == [9001, 9002]
+
+
+# --------------------------------------------------------------------------- name resolution
+
+
+def test_names_resolve_through_atc_salts_and_synonyms(drug_vocabulary):
+    tablet = {"amount_value": 500, "amount_unit": "mg"}
+    # ATC 5th name (INN) of a single-ingredient code
+    atc = _match(_structure({"ingredient": "Paracetamol", **tablet}, form="Oral Tablet"))
+    assert atc.concept_ids == [3] and atc.approximate == []
+    assert atc.resolved == ["Paracetamol → acetaminophen (ATC name)"]
+    # Precise Ingredient (salt) -> Maps to the ingredient
+    salt = _match(
+        _structure({"ingredient": "amoxicillin trihydrate", **tablet}, form="Oral Tablet")
+    )
+    assert salt.concept_ids == [9035] and "Maps to" in salt.resolved[0]
+    # RxNorm synonym, accents and case ignored
+    assert _match(_structure({"ingredient": "apap", **tablet}, form="Oral Tablet")).concept_ids == [
+        3
+    ]
+    # A combination ATC code maps to two ingredients: its name resolves nothing
+    combi = _match(_structure({"ingredient": "amoxicillin and enzyme inhibitor"}))
+    assert combi.unresolved == ["amoxicillin and enzyme inhibitor"]
+
+
+def test_fuzzy_names_only_on_request_and_marked_approximate(drug_vocabulary):
+    typo = _structure(
+        {"ingredient": "amoxicilin", "amount_value": 500, "amount_unit": "mg"}, form="Oral Tablet"
+    )
+    assert _match(typo).unresolved == ["amoxicilin"]
+    with Session(get_engine()) as session:
+        fuzzy = drug_matching.match_structure(session, typo, fuzzy=True)
+        far = drug_matching.match_structure(
+            session, _structure({"ingredient": "zolpidem"}), fuzzy=True
+        )
+    assert fuzzy.concept_ids == [9035]
+    assert fuzzy.approximate and "similarity" in fuzzy.approximate[0]
+    assert far.unresolved == ["zolpidem"]
+
+
+def test_dose_form_aliases():
+    from app.services.drug_forms import alias_targets
+
+    assert alias_targets("Filmom obložena tableta") == ["Oral Tablet"]
+    assert alias_targets("Film-coated tablet") == ["Oral Tablet"]
+    assert alias_targets("otopina za injekciju") == ["Injectable Solution", "Injection"]
+    assert alias_targets("Oral Tablet") == []
+
+
+def test_related_dose_form_is_approximate(drug_vocabulary):
+    # No amoxicillin 250 mg Oral Tablet, but a Chewable Tablet in the same group (Pill)
+    match = _match(
+        _structure(
+            {"ingredient": "amoxicillin", "amount_value": 250, "amount_unit": "mg"},
+            form="film tbl",
+        )
+    )
+    assert match.concept_ids == [9036]
+    assert match.approximate == ["no drug in the form 'film tbl'; related forms (Pill)"]
+
+
+# --------------------------------------------------------------------------- quantity
+
+
+def _diazepam(*, quantity=None, form="Injectable Solution", **strength):
+    return DrugStructure(
+        components=[DrugComponent(ingredient="diazepam", **strength)],
+        dose_form=form,
+        quantity_value=quantity,
+        quantity_unit="mL" if quantity else None,
+    )
+
+
+def test_quantity_selects_the_quant_drug(drug_vocabulary):
+    per_2ml = {"numerator_value": 10, "numerator_unit": "mg", "denominator_value": 2}
+    per_2ml["denominator_unit"] = "mL"
+    quant = _match(_diazepam(quantity=2, **per_2ml))
+    assert (quant.level, quant.concept_ids, quant.approximate) == (
+        "quant_clinical_drug",
+        [9037],
+        [],
+    )
+    # Concentration only: the Clinical Drug
+    assert _match(_diazepam(**per_2ml)).concept_ids == [9038]
+    # Another volume: no 5 mL Quant drug, the Clinical Drug keeps the concentration
+    other = _match(_diazepam(quantity=5, **per_2ml))
+    assert other.concept_ids == [9038] and "used the one without" in other.reason
+    # Amount + quantity is the total amount in the total volume, as OMOP stores Quant drugs
+    total = _match(
+        _diazepam(quantity=2, amount_value=10, amount_unit="mg", form="otopina za injekciju")
+    )
+    assert (total.concept_ids, total.approximate) == ([9037], [])
+
+
+def test_amount_without_quantity_is_approximate(drug_vocabulary):
+    match = _match(_diazepam(amount_value=10, amount_unit="mg"))
+    assert match.concept_ids == [9037] and match.approximate
+
+
+def test_csv_quantity_columns():
+    structure = parse_drug_structure(
+        {"ingredient": "diazepam", "amount_value": "10", "amount_unit": "mg"}
+        | {"quantity_value": "2", "quantity_unit": "mL"}
+    )
+    assert (structure["quantity_value"], structure["quantity_unit"]) == (2.0, "mL")
+    with pytest.raises(SourceImportError, match="quantity_unit"):
+        parse_drug_structure({"ingredient": "diazepam", "quantity_value": "2"})
+
+
+# --------------------------------------------------------------------------- pipeline
+
+
+async def test_approximate_match_goes_to_the_reranker_first(drug_vocabulary):
+    from app.llm.structured import RerankResult
+    from app.workflows.service import run_pipeline
+
+    class Recording:
+        candidates = None
+        notes = None
+
+        async def rerank(self, term, candidates, drug_specific, **kwargs):
+            Recording.candidates = Recording.candidates or [c["concept_id"] for c in candidates]
+            Recording.notes = kwargs.get("notes")
+            return RerankResult(None, None)
+
+    parser = FakeParser(
+        ParsedDrug(
+            is_drug=True,
+            components=[DrugComponent(ingredient="amoxicilin", amount_value=500, amount_unit="mg")],
+            dose_form="Oral Tablet",
+        )
+    )
+    result = await run_pipeline(
+        _state("Amoksicilin 500 mg tbl"), _ctx(parser, Recording()), "automap_drug"
+    )
+    drug_step = next(t for t in result["trace"] if t["node"] == "match_drug")
+    assert "approximate" in drug_step["summary"]
+    assert Recording.candidates[0] == 9035
+    assert any(n.startswith("Structured match is approximate") for n in Recording.notes)

@@ -48,7 +48,11 @@ def describe(structure: DrugStructure) -> str:
     parts = " + ".join(f"{c.ingredient}{strength(c)}" for c in structure.components)
     if structure.brand_name:
         parts = f"{parts} [{structure.brand_name}]" if parts else f"[{structure.brand_name}]"
-    return parts + (f"; {structure.dose_form}" if structure.dose_form else "")
+    if structure.dose_form:
+        parts += f"; {structure.dose_form}"
+    if structure.quantity_value is not None:
+        parts += f"; quantity {structure.quantity_value:g} {structure.quantity_unit or ''}".rstrip()
+    return parts
 
 
 async def _translate_names(
@@ -93,10 +97,13 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
         except ValidationError as exc:
             ctx.logger.warning("Invalid drug structure for %s: %s", state.get("source_id"), exc)
         if structure is not None:
-            match = await asyncio.to_thread(ctx.drug_matcher, structure)
+            # Exact names first, then the English rendering of unknown ones, similar names last
+            match = await asyncio.to_thread(ctx.drug_matcher, structure, False)
             if match.unresolved:
                 structure = await _translate_names(ctx, structure, match.unresolved)
-                match = await asyncio.to_thread(ctx.drug_matcher, structure)
+                match = await asyncio.to_thread(ctx.drug_matcher, structure, False)
+            if match.unresolved:
+                match = await asyncio.to_thread(ctx.drug_matcher, structure, True)
 
     if (structure is None or (match.level is None and match.unresolved)) and params.parse_free_text:
         if ctx.drug_parser is None:
@@ -111,19 +118,26 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
             return "fallback", {"_summary": "not a drug product according to the parser"}
         structure = DrugStructure.model_validate(parsed.model_dump(exclude={"is_drug"}))
         origin = "parsed"
-        match = await asyncio.to_thread(ctx.drug_matcher, structure)
+        match = await asyncio.to_thread(ctx.drug_matcher, structure, True)
 
     if structure is None:
         return "fallback", {"_summary": "no structure"}
     described = describe(structure)
+    notes = [f"Parsed drug structure ({origin}): {described}"]
+    if match.resolved:
+        notes.append("Names read as: " + "; ".join(match.resolved))
+    if match.approximate:
+        notes.append("Structured match is approximate: " + "; ".join(match.approximate))
     update: dict = {
-        "notes": [f"Parsed drug structure ({origin}): {described}"],
+        "notes": notes,
         "meta": {
             "drug_structure": structure.model_dump(exclude_none=True),
             "drug_match": match.reason,
+            **({"drug_match_resolved": match.resolved} if match.resolved else {}),
+            **({"drug_match_approximate": match.approximate} if match.approximate else {}),
         },
     }
-    if match.unique:
+    if match.unique and not match.approximate:
         found = await asyncio.to_thread(ctx.get_concepts, match.concept_ids)
         order = {cid: i for i, cid in enumerate(match.concept_ids)}
         found = sorted(found, key=lambda c: order.get(c["concept_id"], 0))
@@ -136,7 +150,8 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
                 confidence=params.confidence,
                 rationale=(
                     f"Deterministic {level} match on {described} ({origin} structure"
-                    + (f"; {match.reason}" if "clinical level" in match.reason else "")
+                    + (f"; {match.reason}" if "used the" in match.reason else "")
+                    + (f"; {'; '.join(match.resolved)}" if match.resolved else "")
                     + ")"
                 ),
                 method="auto_drug_structured",
@@ -145,9 +160,10 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
             )
             return "matched", update
     if match.concept_ids:
-        # Several equally good drugs: let the reranker choose among them
+        # Several equally good drugs, or an approximate match: the reranker chooses among them
         update["structured_candidates"] = await asyncio.to_thread(
             ctx.get_concepts, match.concept_ids[:30]
         )
-    update["_summary"] = f"{described}: {match.reason or 'no match'} ({origin})"
+    approx = f"; approximate: {'; '.join(match.approximate)}" if match.approximate else ""
+    update["_summary"] = f"{described}: {match.reason or 'no match'}{approx} ({origin})"
     return "fallback", update

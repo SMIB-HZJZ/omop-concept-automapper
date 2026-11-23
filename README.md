@@ -168,12 +168,17 @@ There is no published OMOP-specific benchmark for these models. Before relying o
 
 For drug vocabularies (the vocabulary's drug flag) the default pipeline is `automap_drug` once `DRUG_STRENGTH.csv` is imported (`AUTOMAP_DRUG_PIPELINE`):
 
-1. **Structure.** Taken from the optional CSV columns when present, otherwise extracted from the name by the LLM (ingredients as English INN, strengths, RxNorm dose form). Local names in the columns (`paracetamol`, `tableta`) are translated when they do not match.
+1. **Structure.** Taken from the optional CSV columns when present, otherwise extracted from the name by the LLM (ingredients as English INN, strengths, RxNorm dose form, quantity). Names are read in this order:
+   - ingredients: the standard Ingredient's name, its RxNorm synonyms, non-standard Ingredients and Precise Ingredients (salts, e.g. *amoxicillin trihydrate*) through `Maps to`, and the INN names of single-ingredient ATC codes (*paracetamol*, *salbutamol*). Accents, case and punctuation are ignored;
+   - dose forms: the RxNorm name, plus the EDQM and Croatian terms in [`drug_forms.py`](backend/app/services/drug_forms.py) (*Film-coated tablet*, *filmom obložena tableta* → Oral Tablet). That list is curated and should be reviewed by a pharmacist;
+   - a column name still unknown is translated; one still unknown after that is read as the most similar Ingredient name (trigram similarity ≥ 0.6 and at least 0.1 ahead of the next one).
+   - `quantity_value`/`quantity_unit` is the total volume of one unit (a 2 mL ampoule), as the `denominator_value` of an OMOP Quant drug; a component's denominator only expresses its concentration (100 mg per 5 mL).
 2. **Deterministic match** on `drug_strength` in RxNorm and RxNorm Extension, at the level of detail the source has. With a brand name the branded level is tried first, then the clinical one:
 
    | Source has | Branded (brand given) | Clinical |
    |---|---|---|
    | ingredients + strengths + dose form | Branded Drug | Clinical Drug (else Quant Clinical Drug) |
+   | ... + quantity | Quant Branded Drug | Quant Clinical Drug with that quantity (else Clinical Drug) |
    | ingredient(s) + strengths | Branded Drug Comp | Clinical Drug Comp, one per ingredient |
    | ingredients + dose form | Branded Drug Form | Clinical Drug Form |
    | ingredients only | Branded Drug Form, if only one exists | Clinical Drug Form, if only one exists; else every Ingredient |
@@ -181,17 +186,22 @@ For drug vocabularies (the vocabulary's drug flag) the default pipeline is `auto
    - A brand without ingredients takes its ingredients from its branded products, when they all have the same ingredient set.
    - "One per ingredient" and "every Ingredient" are combined matches: the source concept is mapped to all of them together, also through the review queue.
    - The ingredient set must be identical, strengths equal after unit conversion (0.5 g = 500 mg; 500 mcg/5 mL = 0.1 mg/mL; 1 % = 10 mg/g or mL; 1 % tolerance) and the dose form identical. RxNorm wins over an RxNorm Extension duplicate.
-   - A deterministic match is accepted with confidence 10 (`auto_drug_structured`); the rationale names the level and whether the brand was used.
+   - Amount + quantity (10 mg, 2 mL) is compared with a Quant drug's total amount and volume.
+   - A deterministic match is accepted with confidence 10 (`auto_drug_structured`); the rationale names the level, whether the brand was used and how names were read.
+   - **Approximate** matches are not accepted: an ingredient read by similarity, a drug found only in a related dose form (the smallest RxNorm Dose Form Group of the stated form, e.g. *Pill*), or an amount without a quantity compared with Quant drugs' total amount. They go to the reranker as its first candidates, with the reason in its notes.
 3. **Fallback.** No match, or several equally good ones: translation, similarity search (tied matches first) and the LLM reranker, which also sees the parsed structure.
 
 CSV example:
 
 ```csv
-source_value,source_concept_name,ingredient,amount_value,amount_unit,numerator_value,numerator_unit,denominator_value,denominator_unit,dose_form
-N02BE01-1,Paracetamol 500 mg tbl,paracetamol,500,mg,,,,,tablet
-J01CR02-3,Amoksiklav 875/125,amoxicillin;clavulanate,875;125,mg,,,,,Oral Tablet
-N02BE01-7,Paracetamol sirup 120 mg/5 ml,paracetamol,,,120,mg,5,mL,Oral Solution
+source_value,source_concept_name,ingredient,amount_value,amount_unit,numerator_value,numerator_unit,denominator_value,denominator_unit,dose_form,quantity_value,quantity_unit
+N02BE01-1,Paracetamol 500 mg tbl,paracetamol,500,mg,,,,,tablet,,
+J01CR02-3,Amoksiklav 875/125,amoxicillin;clavulanate,875;125,mg,,,,,Oral Tablet,,
+N02BE01-7,Paracetamol sirup 120 mg/5 ml,paracetamol,,,120,mg,5,mL,Oral Solution,,
+N05BA01-2,Diazepam 10 mg/2 ml amp,diazepam,,,10,mg,2,mL,otopina za injekciju,2,mL
 ```
+
+With an ATC7 code in the source value, the drug's similarity search is filtered by it; when the filter leaves no candidates (a wrong or outdated code), the search runs again without it (`atc7_fallback`, on by default).
 
 ### Mapping pipelines (LangGraph)
 
