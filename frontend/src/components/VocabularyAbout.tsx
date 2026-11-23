@@ -7,6 +7,7 @@ import { useUpdateVocabulary } from "@/api/queries";
 import type { SourceVocabulary } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
 import { CodeSystemsField } from "@/components/CodeSystemsField";
+import { SourceLanguageField } from "@/components/SourceLanguageField";
 import { VocabularyDescriptionField } from "@/components/VocabularyDescriptionField";
 import { VocabularyTypeSwitch } from "@/components/VocabularyTypeSwitch";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ function EditVocabulary({ vocabulary }: { vocabulary: SourceVocabulary }) {
   const [description, setDescription] = useState(vocabulary.description ?? "");
   const [isDrug, setIsDrug] = useState(vocabulary.is_drug);
   const [codes, setCodes] = useState<string[]>(vocabulary.code_vocabularies ?? []);
+  const [language, setLanguage] = useState<string | null>(vocabulary.source_language ?? null);
 
   const onOpenChange = (next: boolean) => {
     if (next) {
@@ -52,6 +54,7 @@ function EditVocabulary({ vocabulary }: { vocabulary: SourceVocabulary }) {
       setDescription(vocabulary.description ?? "");
       setIsDrug(vocabulary.is_drug);
       setCodes(vocabulary.code_vocabularies ?? []);
+      setLanguage(vocabulary.source_language ?? null);
     }
     setOpen(next);
   };
@@ -64,6 +67,7 @@ function EditVocabulary({ vocabulary }: { vocabulary: SourceVocabulary }) {
         description: description.trim(),
         is_drug: isDrug,
         code_vocabularies: codes,
+        source_language: language,
       },
       {
         onSuccess: () => {
@@ -98,6 +102,7 @@ function EditVocabulary({ vocabulary }: { vocabulary: SourceVocabulary }) {
         </div>
         <VocabularyDescriptionField id="vocab-edit-description" value={description} onChange={setDescription} />
         <VocabularyTypeSwitch isDrug={isDrug} onChange={setIsDrug} />
+        <SourceLanguageField id="vocab-edit-language" value={language} onChange={setLanguage} />
         <CodeSystemsField id="vocab-edit-codes" value={codes} onChange={setCodes} />
         <Button className="w-full" onClick={save} disabled={!name.trim() || update.isPending}>
           Save

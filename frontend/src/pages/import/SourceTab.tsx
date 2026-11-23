@@ -11,6 +11,7 @@ import { ErrorAlert } from "@/components/common";
 import { TaskProgress } from "@/components/TaskProgress";
 import { VocabularyDescriptionField } from "@/components/VocabularyDescriptionField";
 import { CodeSystemsField } from "@/components/CodeSystemsField";
+import { SourceLanguageField } from "@/components/SourceLanguageField";
 import { VocabularyTypeSwitch } from "@/components/VocabularyTypeSwitch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -97,6 +98,7 @@ export function SourceTab() {
   const [description, setDescription] = useState("");
   const [isDrug, setIsDrug] = useState(false);
   const [codes, setCodes] = useState<string[]>([]);
+  const [language, setLanguage] = useState<string | null>(null);
 
   const existing = target === "new" ? undefined : vocabularies.data?.find((v) => v.id === target);
   // Appending to an existing vocabulary starts from its saved name, description and type
@@ -108,6 +110,7 @@ export function SourceTab() {
     setDescription(existing?.description ?? "");
     setIsDrug(existing?.is_drug ?? false);
     setCodes(existing?.code_vocabularies ?? []);
+    setLanguage(existing?.source_language ?? null);
   }
   const nameMissing = !name.trim();
   const missing = preview ? missingSourceColumns(preview.columns) : [];
@@ -136,6 +139,7 @@ export function SourceTab() {
       description: description.trim(),
       is_drug: isDrug,
       code_vocabularies: codes,
+      source_language: language,
     };
     // The schema types the file part as a string; the serializer sends the real File
     const fileOnly = () => {
@@ -149,6 +153,7 @@ export function SourceTab() {
       if (settings.description) fd.append("description", settings.description);
       fd.append("is_drug", settings.is_drug ? "true" : "false");
       if (codes.length) fd.append("code_vocabularies", codes.join(","));
+      if (language) fd.append("source_language", language);
       return fd;
     };
     return run(
@@ -273,7 +278,8 @@ export function SourceTab() {
           {!!file && nameMissing && <p className="text-destructive text-xs">Give the vocabulary a name.</p>}
         </div>
         <VocabularyTypeSwitch isDrug={isDrug} onChange={setIsDrug} />
-        <CodeSystemsField id="source-vocab-codes" className="md:col-span-2" value={codes} onChange={setCodes} />
+        <SourceLanguageField id="source-vocab-language" value={language} onChange={setLanguage} />
+        <CodeSystemsField id="source-vocab-codes" value={codes} onChange={setCodes} />
         <VocabularyDescriptionField
           id="source-vocab-description"
           className="md:col-span-2"

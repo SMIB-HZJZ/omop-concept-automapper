@@ -247,6 +247,7 @@ export function useUpdateVocabulary() {
       description?: string;
       is_drug?: boolean;
       code_vocabularies?: string[];
+      source_language?: string | null;
     }) =>
       unwrap(
         await api.PATCH("/api/source-vocabularies/{vocabulary_id}", { params: { path: { vocabulary_id: id } }, body }),
