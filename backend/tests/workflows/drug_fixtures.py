@@ -254,7 +254,7 @@ class FakeFormPicker:
         self.forms = forms or {"tableta": ["Oral Tablet"]}
         self.calls = []
 
-    async def pick(self, form, product=None):
+    async def pick(self, form, product=None, unused=False):
         self.calls.append((form, product))
         return self.forms.get(form, [])
 

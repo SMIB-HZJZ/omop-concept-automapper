@@ -155,9 +155,17 @@ class DoseFormPicker:
         label = f"{self.model}@{self.effort}" if self.effort else self.model
         return f"doseform:{label}:{digest}"
 
-    async def pick(self, form: str, product: str | None = None) -> list[str]:
-        """``product``: the source name, which can settle an ambiguous form (drops: eye or oral)."""
+    async def pick(self, form: str, product: str | None = None, unused: bool = False) -> list[str]:
+        """``product``: the source name, which can settle an ambiguous form (drops: eye or oral).
+        ``unused``: the form is a listed one, but no product of this drug uses it; ask for the
+        forms the same product is usually recorded as instead."""
         text = f"Dose form: {form.strip()}" + (f"\nProduct: {product.strip()}" if product else "")
+        if unused:
+            text += (
+                f"\nNo product of this drug is recorded with the form {form.strip()!r}. Return the"
+                " other listed forms the same product is usually recorded as (e.g. a syrup as Oral"
+                f" Solution), not {form.strip()!r}; an empty list if none means the same."
+            )
         key = self._key(text)
         try:
             hit = await asyncio.to_thread(get_redis().get, key)

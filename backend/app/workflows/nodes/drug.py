@@ -74,11 +74,16 @@ async def _translate_names(
     return structure.model_copy(update={"components": components})
 
 
-async def _pick_forms(ctx: NodeContext, form: str, product: str | None) -> list[str] | None:
-    """RxNorm dose forms for a form term the vocabulary does not know (any language)."""
+async def _pick_forms(
+    ctx: NodeContext, form: str, product: str | None, unused: bool = False
+) -> list[str] | None:
+    """RxNorm dose forms for a form term the vocabulary does not know (any language), or, with
+    ``unused``, for a listed form no product of this drug uses."""
     if ctx.dose_form_picker is None:
         return None
     try:
+        if unused:
+            return await ctx.dose_form_picker.pick(form, product, unused=True) or None
         return await ctx.dose_form_picker.pick(form, product) or None
     except Exception as exc:
         ctx.logger.warning("Could not choose a dose form for %r: %s", form, exc)
@@ -105,7 +110,7 @@ async def _match(
         match = await asyncio.to_thread(ctx.drug_matcher, structure, True, form_choice)
     if match.level is None and not match.unresolved and form and form_choice is None:
         # A generic RxNorm form (Tablet, Syrup) that products rarely use: ask for the usual ones
-        choice = await _pick_forms(ctx, form, product)
+        choice = await _pick_forms(ctx, form, product, unused=True)
         if choice and {c.lower() for c in choice} != {form.strip().lower()}:
             retry = await asyncio.to_thread(ctx.drug_matcher, structure, True, choice)
             if retry.level is not None:
