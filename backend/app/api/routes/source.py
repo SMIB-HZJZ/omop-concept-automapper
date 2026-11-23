@@ -9,6 +9,7 @@ from app.api.routes._tasks import start_task
 from app.core.config import get_settings
 from app.models import SourceVocabulary
 from app.schemas.api import (
+    SOURCE_LANGUAGE_DESCRIPTION,
     VOCABULARY_DESCRIPTION_MAX,
     VOCABULARY_NAME_MAX,
     AuditEntry,
@@ -21,6 +22,7 @@ from app.schemas.api import (
     SourceVocabularyUpdate,
     TaskRef,
     UnmappedPage,
+    clean_language,
 )
 from app.services import mapping
 from app.services.source_import import SourceImportError, read_header, validate_header
@@ -68,6 +70,7 @@ def create_vocabulary(body: SourceVocabularyCreate, _: AdminUser, session: Sessi
         description=body.description,
         is_drug=body.is_drug,
         code_vocabularies=body.code_vocabularies,
+        source_language=body.source_language,
     )
     return SourceVocabularyOut(**vocab.model_dump())
 
@@ -109,6 +112,18 @@ _CODES_FORM = Form(
 )
 
 
+_LANGUAGE_FORM = Form(
+    None, max_length=8, description=SOURCE_LANGUAGE_DESCRIPTION + " (change it later with PATCH)"
+)
+
+
+def _parse_language(value: str | None) -> str | None:
+    try:
+        return clean_language(value)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
 def _parse_codes(value: str | None) -> list[str] | None:
     """None when not sent (an empty form field also arrives as None); else the distinct ids."""
     if value is None:
@@ -125,10 +140,19 @@ def import_new_vocabulary(
     description: str | None = _DESCRIPTION_FORM,
     is_drug: bool = Form(False),
     code_vocabularies: str | None = _CODES_FORM,
+    source_language: str | None = _LANGUAGE_FORM,
 ):
     """Import source concepts into a new vocabulary, which gets the next free id."""
     return _start_import(
-        session, user, file, None, name, description, is_drug, _parse_codes(code_vocabularies)
+        session,
+        user,
+        file,
+        None,
+        name,
+        description,
+        is_drug,
+        _parse_codes(code_vocabularies),
+        _parse_language(source_language),
     )
 
 
@@ -144,6 +168,7 @@ def import_concepts(
     description: str | None = _DESCRIPTION_FORM,
     is_drug: bool | None = Form(None),
     code_vocabularies: str | None = _CODES_FORM,
+    source_language: str | None = _LANGUAGE_FORM,
 ):
     """Add source concepts to a vocabulary (created with this id when it does not exist)."""
     if vocabulary_id < 1:
@@ -157,6 +182,7 @@ def import_concepts(
         description,
         is_drug,
         _parse_codes(code_vocabularies),
+        _parse_language(source_language),
     )
 
 
@@ -169,7 +195,10 @@ def _start_import(
     description: str | None,
     is_drug: bool | None,
     code_vocabularies: list[str] | None = None,
+    source_language: str | None = None,
 ):
+    """``source_language``: None leaves an existing vocabulary's language as it is (an empty form
+    field also arrives as None; clear it with PATCH)."""
     name = " ".join((name or "").split()) or None
     description = None if description is None else (" ".join(description.split()) or "")
     upload_dir = get_settings().upload_dir
@@ -193,9 +222,14 @@ def _start_import(
                 description=description,
                 is_drug=bool(is_drug),
                 code_vocabularies=code_vocabularies,
+                source_language=source_language,
             )
         elif (
-            name or is_drug is not None or description is not None or code_vocabularies is not None
+            name
+            or is_drug is not None
+            or description is not None
+            or code_vocabularies is not None
+            or source_language is not None
         ):
             if name:
                 vocab.name = name
@@ -205,6 +239,8 @@ def _start_import(
                 vocab.is_drug = is_drug
             if code_vocabularies is not None:
                 vocab.code_vocabularies = code_vocabularies
+            if source_language is not None:
+                vocab.source_language = source_language
             session.add(vocab)
             session.commit()
             mapping.invalidate_vocabulary(vocab.id)

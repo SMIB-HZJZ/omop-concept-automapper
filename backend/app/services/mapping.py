@@ -40,7 +40,8 @@ def list_source_vocabularies(session: Session) -> list[dict]:
     rows = session.execute(
         text(
             """
-            SELECT v.id, v.name, v.description, v.is_drug, v.code_vocabularies, v.created_at,
+            SELECT v.id, v.name, v.description, v.is_drug, v.source_language, v.code_vocabularies,
+                   v.created_at,
                    COUNT(sc.source_id) AS concept_count,
                    COUNT(sc.source_id) FILTER (
                        WHERE EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
@@ -63,6 +64,7 @@ def create_vocabulary(
     description: str | None = None,
     is_drug: bool = False,
     code_vocabularies: list[str] | None = None,
+    source_language: str | None = None,
 ) -> SourceVocabulary:
     """Create a source vocabulary; without ``vocabulary_id`` it gets the next free id.
 
@@ -79,6 +81,7 @@ def create_vocabulary(
         description=description or None,
         is_drug=is_drug,
         code_vocabularies=list(code_vocabularies or []),
+        source_language=source_language or None,
     )
     session.add(vocab)
     session.commit()
@@ -250,7 +253,7 @@ def get_source_concept(session: Session, source_id: int) -> dict | None:
                 """
             SELECT sc.source_id, sc.source_value, sc.source_concept_name,
                    sc.source_vocabulary_id, sc.freq, v.is_drug, sc.drug_structure,
-                   v.code_vocabularies, v.name AS vocabulary_name,
+                   v.code_vocabularies, v.source_language, v.name AS vocabulary_name,
                    v.description AS vocabulary_description
             FROM source_concepts sc JOIN source_vocabulary v ON v.id = sc.source_vocabulary_id
             WHERE sc.source_id = :s

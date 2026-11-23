@@ -155,6 +155,7 @@ def initial_state(
     domain_mode: str = "restrict",
     code_vocabularies: list[str] | None = None,
     vocabulary_context: str | None = None,
+    source_language: str | None = None,
 ) -> AutomapState:
     return AutomapState(
         source_id=source_id,
@@ -175,6 +176,7 @@ def initial_state(
         domain_mode=domain_mode,
         code_vocabularies=code_vocabularies or [],
         vocabulary_context=vocabulary_context,
+        source_language=source_language,
         match_type=None,
         structured_candidates=[],
         selected_concepts=[],

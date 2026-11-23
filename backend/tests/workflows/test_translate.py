@@ -179,3 +179,52 @@ async def test_an_exact_name_match_needs_no_translation():
     ctx = make_context(RecordingReranker(), translator=translator, lexical=OriginalNameMatches())
     result = await run_pipeline(_state("type 2 diabetes mellitus"), ctx, "automap")
     assert result["method"] == "auto_exact_name" and translator.calls == []
+
+
+class LanguageTranslator(FakeTranslator):
+    async def translate(self, term, language=None):
+        self.calls.append((term, language))
+        return TranslationResult(self.mapping.get(term, term), "sl")
+
+
+async def test_the_vocabulary_language_is_given_to_the_translator():
+    translator = LanguageTranslator({"šećerna bolest tip 2": "type 2 diabetes mellitus"})
+    ctx = make_context(RecordingReranker(), searcher=FakeSearcher(), translator=translator)
+    state = _state("šećerna bolest tip 2")
+    state["source_language"] = "hr"
+    result = await run_pipeline(state, ctx, "automap")
+    assert translator.calls == [("šećerna bolest tip 2", "hr")]
+    # The vocabulary's setting wins over what the model reports
+    assert result["meta"]["source_language"] == "hr"
+
+
+async def test_an_english_vocabulary_is_not_translated():
+    translator = LanguageTranslator({})
+    ctx = make_context(RecordingReranker(), searcher=FakeSearcher(), translator=translator)
+    state = _state("type 2 diabetes")
+    state["source_language"] = "en"
+    result = await run_pipeline(state, ctx, "automap")
+    assert translator.calls == [] and result["translated_query"] is None
+
+
+async def test_the_language_goes_into_the_prompt_and_the_cache_key():
+    from app.core.redis import get_redis
+    from app.llm import structured
+
+    prompts = []
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            prompts.append(kwargs["messages"][1]["content"])
+            return structured.TranslationResponse(english="headache", language="hr")
+
+    class FakeClient:
+        chat = type("Chat", (), {"completions": FakeCompletions()})()
+
+    translator = structured.Translator("test/language-model", client=FakeClient())
+    assert translator._key("glavobolja") != translator._key("glavobolja", language="hr")
+    get_redis().delete(translator._key("glavobolja"), translator._key("glavobolja", language="hr"))
+    await translator.translate("glavobolja", language="hr")
+    await translator.translate("glavobolja")
+    assert "Source language (ISO 639-1) of the vocabulary: hr" in prompts[0]
+    assert "Source language" not in prompts[1]

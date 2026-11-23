@@ -144,6 +144,7 @@ async def suggest(
         vocabulary_context=vocabulary_context(
             source.get("vocabulary_name"), source.get("vocabulary_description")
         ),
+        source_language=source.get("source_language"),
     )
     if body.query:
         # An edited search name is both the search query and the term the LLM judges

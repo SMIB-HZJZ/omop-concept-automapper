@@ -3194,6 +3194,19 @@
             ],
             "title": "Code Vocabularies",
             "description": "Comma-separated OMOP vocabulary_ids of the codes in source_value (e.g. ICD10), looked up and followed through Maps to before any AI step (change or clear it later with PATCH)"
+          },
+          "source_language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Language",
+            "description": "ISO 639-1 code of the source terms (e.g. hr), told to the translation step; empty: the language is detected per term (change it later with PATCH)"
           }
         },
         "type": "object",
@@ -3244,6 +3257,19 @@
             ],
             "title": "Code Vocabularies",
             "description": "Comma-separated OMOP vocabulary_ids of the codes in source_value (e.g. ICD10), looked up and followed through Maps to before any AI step (change or clear it later with PATCH)"
+          },
+          "source_language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Language",
+            "description": "ISO 639-1 code of the source terms (e.g. hr), told to the translation step; empty: the language is detected per term (change it later with PATCH)"
           }
         },
         "type": "object",
@@ -4688,6 +4714,19 @@
             "title": "Is Drug",
             "default": false
           },
+          "source_language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Language",
+            "description": "ISO 639-1 code of the source terms (e.g. hr), told to the translation step; empty: the language is detected per term"
+          },
           "code_vocabularies": {
             "items": {
               "type": "string"
@@ -4727,6 +4766,17 @@
           "is_drug": {
             "type": "boolean",
             "title": "Is Drug"
+          },
+          "source_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Language"
           },
           "code_vocabularies": {
             "items": {
@@ -4804,6 +4854,19 @@
               }
             ],
             "title": "Is Drug"
+          },
+          "source_language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Language",
+            "description": "ISO 639-1 code of the source terms (e.g. hr), told to the translation step; empty: the language is detected per term"
           },
           "code_vocabularies": {
             "anyOf": [

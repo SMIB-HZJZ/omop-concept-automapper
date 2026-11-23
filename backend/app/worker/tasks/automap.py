@@ -163,6 +163,7 @@ async def automap_concepts(
     domain_mode: str = "prefer",
     code_vocabularies: list[str] | None = None,
     vocabulary_context: str | None = None,
+    source_language: str | None = None,
 ) -> dict:
     compiled = compiled or get_pipeline(pipeline)
     counts = {
@@ -197,6 +198,7 @@ async def automap_concepts(
                 domain_mode=domain_mode,
                 code_vocabularies=code_vocabularies,
                 vocabulary_context=vocabulary_context,
+                source_language=source_language,
             ),
             ctx,
             compiled=compiled,
@@ -303,6 +305,7 @@ def run_automap(
         concepts = mapping.get_unmapped_concepts_for_automap(session, vocabulary_id, limit)
         vocabulary = session.get(SourceVocabulary, vocabulary_id)
         code_vocabularies = list(vocabulary.code_vocabularies or []) if vocabulary else []
+        source_language = vocabulary.source_language if vocabulary else None
         context = (
             prompts.vocabulary_context(vocabulary.name, vocabulary.description)
             if vocabulary
@@ -338,6 +341,7 @@ def run_automap(
                 domain_mode=domain_mode,
                 code_vocabularies=code_vocabularies,
                 vocabulary_context=context,
+                source_language=source_language,
             )
         finally:
             await aclose_async_client()

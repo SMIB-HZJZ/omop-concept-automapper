@@ -1,5 +1,6 @@
 """Request and response models for the HTTP API (they drive the generated TypeScript types)."""
 
+import re
 from datetime import datetime
 from typing import Any, Literal
 
@@ -151,6 +152,7 @@ class SourceVocabularyOut(BaseModel):
     name: str
     description: str | None = None
     is_drug: bool
+    source_language: str | None = None
     code_vocabularies: list[str] = []
     created_at: datetime | None = None
     concept_count: int = 0
@@ -166,6 +168,23 @@ def _clean_text(value: str | None) -> str | None:
     return value or None
 
 
+_LANGUAGE_CODE = re.compile(r"^[a-z]{2}$")
+SOURCE_LANGUAGE_DESCRIPTION = (
+    "ISO 639-1 code of the source terms (e.g. hr), told to the translation step; "
+    "empty: the language is detected per term"
+)
+
+
+def clean_language(value: str | None) -> str | None:
+    """Lower-case ISO 639-1 code, or None for "detect per term"."""
+    value = (value or "").strip().lower()
+    if not value:
+        return None
+    if not _LANGUAGE_CODE.match(value):
+        raise ValueError("Source language must be a two-letter ISO 639-1 code, e.g. hr")
+    return value
+
+
 class SourceVocabularyCreate(BaseModel):
     # Empty: the next free id
     id: int | None = Field(default=None, ge=1)
@@ -173,7 +192,15 @@ class SourceVocabularyCreate(BaseModel):
     # One or two sentences on what the terms denote; given to the LLM with every term
     description: str | None = Field(default=None, max_length=VOCABULARY_DESCRIPTION_MAX)
     is_drug: bool = False
+    source_language: str | None = Field(
+        default=None, max_length=8, description=SOURCE_LANGUAGE_DESCRIPTION
+    )
     code_vocabularies: list[str] = []
+
+    @field_validator("source_language")
+    @classmethod
+    def _clean_language(cls, value: str | None) -> str | None:
+        return clean_language(value)
 
     @field_validator("description")
     @classmethod
@@ -193,8 +220,16 @@ class SourceVocabularyUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=VOCABULARY_NAME_MAX)
     description: str | None = Field(default=None, max_length=VOCABULARY_DESCRIPTION_MAX)
     is_drug: bool | None = None
+    source_language: str | None = Field(
+        default=None, max_length=8, description=SOURCE_LANGUAGE_DESCRIPTION
+    )
     # OMOP vocabulary_ids of the codes in source_value, e.g. ["ICD10"] for MKB-10 codes
     code_vocabularies: list[str] | None = None
+
+    @field_validator("source_language")
+    @classmethod
+    def _clean_language(cls, value: str | None) -> str | None:
+        return clean_language(value)
 
     @field_validator("description")
     @classmethod

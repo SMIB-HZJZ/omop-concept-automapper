@@ -1039,6 +1039,11 @@ export interface components {
              * @description Comma-separated OMOP vocabulary_ids of the codes in source_value (e.g. ICD10), looked up and followed through Maps to before any AI step (change or clear it later with PATCH)
              */
             code_vocabularies?: string | null;
+            /**
+             * Source Language
+             * @description ISO 639-1 code of the source terms (e.g. hr), told to the translation step; empty: the language is detected per term (change it later with PATCH)
+             */
+            source_language?: string | null;
         };
         /** Body_import_new_vocabulary_api_source_vocabularies_import_post */
         Body_import_new_vocabulary_api_source_vocabularies_import_post: {
@@ -1061,6 +1066,11 @@ export interface components {
              * @description Comma-separated OMOP vocabulary_ids of the codes in source_value (e.g. ICD10), looked up and followed through Maps to before any AI step (change or clear it later with PATCH)
              */
             code_vocabularies?: string | null;
+            /**
+             * Source Language
+             * @description ISO 639-1 code of the source terms (e.g. hr), told to the translation step; empty: the language is detected per term (change it later with PATCH)
+             */
+            source_language?: string | null;
         };
         /** Calibration */
         Calibration: {
@@ -1549,6 +1559,11 @@ export interface components {
              */
             is_drug: boolean;
             /**
+             * Source Language
+             * @description ISO 639-1 code of the source terms (e.g. hr), told to the translation step; empty: the language is detected per term
+             */
+            source_language?: string | null;
+            /**
              * Code Vocabularies
              * @default []
              */
@@ -1564,6 +1579,8 @@ export interface components {
             description?: string | null;
             /** Is Drug */
             is_drug: boolean;
+            /** Source Language */
+            source_language?: string | null;
             /**
              * Code Vocabularies
              * @default []
@@ -1590,6 +1607,11 @@ export interface components {
             description?: string | null;
             /** Is Drug */
             is_drug?: boolean | null;
+            /**
+             * Source Language
+             * @description ISO 639-1 code of the source terms (e.g. hr), told to the translation step; empty: the language is detected per term
+             */
+            source_language?: string | null;
             /** Code Vocabularies */
             code_vocabularies?: string[] | null;
         };

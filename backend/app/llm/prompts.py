@@ -132,6 +132,13 @@ Rules:
 - If the term is already English, return it unchanged.
 - Report the detected language as an ISO 639-1 code."""
 
+# The language set on the source vocabulary. Kept out of the system prompt (like VOCABULARY_LINE)
+# so runs without it reuse the cached answers; a list may still mix in English or Latin terms.
+SOURCE_LANGUAGE_LINE = (
+    "Source language (ISO 639-1) of the vocabulary: {language}; a term may still be English "
+    "or Latin\n"
+)
+
 
 REWRITE_SYSTEM_PROMPT = """\
 A vector search over standard OMOP concepts (SNOMED CT, LOINC, RxNorm, ...) found no convincing

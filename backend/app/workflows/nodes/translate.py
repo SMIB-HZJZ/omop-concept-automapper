@@ -23,21 +23,30 @@ async def translate(state: AutomapState, ctx: NodeContext, params: TranslatePara
     translator = ctx.translator or Translator(
         ctx.llm_model, effort=ctx.settings.llm_reasoning_effort
     )
+    language = state.get("source_language")
+    if language == "en":
+        # Set on the vocabulary: nothing to translate, no LLM call
+        return {"meta": {"source_language": "en"}, "_summary": "English vocabulary, skipped"}
     try:
         context = state.get("vocabulary_context")
+        kwargs = {"language": language} if language else {}
         result = await (
-            translator.translate(term, context) if context else translator.translate(term)
+            translator.translate(term, context, **kwargs)
+            if context
+            else translator.translate(term, **kwargs)
         )
     except Exception as exc:
         # A failed translation must not lose the concept: continue with the original term
         ctx.logger.warning("Translation failed for %r: %s", term, exc)
         return {"_summary": f"translation failed ({type(exc).__name__}), kept original"}
     english = result.english or term
+    # The vocabulary's setting wins over what the model reports
+    detected = language or result.language
     same = english.strip().lower() == term.strip().lower()
     update: dict = {
         "translated_query": None if same else english,
-        "meta": {"source_language": result.language, "translation_cached": result.cached},
-        "_summary": "already English" if same else f"'{term}' → '{english}' ({result.language})",
+        "meta": {"source_language": detected, "translation_cached": result.cached},
+        "_summary": "already English" if same else f"'{term}' → '{english}' ({detected})",
     }
     if params.replace_query and not same:
         update["query"] = english

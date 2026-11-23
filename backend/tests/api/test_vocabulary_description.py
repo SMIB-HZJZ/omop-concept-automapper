@@ -106,3 +106,20 @@ def test_code_systems_are_set_at_import(client, admin_headers):
     )
     assert resp.json()["code_vocabularies"] == []
     client.delete("/api/source-vocabularies/164", headers=admin_headers)
+
+
+def test_source_language_is_set_at_import(client, admin_headers):
+    assert _import(client, admin_headers, 165, name="Bad", source_language="hrv").status_code == 400
+    resp = _import(client, admin_headers, 165, name="Diagnoses", source_language=" HR ")
+    assert resp.status_code == 202, resp.text
+    assert _vocab(client, admin_headers, 165)["source_language"] == "hr"
+    # Not sent: kept; changed or cleared (back to per-term detection) with PATCH
+    assert _import(client, admin_headers, 165).status_code == 202
+    assert _vocab(client, admin_headers, 165)["source_language"] == "hr"
+    url = "/api/source-vocabularies/165"
+    assert (
+        client.patch(url, json={"source_language": "x1"}, headers=admin_headers).status_code == 422
+    )
+    resp = client.patch(url, json={"source_language": None}, headers=admin_headers)
+    assert resp.json()["source_language"] is None
+    client.delete(url, headers=admin_headers)

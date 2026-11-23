@@ -15,6 +15,8 @@ class SourceVocabulary(SQLModel, table=True):
     name: str
     description: str | None = None
     is_drug: bool = False
+    # ISO 639-1 code of the terms (e.g. "hr"); None: the translation step detects it per term
+    source_language: str | None = None
     # Code systems of source_value (e.g. ["ICD10"]) for deterministic code mapping
     code_vocabularies: list[str] = Field(
         default_factory=list, sa_column=Column(ARRAY(Text), server_default="{}", nullable=False)

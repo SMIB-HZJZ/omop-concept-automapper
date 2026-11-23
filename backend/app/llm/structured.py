@@ -20,6 +20,7 @@ from app.llm.prompts import (
     EXAMPLES_BLOCK,
     INPUT_PROMPT,
     REWRITE_SYSTEM_PROMPT,
+    SOURCE_LANGUAGE_LINE,
     TRANSLATE_SYSTEM_PROMPT,
     TRANSLATION_LINE,
     VOCABULARY_LINE,
@@ -393,15 +394,20 @@ class Translator:
         self.effort = effort or None
         self._client = client
 
-    def _key(self, term: str, context: str | None = None) -> str:
+    def _key(self, term: str, context: str | None = None, language: str | None = None) -> str:
         ident = term.strip() if not context else f"{term.strip()}\n{context}"
+        if language:
+            ident = f"{ident}\nlanguage={language}"
         digest = hashlib.sha1(ident.encode()).hexdigest()
         return f"translate:{model_label(self.model, self.effort)}:{digest}"
 
-    async def translate(self, term: str, context: str | None = None) -> TranslationResult:
+    async def translate(
+        self, term: str, context: str | None = None, language: str | None = None
+    ) -> TranslationResult:
         """``context``: the source vocabulary (name and description), which can settle what an
-        abbreviation means."""
-        key = self._key(term, context)
+        abbreviation means. ``language``: ISO 639-1 code set on the vocabulary; without it the
+        model detects the language."""
+        key = self._key(term, context, language)
         try:
             hit = await asyncio.to_thread(get_redis().get, key)
             if hit:
@@ -418,6 +424,7 @@ class Translator:
                 {
                     "role": "user",
                     "content": (VOCABULARY_LINE.format(context=context) if context else "")
+                    + (SOURCE_LANGUAGE_LINE.format(language=language) if language else "")
                     + f"Term: {term}",
                 },
             ],

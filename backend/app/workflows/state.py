@@ -29,6 +29,8 @@ class AutomapState(TypedDict, total=False):
     vocabulary_id: str | None
     # Name and description of the source vocabulary, given to the LLM steps
     vocabulary_context: str | None
+    # ISO 639-1 code set on the source vocabulary; None: the translate step detects it
+    source_language: str | None
     threshold: int
     # Decision
     candidates: list[dict]
