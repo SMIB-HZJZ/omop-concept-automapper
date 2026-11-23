@@ -15,9 +15,10 @@ class RetrieveParams(BaseModel):
     # when the structured drug_strength match fails.
     k: int = Field(default=30, ge=1, le=200)
     use_atc7: bool = True
-    # When the ATC7-filtered search finds nothing, search again without the ATC7 filter.
-    # Off by default (as in the Streamlit app): a drug outside its ATC7 class is a wrong match.
-    atc7_fallback: bool = False
+    # When the ATC7-filtered search finds nothing, search again without the ATC7 filter. A wrong
+    # or outdated ATC7 code in the source would otherwise leave no candidates at all; the
+    # reranker still judges the unfiltered ones.
+    atc7_fallback: bool = True
     # Keyword (trigram) search on names and synonyms next to the vector search, fused by rank.
     # Off by default: in the 2026-11 evaluation fusion lowered R@1 by ~10 points for good
     # embedding models and did not raise R@30.

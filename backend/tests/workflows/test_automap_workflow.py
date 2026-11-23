@@ -154,27 +154,28 @@ async def test_standard_mode_without_candidates():
     assert result["outcome"] == "no_candidates" and provider.requests == []
 
 
-async def test_no_atc7_fallback_by_default():
-    """As in the Streamlit app: no candidate in the ATC7 class means no match."""
-    provider = MockProvider({"most_similar_item_id": 0, "confidence_score": 9})
+async def test_atc7_fallback_by_default():
+    """A wrong or outdated ATC7 code must not leave the term without candidates."""
+    from app.workflows.nodes.retrieve import RetrieveParams, retrieve
+
     searcher = FakeSearcher()
-    result = await run_pipeline(
-        _state(value="Z99ZZ99-1"), make_context(reranker_with(provider), searcher=searcher)
-    )
-    assert len(searcher.calls) == 1 and searcher.calls[0][3] == ("Z99ZZ99",)
-    assert result["outcome"] == "no_candidates" and provider.requests == []
+    state = {**_state(value="Z99ZZ99-1"), "atc7_codes": ["Z99ZZ99"]}
+    update = await retrieve(state, make_context(None, searcher=searcher), RetrieveParams())
+    assert len(searcher.calls) == 2 and searcher.calls[1][3] == ()
+    assert update["candidates"] and "fell back" in update["_summary"]
 
 
-async def test_atc7_fallback_can_be_enabled():
+async def test_strict_atc7_filter_can_be_kept():
+    """With atc7_fallback off, no candidate in the ATC7 class means no match."""
     from app.workflows.nodes.retrieve import RetrieveParams, retrieve
 
     searcher = FakeSearcher()
     state = {**_state(value="Z99ZZ99-1"), "atc7_codes": ["Z99ZZ99"]}
     update = await retrieve(
-        state, make_context(None, searcher=searcher), RetrieveParams(atc7_fallback=True)
+        state, make_context(None, searcher=searcher), RetrieveParams(atc7_fallback=False)
     )
-    assert len(searcher.calls) == 2 and searcher.calls[1][3] == ()
-    assert update["candidates"] and "fell back" in update["_summary"]
+    assert len(searcher.calls) == 1 and searcher.calls[0][3] == ("Z99ZZ99",)
+    assert update["candidates"] == []
 
 
 async def test_rationale_is_kept():
