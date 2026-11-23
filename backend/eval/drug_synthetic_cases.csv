@@ -1,0 +1,76 @@
+case_id,language,kind,source_name,ingredient,amount_value,amount_unit,numerator_value,numerator_unit,denominator_value,denominator_unit,dose_form,brand_name,quantity_value,quantity_unit,expected
+D001,hr,structured,Paracetamol 500 mg tablete,paracetamol,500,mg,,,,,tableta,,,,acetaminophen 500 MG Oral Tablet
+D002,de,structured,Ibuprofen 400 mg Filmtabletten,Ibuprofen,400,mg,,,,,Filmtablette,,,,ibuprofen 400 MG Oral Tablet
+D003,it,structured,Amoxicillina 500 mg capsule rigide,amoxicillina,500,mg,,,,,capsula rigida,,,,amoxicillin 500 MG Oral Capsule
+D004,fr,structured,"Amoxicilline/Acide clavulanique 875 mg/125 mg, comprimé pelliculé",amoxicilline;acide clavulanique,875;125,mg,,,,,comprimé pelliculé,,,,amoxicillin 875 MG / clavulanate 125 MG Oral Tablet
+D005,es,structured,Metformina 850 mg comprimidos recubiertos con película,metformina,850,mg,,,,,comprimido recubierto con película,,,,metformin hydrochloride 850 MG Oral Tablet
+D006,pl,structured,Atorwastatyna 20 mg tabletki powlekane,atorwastatyna,20,mg,,,,,tabletka powlekana,,,,atorvastatin 20 MG Oral Tablet
+D007,sl,structured,Amlodipin 5 mg tablete,amlodipin,5,mg,,,,,tableta,,,,amlodipine 5 MG Oral Tablet
+D008,hr,structured,Omeprazol 20 mg tvrde želučanootporne kapsule,omeprazol,20,mg,,,,,tvrda želučanootporna kapsula,,,,omeprazole 20 MG Delayed Release Oral Capsule
+D009,de,structured,Pantoprazol 40 mg magensaftresistente Tabletten,Pantoprazol,40,mg,,,,,magensaftresistente Tablette,,,,pantoprazole 40 MG Delayed Release Oral Tablet
+D010,hr,structured,"Diazepam 10 mg/2 ml otopina za injekciju, ampula",diazepam,,,10,mg,2,ml,otopina za injekciju,,2,ml,2 ML Diazepam 5 MG/ML Injectable Solution|2 ML Diazepam 5 MG/ML Injection
+D011,de,structured,"Enoxaparin-Natrium 40 mg/0,4 ml Injektionslösung in einer Fertigspritze",Enoxaparin-Natrium,,,40,mg,"0,4",ml,Injektionslösung in einer Fertigspritze,,"0,4",ml,0.4 ML enoxaparin sodium 100 MG/ML Prefilled Syringe
+D012,it,structured,"Tobramicina 3 mg/ml collirio, soluzione",tobramicina,,,3,mg,,ml,"collirio, soluzione",,,,tobramycin 3 MG/ML Ophthalmic Solution
+D013,hr,structured,Hidrokortizon 1% krema,hidrokortizon,,,1,%,,,krema,,,,hydrocortisone 10 MG/ML Topical Cream
+D014,nl,structured,Ceftriaxon 1 g poeder voor oplossing voor injectie,ceftriaxon,1,g,,,,,poeder voor oplossing voor injectie,,,,ceftriaxone 1000 MG Injection
+D015,en,structured,Levothyroxine sodium 50 micrograms tablets,levothyroxine sodium,50,micrograms,,,,,Tablet,,,,levothyroxine sodium 0.05 MG Oral Tablet
+D016,cs,structured,Furosemid 40 mg tablety,furosemid,40,mg,,,,,tableta,,,,furosemide 40 MG Oral Tablet
+D017,de,structured,Brufen 400 mg Filmtabletten,Ibuprofen,400,mg,,,,,Filmtablette,Brufen,,,ibuprofen 400 MG Oral Tablet [Brufen]
+D018,hr,structured,Sertralin 50 mg filmom obložene tablete,sertralin,50,mg,,,,,filmom obložena tableta,,,,sertraline 50 MG Oral Tablet
+D019,fr,structured,"Salbutamol 100 microgrammes/dose, suspension pour inhalation en flacon pressurisé",salbutamol,,,100,mcg,,dose,suspension pour inhalation en flacon pressurisé,,,,Albuterol 0.1 MG/ACTUAT Metered Dose Inhaler
+D020,de,structured,Fentanyl 25 Mikrogramm/h transdermales Pflaster,Fentanyl,,,25,mcg,,h,transdermales Pflaster,,,,fentanyl 0.025 MG/HR Transdermal System|72 HR fentanyl 0.025 MG/HR Transdermal System
+D021,it,structured,Ondansetron 4 mg compresse orodispersibili,ondansetron,4,mg,,,,,compressa orodispersibile,,,,ondansetron 4 MG Disintegrating Oral Tablet
+D022,es,structured,Paracetamol 100 mg/ml solución oral,paracetamol,,,100,mg,,ml,solución oral,,,,acetaminophen 100 MG/ML Oral Solution
+D023,pl,structured,Ibuprofen 100 mg/5 ml zawiesina doustna,ibuprofen,,,100,mg,5,ml,zawiesina doustna,,,,ibuprofen 20 MG/ML Oral Suspension
+D024,hr,structured,Kolekalciferol 1000 IU tablete,kolekalciferol,1000,IU,,,,,tableta,,,,cholecalciferol 1000 UNT Oral Tablet|cholecalciferol 0.025 MG Oral Tablet
+D025,en,structured,"Morphine sulfate 10 mg/1 ml solution for injection, ampoule",morphine sulfate,,,10,mg,1,ml,Solution for injection,,1,ml,1 ML morphine sulfate 10 MG/ML Injection
+D026,hr,structured,"Natrijev klorid 0,9% otopina za infuziju",natrijev klorid,,,"0,9",%,,,otopina za infuziju,,,,sodium chloride 9 MG/ML Injectable Solution
+D027,de,structured,Insulin glargin 100 E/ml Injektionslösung im Fertigpen 3 ml,Insulin glargin,,,100,E,,ml,Injektionslösung in einem Fertigpen,,3,ml,3 ML insulin glargine 100 UNT/ML Pen Injector
+D028,hr,structured,Varfarin 5 mg tablete,varfarin,5,mg,,,,,tableta,,,,warfarin sodium 5 MG Oral Tablet
+D029,hr,structured,Klopidogrel 75 mg (no form),klopidogrel,75,mg,,,,,,,,,clopidogrel 75 MG
+D030,de,structured,Amoxicilin 500 mg Kapseln (typo),amoxicilin,500,mg,,,,,Hartkapsel,,,,amoxicillin 500 MG Oral Capsule
+D031,hr,structured,Paracetamol + ibuprofen (ingredients only),paracetamol;ibuprofen,,,,,,,,,,,acetaminophen + ibuprofen|acetaminophen / ibuprofen Oral Tablet
+D032,hr,parsed,Normabel 5 mg tablete,,,,,,,,,,,,diazepam 5 MG Oral Tablet
+D033,de,parsed,Ibuprofen AL 600 mg Filmtabletten,,,,,,,,,,,,Ibuprofen 600 MG Oral Tablet [Ibuprofen Al]|ibuprofen 600 MG Oral Tablet
+D034,it,parsed,Augmentin 875 mg/125 mg compresse rivestite con film,,,,,,,,,,,,amoxicillin 875 MG / clavulanate 125 MG Oral Tablet [Augmentin]
+D035,en,parsed,Xanax 0.5 mg tablets,,,,,,,,,,,,alprazolam 0.5 MG Oral Tablet [Xanax]
+D036,fr,parsed,"Zyrtec 10 mg, comprimé pelliculé sécable",,,,,,,,,,,,cetirizine hydrochloride 10 MG Oral Tablet [Zyrtec]
+D037,de,parsed,Euthyrox 50 Mikrogramm Tabletten,,,,,,,,,,,,levothyroxine sodium 0.05 MG Oral Tablet [Euthyrox]
+D038,hr,parsed,Sortis 20 mg filmom obložene tablete,,,,,,,,,,,,atorvastatin 20 MG Oral Tablet [Sortis]
+D039,hr,parsed,Concor 5 mg filmom obložene tablete,,,,,,,,,,,,Bisoprolol 5 MG Oral Tablet [Concor]
+D040,es,parsed,Lipitor 20 mg comprimidos recubiertos,,,,,,,,,,,,atorvastatin 20 MG Oral Tablet [Lipitor]
+D041,hr,parsed,Klopidogrel Pliva 75 mg film. tbl.,,,,,,,,,,,,clopidogrel 75 MG Oral Tablet
+D042,sl,parsed,Escitalopram Krka 10 mg filmsko obložene tablete,,,,,,,,,,,,escitalopram 10 MG Oral Tablet
+D043,pl,parsed,Lorazepam 1 mg tabletki,,,,,,,,,,,,lorazepam 1 MG Oral Tablet
+D044,cs,parsed,Azithromycin 500 mg potahované tablety,,,,,,,,,,,,azithromycin 500 MG Oral Tablet
+D045,nl,parsed,Ciprofloxacine 500 mg filmomhulde tabletten,,,,,,,,,,,,ciprofloxacin 500 MG Oral Tablet
+D046,it,parsed,Cefuroxima axetil 500 mg compresse rivestite con film,,,,,,,,,,,,cefuroxime 500 MG Oral Tablet
+D047,hr,parsed,Flukonazol 150 mg kapsula,,,,,,,,,,,,fluconazole 150 MG Oral Capsule
+D048,de,parsed,Loratadin 10 mg Tabletten,,,,,,,,,,,,loratadine 10 MG Oral Tablet
+D049,hr,parsed,Simvastatin 20 mg tbl,,,,,,,,,,,,simvastatin 20 MG Oral Tablet
+D050,en,parsed,Ramipril 5 mg hard capsules,,,,,,,,,,,,ramipril 5 MG Oral Capsule
+D051,hr,parsed,Ramipril 5 mg tablete,,,,,,,,,,,,ramipril 5 MG Oral Tablet
+D052,fr,parsed,"Diclofénac sodique 50 mg, comprimé gastro-résistant",,,,,,,,,,,,diclofenac sodium 50 MG Delayed Release Oral Tablet
+D053,hr,parsed,Andol pro 100 mg želučanootporne tablete,,,,,,,,,,,,aspirin 100 MG Delayed Release Oral Tablet
+D054,it,parsed,Cardioaspirin 100 mg compresse gastroresistenti,,,,,,,,,,,,aspirin 100 MG Delayed Release Oral Tablet
+D055,es,parsed,Ácido acetilsalicílico 100 mg comprimidos,,,,,,,,,,,,aspirin 100 MG Oral Tablet
+D056,hr,parsed,Tramadol 50 mg kapsule,,,,,,,,,,,,tramadol hydrochloride 50 MG Oral Capsule
+D057,de,parsed,Kaliumchlorid 600 mg Retardtabletten,,,,,,,,,,,,Potassium Chloride 600 MG Extended Release Oral Tablet
+D058,en,parsed,Mesalazine 500 mg gastro-resistant tablets,,,,,,,,,,,,mesalamine 500 MG Delayed Release Oral Tablet
+D059,hr,parsed,Metilprednizolon 4 mg tablete,,,,,,,,,,,,methylprednisolone 4 MG Oral Tablet
+D060,de,parsed,Prednisolon 5 mg Tabletten,,,,,,,,,,,,prednisolone 5 MG Oral Tablet
+D061,hr,parsed,Ondansetron 8 mg filmom obložene tablete,,,,,,,,,,,,ondansetron 8 MG Oral Tablet
+D062,it,parsed,Glucosio 5% soluzione per infusione,,,,,,,,,,,,glucose 50 MG/ML Injectable Solution
+D063,hr,parsed,"Adrenalin 1 mg/1 ml otopina za injekciju, ampula",,,,,,,,,,,,1 ML epinephrine 1 MG/ML Injection|1 ML Epinephrine 1 MG/ML Injectable Solution
+D064,en,parsed,Budesonide 200 micrograms/dose inhalation powder,,,,,,,,,,,,Budesonide 0.2 MG/ACTUAT Dry Powder Inhaler
+D065,hr,parsed,Paracetamol,,,,,,,,,,,,acetaminophen
+D066,de,parsed,Ibuprofen/Pseudoephedrinhydrochlorid 200 mg/30 mg Filmtabletten,,,,,,,,,,,,ibuprofen 200 MG / pseudoephedrine hydrochloride 30 MG Oral Tablet
+D067,hr,parsed,Paracetamol sirup 120 mg/5 ml,,,,,,,,,,,,acetaminophen 24 MG/ML Oral Solution
+D068,en,parsed,Paracetamol 1 g tablets,,,,,,,,,,,,acetaminophen 1000 MG Oral Tablet
+D069,hr,parsed,Metformin 1000 mg filmom obložene tablete,,,,,,,,,,,,metformin hydrochloride 1000 MG Oral Tablet
+D070,hr,typo,Amoksicilin 500 mg kapsule,,,,,,,,,,,,amoxicillin 500 MG Oral Capsule
+D071,de,typo,Amoxicilin 500mg Kps,,,,,,,,,,,,amoxicillin 500 MG Oral Capsule
+D072,hr,typo,Ibuprofn 400 mg tbl,,,,,,,,,,,,ibuprofen 400 MG Oral Tablet
+D073,hr,non_drug,Igla za inzulinsku brizgalicu 4 mm,,,,,,,,,,,,NONE
+D074,de,non_drug,Blutzuckerteststreifen,,,,,,,,,,,,NONE
+D075,en,non_drug,Elastic bandage 10 cm x 4 m,,,,,,,,,,,,NONE

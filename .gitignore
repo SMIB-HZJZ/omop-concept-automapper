@@ -54,6 +54,8 @@ temp_*.csv
 vocabulary/*.zip
 # Data files (vocabularies, source concepts) are never committed
 *.csv
+# ...except synthetic evaluation sets, written by hand and containing no source data
+!backend/eval/*.csv
 store/
 *backup/
 
