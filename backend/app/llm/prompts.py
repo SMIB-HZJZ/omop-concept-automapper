@@ -176,7 +176,8 @@ with the tools:
 
 Pick a concept only if it satisfies the matching rules below; otherwise return no concept.
 Only return a concept_id you have seen in tool results or in the initial candidates.
-Give a confidence score on the scale below and a one-sentence rationale."""
+Give a confidence score on the scale below and a one-sentence rationale, and state how the
+chosen concept relates to the source term: exact, broader, narrower or related."""
 
 
 def agent_criteria(drug_specific: bool) -> str:

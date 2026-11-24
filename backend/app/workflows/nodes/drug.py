@@ -24,6 +24,44 @@ LEVEL_NAMES = {
 }
 
 
+# What each RxNorm level states besides the ingredients
+_LEVEL_DETAIL = {
+    "branded_drug": {"strength", "form", "brand"},
+    "quant_branded_drug": {"strength", "form", "brand", "quantity"},
+    "branded_drug_comp": {"strength", "brand"},
+    "branded_drug_form": {"form", "brand"},
+    "clinical_drug": {"strength", "form"},
+    "quant_clinical_drug": {"strength", "form", "quantity"},
+    "clinical_drug_comp": {"strength"},
+    "clinical_drug_form": {"form"},
+    "ingredient": set(),
+}
+
+
+def drug_match_type(structure: DrugStructure, level: str | None) -> str | None:
+    """How a structured match relates to the source: exact when the drug states what the source
+    states; broader when it leaves something out (a brand or quantity no drug has); narrower when
+    it adds something (e.g. the one dose form of an ingredient-only source); related for both."""
+    if level not in _LEVEL_DETAIL:
+        return None
+    source = set()
+    if any(
+        c.amount_value is not None or c.numerator_value is not None for c in structure.components
+    ):
+        source.add("strength")
+    if structure.dose_form:
+        source.add("form")
+    if structure.quantity_value is not None:
+        source.add("quantity")
+    if structure.brand_name:
+        source.add("brand")
+    drug = _LEVEL_DETAIL[level]
+    missing, added = source - drug, drug - source
+    if missing and added:
+        return "related"
+    return "broader" if missing else "narrower" if added else "exact"
+
+
 class MatchDrugParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -272,6 +310,7 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
                     + ")"
                 ),
                 method="auto_drug_structured",
+                match_type=drug_match_type(structure, match.level),
                 outcome="selected",
                 meta={**update["meta"], "drug_status": "exact"},
                 _summary=f"{level} {names} for {described}",

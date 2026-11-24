@@ -164,7 +164,8 @@ def test_source_import_and_mapping_flow(client, user_headers, admin_headers, loa
     lines = csv_resp.text.strip().splitlines()
     assert (
         lines[0]
-        == "source_id,source_value,source_concept_name,concept_name,concept_id,domain_id,freq"
+        == "source_id,source_value,source_concept_name,concept_name,concept_id,domain_id,freq,"
+        "match_type"
     )
     assert len(lines) == 4
 

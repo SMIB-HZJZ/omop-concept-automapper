@@ -59,7 +59,7 @@ async def agentic_refine(state: AutomapState, ctx: NodeContext, params: AgenticP
         "step": "agent retry",
         "concept": deps.seen.get(decision.concept_id) if decision.concept_id else None,
         "confidence": decision.confidence,
-        "match_type": None,
+        "match_type": decision.match_type,
         "rationale": decision.rationale,
     }
     evidence = {"attempts": [attempt], "agent_candidates": found_by_agent}
@@ -85,9 +85,9 @@ async def agentic_refine(state: AutomapState, ctx: NodeContext, params: AgenticP
     return {
         **evidence,
         "selected": selected,
-        # One concept replaces a combined first pick; the agent states no match type
+        # One concept replaces a combined first pick
         "selected_concepts": [],
-        "match_type": None,
+        "match_type": decision.match_type,
         "confidence": decision.confidence,
         "rationale": decision.rationale,
         "method": "auto_agentic",

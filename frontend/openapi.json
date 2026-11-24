@@ -4762,6 +4762,17 @@
             "type": "array",
             "minItems": 1,
             "title": "Concept Ids"
+          },
+          "match_type": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "broader",
+              "narrower",
+              "related"
+            ],
+            "title": "Match Type",
+            "default": "exact"
           }
         },
         "type": "object",
@@ -4847,6 +4858,17 @@
               }
             ],
             "title": "Freq"
+          },
+          "match_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Type"
           },
           "mapped_by": {
             "anyOf": [

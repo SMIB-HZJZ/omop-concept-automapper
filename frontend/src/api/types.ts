@@ -39,3 +39,10 @@ export type AutomapRequest = S["AutomapRequest"];
 export type SuggestRequest = S["SuggestRequest"];
 export type SuggestResponse = S["SuggestResponse"];
 export type WorkflowCatalog = S["WorkflowCatalog"];
+
+/** How a mapped concept relates to the source term. */
+export type MatchType = S["MapRequest"]["match_type"];
+export const MATCH_TYPES: MatchType[] = ["exact", "broader", "narrower", "related"];
+/** A match type from the API (a free string there), or ``fallback`` when it is not one. */
+export const asMatchType = (value: string | null | undefined, fallback: MatchType = "exact"): MatchType =>
+  MATCH_TYPES.find((t) => t === value) ?? fallback;

@@ -15,7 +15,14 @@ import {
   useSuggestions,
   useUnmap,
 } from "@/api/queries";
-import type { DrugStructure, SearchRequest, SuggestResponse, UnmappedItem } from "@/api/types";
+import {
+  asMatchType,
+  type DrugStructure,
+  type MatchType,
+  type SearchRequest,
+  type SuggestResponse,
+  type UnmappedItem,
+} from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { ErrorAlert } from "@/components/common";
 import { ConceptFilterFields } from "@/components/ConceptFilterFields";
@@ -190,6 +197,8 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const [pipeline, setPipeline] = useState(DEFAULT_PIPELINE);
   const [selected, setSelected] = useState<Map<number, ConceptLike>>(new Map());
   const [suggestion, setSuggestion] = useState<SuggestResponse | null>(null);
+  // How the chosen concept(s) relate to the term; a picked AI suggestion brings its own
+  const [matchType, setMatchType] = useState<MatchType>("exact");
   const [threshold] = useAutomapThreshold();
   const [domainMode] = useDomainMode();
   // Drugs: the structure as auto-mapping reads it (from the CSV, or the name read by the AI),
@@ -294,7 +303,11 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
         concept_class_id: c.concept_class_id,
       })),
     ];
-    setSelected((prev) => (prev.size ? prev : new Map(picks.map((c) => [c.concept_id, c]))));
+    setSelected((prev) => {
+      if (prev.size) return prev;
+      setMatchType(asMatchType(waiting.match_type));
+      return new Map(picks.map((c) => [c.concept_id, c]));
+    });
   }, [waiting]);
 
   const addConcept = (c: ConceptLike) => setSelected((prev) => new Map(prev).set(c.concept_id, c));
@@ -358,12 +371,17 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const confirm = () => {
     // Confirming exactly the waiting suggestion records it as accepted (keeps the calibration)
     const ids = [...selected.keys()].sort();
-    if (waiting && ids.length === waitingIds.length && [...waitingIds].sort().every((id, i) => id === ids[i])) {
+    if (
+      waiting &&
+      matchType === asMatchType(waiting.match_type) &&
+      ids.length === waitingIds.length &&
+      [...waitingIds].sort().every((id, i) => id === ids[i])
+    ) {
       decideWaiting("accept");
       return;
     }
     mapConcepts.mutate(
-      { source_id: concept.source_id, concept_ids: [...selected.keys()] },
+      { source_id: concept.source_id, concept_ids: [...selected.keys()], match_type: matchType },
       {
         onSuccess: (res) => {
           const sourceId = concept.source_id;
@@ -382,6 +400,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
             },
           });
           setSelected(new Map());
+          setMatchType("exact");
           onMapped();
         },
         onError: (err) => toast.error(errorMessage(err)),
@@ -644,6 +663,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
           <BelowThresholdPick
             suggestion={lowPick}
             onSelect={() => {
+              setMatchType(asMatchType(lowPick.match_type));
               addConcept({
                 concept_id: lowPick.concept_id,
                 concept_name: lowPick.concept_name,
@@ -671,7 +691,14 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
               exit={{ opacity: 0, height: 0 }}
               className="shrink-0 overflow-hidden"
             >
-              <SuggestionAlert suggestion={suggestion} threshold={threshold} onSelect={addConcept} />
+              <SuggestionAlert
+                suggestion={suggestion}
+                threshold={threshold}
+                onSelect={(c) => {
+                  setMatchType(asMatchType(suggestion.match_type));
+                  addConcept(c);
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -681,6 +708,8 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
           onRemove={removeConcept}
           onConfirm={confirm}
           confirming={mapConcepts.isPending || acceptSuggestion.isPending}
+          matchType={matchType}
+          onMatchTypeChange={setMatchType}
         />
 
         <ErrorAlert error={searchError} title="Search failed" />

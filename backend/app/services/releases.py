@@ -172,9 +172,9 @@ def publish(session: Session, vocabulary_id: int, user_id: int | None, note: str
             """
             INSERT INTO mapping_release_row
                 (release_id, source_id, source_value, source_concept_name, concept_id,
-                 target_vocabulary_id)
+                 target_vocabulary_id, match_type)
             SELECT :r, sc.source_id, sc.source_value, sc.source_concept_name, c.concept_id,
-                   c.vocabulary_id
+                   c.vocabulary_id, m.match_type
             FROM source_standard_map m
             JOIN source_concepts sc ON sc.source_id = m.source_id
             JOIN concept c ON c.concept_id = m.concept_id

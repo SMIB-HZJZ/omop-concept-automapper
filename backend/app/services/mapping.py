@@ -282,6 +282,8 @@ MAPPED_COLUMNS = [
     "concept_id",
     "domain_id",
     "freq",
+    # After the Streamlit app's columns, so existing readers of the file keep working
+    "match_type",
 ]
 
 
@@ -298,7 +300,7 @@ _MAPPED_FROM = """
 _MAPPED_SELECT = """
     SELECT sc.source_id, sc.source_value, sc.source_concept_name,
            c.concept_name, c.concept_id, c.domain_id, c.vocabulary_id, sc.freq,
-           u.username AS mapped_by, ssm.created_at AS mapped_at
+           ssm.match_type, u.username AS mapped_by, ssm.created_at AS mapped_at
 """
 _MAPPED_ORDER = " ORDER BY sc.freq DESC NULLS LAST, sc.source_id, c.concept_id"
 
@@ -548,10 +550,10 @@ def map_concepts(
         params = {"s": source_id, "c": concept_id, "u": user_id}
         session.execute(
             text(
-                "INSERT INTO source_standard_map (source_id, concept_id, created_by) "
-                "VALUES (:s, :c, :u) ON CONFLICT DO NOTHING"
+                "INSERT INTO source_standard_map (source_id, concept_id, created_by, match_type) "
+                "VALUES (:s, :c, :u, :match_type) ON CONFLICT DO NOTHING"
             ),
-            params,
+            {**params, "match_type": match_type},
         )
         session.execute(
             text(
@@ -614,7 +616,7 @@ def update_non_standard_mappings(conn) -> dict[str, int]:
         cur.execute(
             """
             CREATE TEMP TABLE stale_map ON COMMIT DROP AS
-            SELECT m.source_id, m.concept_id
+            SELECT m.source_id, m.concept_id, m.match_type
             FROM source_standard_map m JOIN concept c ON c.concept_id = m.concept_id
             WHERE c.standard_concept IS DISTINCT FROM 'S' OR c.invalid_reason IS NOT NULL
             """
@@ -622,7 +624,8 @@ def update_non_standard_mappings(conn) -> dict[str, int]:
         cur.execute(
             """
             CREATE TEMP TABLE stale_successor ON COMMIT DROP AS
-            SELECT DISTINCT s.source_id, s.concept_id AS old_id, r.concept_id_2 AS new_id
+            SELECT DISTINCT s.source_id, s.concept_id AS old_id, r.concept_id_2 AS new_id,
+                   s.match_type
             FROM stale_map s
             JOIN concept_relationship r
               ON r.concept_id_1 = s.concept_id AND r.relationship_id = 'Maps to'
@@ -637,16 +640,20 @@ def update_non_standard_mappings(conn) -> dict[str, int]:
         reopened = reopen_for_vocabulary_update(cur)
         cur.execute(
             """
-            INSERT INTO source_standard_map (source_id, concept_id)
-            SELECT DISTINCT source_id, new_id FROM stale_successor
+            -- The successor stands for the same meaning: the match type carries over
+            INSERT INTO source_standard_map (source_id, concept_id, match_type)
+            SELECT DISTINCT ON (source_id, new_id) source_id, new_id, match_type
+            FROM stale_successor
             ON CONFLICT (source_id, concept_id) DO NOTHING
             """
         )
         cur.execute(
             """
-            INSERT INTO auto_mapping_audit (source_id, concept_id, mapping_method, rationale)
+            INSERT INTO auto_mapping_audit
+                (source_id, concept_id, mapping_method, rationale, match_type)
             SELECT source_id, new_id, 'auto_vocab_update',
-                   'Vocabulary update: replaces concept ' || old_id || ', no longer standard'
+                   'Vocabulary update: replaces concept ' || old_id || ', no longer standard',
+                   match_type
             FROM stale_successor
             """
         )

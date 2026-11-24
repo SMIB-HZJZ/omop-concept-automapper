@@ -1585,6 +1585,12 @@ export interface components {
             source_id: number;
             /** Concept Ids */
             concept_ids: number[];
+            /**
+             * Match Type
+             * @default exact
+             * @enum {string}
+             */
+            match_type: "exact" | "broader" | "narrower" | "related";
         };
         /** MappedPage */
         MappedPage: {
@@ -1617,6 +1623,8 @@ export interface components {
             vocabulary_id: string;
             /** Freq */
             freq: number | null;
+            /** Match Type */
+            match_type?: string | null;
             /** Mapped By */
             mapped_by?: string | null;
             /** Mapped At */

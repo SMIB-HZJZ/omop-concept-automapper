@@ -69,6 +69,9 @@ class MappingDecision(BaseModel):
         description="The chosen standard OMOP concept_id, or null if none fits"
     )
     confidence: int | None = Field(default=None, ge=1, le=10)
+    match_type: Literal["exact", "broader", "narrower", "related"] | None = Field(
+        default=None, description="How the chosen concept relates to the source term"
+    )
     rationale: str = Field(description="One sentence explaining the decision")
 
 

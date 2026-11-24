@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-query";
 
 import { api, unwrap } from "./client";
-import type { ConfigUpdate, DrugStructure, SearchRequest, SuggestRequest } from "./types";
+import type { ConfigUpdate, DrugStructure, MatchType, SearchRequest, SuggestRequest } from "./types";
 
 /** Query keys. Everything about one source vocabulary lives under ["vocab", id]. */
 export const keys = {
@@ -230,7 +230,7 @@ export const useSuggestions = (id: number | null, filters: SuggestionFilters) =>
 export function useMapConcepts(vocabularyId: number | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { source_id: number; concept_ids: number[] }) =>
+    mutationFn: async (body: { source_id: number; concept_ids: number[]; match_type: MatchType }) =>
       unwrap(await api.POST("/api/mappings", { body })),
     onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
   });

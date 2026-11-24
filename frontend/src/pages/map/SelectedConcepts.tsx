@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from "motion/react";
 
 import { ConceptLink } from "@/components/ConceptLink";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MATCH_TYPES, type MatchType } from "@/api/types";
 import { cn } from "@/lib/utils";
 import type { ConceptLike } from "./types";
 import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
@@ -14,11 +16,16 @@ export function SelectedConcepts({
   onRemove,
   onConfirm,
   confirming,
+  matchType,
+  onMatchTypeChange,
 }: {
   concepts: ConceptLike[];
   onRemove: (conceptId: number) => void;
   onConfirm: () => void;
   confirming: boolean;
+  /** How the selected concept(s) relate to the source term */
+  matchType: MatchType;
+  onMatchTypeChange: (value: MatchType) => void;
 }) {
   const empty = concepts.length === 0;
   // A released vocabulary is locked until an admin starts the next release
@@ -62,9 +69,27 @@ export function SelectedConcepts({
           </motion.span>
         ))}
       </AnimatePresence>
+      {!empty && (
+        <Select value={matchType} onValueChange={(v) => onMatchTypeChange(v as MatchType)}>
+          <SelectTrigger
+            className="ml-auto h-8 w-40"
+            aria-label="Match type"
+            title="How the selected concept relates to the source term"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MATCH_TYPES.map((t) => (
+              <SelectItem key={t} value={t}>
+                {t[0].toUpperCase() + t.slice(1)} match
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
       <Button
         variant="cta"
-        className="ml-auto gap-1.5"
+        className={cn("gap-1.5", empty && "ml-auto")}
         onClick={onConfirm}
         disabled={empty || confirming || locked}
         title={locked ? "This vocabulary is released and locked" : undefined}

@@ -56,7 +56,12 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
     if missing:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Concept ID(s) not found: {missing}")
     mapping.map_concepts(
-        session, body.source_id, body.concept_ids, method="manual", user_id=user.id
+        session,
+        body.source_id,
+        body.concept_ids,
+        method="manual",
+        user_id=user.id,
+        match_type=body.match_type,
     )
     mapping.invalidate_vocabulary(source["source_vocabulary_id"])
     return CountResult(count=len(set(body.concept_ids)))

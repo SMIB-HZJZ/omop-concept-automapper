@@ -333,6 +333,8 @@ class MappedRow(BaseModel):
     domain_id: str
     vocabulary_id: str
     freq: int | None
+    # exact / broader / narrower / related; None when unknown (e.g. mapped in the import CSV)
+    match_type: str | None = None
     mapped_by: str | None = None
     mapped_at: datetime | None = None
 
@@ -387,9 +389,14 @@ class AuditEntry(BaseModel):
     created_at: datetime | None
 
 
+MatchType = Literal["exact", "broader", "narrower", "related"]
+
+
 class MapRequest(BaseModel):
     source_id: int
     concept_ids: list[int] = Field(min_length=1)
+    # How the concept(s) relate to the source term, as the mapper judges it
+    match_type: MatchType = "exact"
 
 
 class UnmapRequest(BaseModel):

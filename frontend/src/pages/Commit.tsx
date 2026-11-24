@@ -45,6 +45,15 @@ const columns: ColumnDef<MappedRow, unknown>[] = [
   { accessorKey: "concept_id", header: "Concept ID" },
   { accessorKey: "domain_id", header: "Domain" },
   {
+    accessorKey: "match_type",
+    header: "Match",
+    cell: ({ getValue }) => {
+      const value = getValue() as string | null;
+      if (!value) return <span className="text-muted-foreground">—</span>;
+      return value === "exact" ? value : <span className="text-amber-700 dark:text-amber-400">{value}</span>;
+    },
+  },
+  {
     accessorKey: "freq",
     header: "Freq",
     cell: ({ getValue }) => (getValue() as number | null)?.toLocaleString() ?? "—",
