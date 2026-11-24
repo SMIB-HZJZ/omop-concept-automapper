@@ -390,7 +390,8 @@ def _component_quality(component: DrugComponent, row: dict) -> str | None:
 def _drug_quality(
     structure: DrugStructure, component_of: dict[int, DrugComponent], rows: list[dict]
 ) -> str | None:
-    """One drug's rows vs the source: "exact", "approx" or None."""
+    """One drug's rows vs the source: "exact", an approximate kind ("total", "volume", see
+    APPROXIMATE_REASONS) or None."""
     qualities = [_component_quality(component_of[r["ingredient_concept_id"]], r) for r in rows]
     if None in qualities:
         return None
@@ -405,8 +406,19 @@ def _drug_quality(
             return None  # another volume
         quantity_matches = True
     if "total" in qualities and not quantity_matches:
-        return "approx"  # 10 mg could be in 1 mL or in 2 mL
+        return "total"  # 10 mg could be in 1 mL or in 2 mL
+    if quant and structure.quantity_value is None:
+        return "volume"  # 5 mg/mL in a 2 mL ampoule, but the source may be a 10 mL vial
     return "exact"
+
+
+# Why a drug matched only approximately, by the kind _drug_quality returns
+APPROXIMATE_REASONS = {
+    "total": "an amount without a quantity compared with the total amount of quantified drugs "
+    "(the volume is unknown)",
+    "volume": "a concentration without a quantity matched only quantified drugs "
+    "(the volume of the source is unknown)",
+}
 
 
 _BRAND_FILTER = """
@@ -612,13 +624,14 @@ def _match_strengths(
     rough: DrugMatch | None = None
     for level, class_ids in levels:
         by_drug = _strength_rows(session, ingredient_ids, class_ids, forms, brand_id)
-        exact, approx = [], []
+        exact, approx, kinds = [], [], []
         for drug, rows in by_drug.items():
             quality = _drug_quality(structure, component_of, rows)
             if quality == "exact":
                 exact.append(drug)
-            elif quality == "approx":
+            elif quality is not None:
                 approx.append(drug)
+                kinds.append(quality)
         vocabulary_of = {d: rows[0]["vocabulary_id"] for d, rows in by_drug.items()}
         if exact:
             exact = _prefer_rxnorm(vocabulary_of, exact)
@@ -628,11 +641,8 @@ def _match_strengths(
             rough = DrugMatch(
                 level,
                 approx,
-                f"{len(approx)} {class_ids[0]} with the same total amount",
-                approximate=[
-                    "an amount without a quantity compared with the total amount of "
-                    "quantified drugs (the volume is unknown)"
-                ],
+                f"{len(approx)} {class_ids[0]} of unknown volume",
+                approximate=[APPROXIMATE_REASONS[k] for k in dict.fromkeys(kinds)],
             )
     return rough
 

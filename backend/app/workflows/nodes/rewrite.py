@@ -6,10 +6,9 @@ import asyncio
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.llm.structured import QueryRewriter
-from app.services.drug_matching import BRANDED_CLASSES
 from app.vector.store import SearchFilters
 from app.workflows.context import NodeContext
-from app.workflows.nodes.retrieve import unbranded_drug
+from app.workflows.nodes.retrieve import excluded_drug_classes
 from app.workflows.registry import router
 from app.workflows.state import AutomapState
 
@@ -53,7 +52,7 @@ async def rewrite_search(state: AutomapState, ctx: NodeContext, params: RewriteP
         vocabulary_id=state.get("vocabulary_id"),
         atc7_codes=(state.get("atc7_codes") or []) if drug else [],
         # Like retrieve: no branded drugs for a source that names no brand
-        exclude_concept_classes=BRANDED_CLASSES if unbranded_drug(state) else (),
+        exclude_concept_classes=excluded_drug_classes(state),
     )
     found = await asyncio.gather(
         *(asyncio.to_thread(ctx.searcher.search, q, params.k, filters) for q in queries)

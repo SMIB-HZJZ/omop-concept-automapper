@@ -55,7 +55,38 @@ export function parseNumber(raw: string): number | null {
   return raw.trim() !== "" && Number.isFinite(v) && v > 0 ? v : null;
 }
 
-/** The structure sent for matching; null when no ingredient (and no brand) is filled in. */
+/** What keeps the form from being matched as typed: a number that is not one, a number without
+ * its unit, nothing to match. Empty when the form can be sent. */
+export function checkForm(f: StructureForm): string[] {
+  const errors: string[] = [];
+  const number = (raw: string, what: string) => {
+    if (raw.trim() && parseNumber(raw) === null) errors.push(`${what}: "${raw.trim()}" is not a positive number`);
+  };
+  const paired = (value: string, unit: string, what: string) => {
+    if (value.trim() && !unit.trim()) errors.push(`${what} needs a unit`);
+    if (!value.trim() && unit.trim()) errors.push(`${what}: a unit without a number`);
+  };
+  for (const r of f.rows) {
+    const filled = [r.value, r.unit, r.perValue, r.perUnit].some((v) => v.trim());
+    if (!r.ingredient.trim()) {
+      if (filled) errors.push("A strength without an ingredient");
+      continue;
+    }
+    const name = r.ingredient.trim();
+    number(r.value, `Strength of ${name}`);
+    paired(r.value, r.unit, `Strength of ${name}`);
+    number(r.perValue, `"Per" of ${name}`);
+    if (r.perValue.trim() && !r.perUnit.trim()) errors.push(`"Per" of ${name} needs a unit`);
+    if ((r.perValue.trim() || r.perUnit.trim()) && !r.value.trim()) errors.push(`"Per" of ${name} needs a strength`);
+  }
+  number(f.quantityValue, "Quantity");
+  paired(f.quantityValue, f.quantityUnit, "Quantity");
+  if (!f.rows.some((r) => r.ingredient.trim()) && !f.brand.trim()) errors.push("Enter an ingredient or a brand");
+  return errors;
+}
+
+/** The structure sent for matching; null when no ingredient (and no brand) is filled in.
+ * Check the form with ``checkForm`` first: values that do not parse are dropped here. */
 export function fromForm(f: StructureForm): DrugStructure | null {
   const text = (v: string) => v.trim() || null;
   const components: DrugComponent[] = f.rows

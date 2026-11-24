@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { emptyRow, formatStrength, fromForm, toForm, type StructureForm } from "@/lib/drugStructure";
+import { checkForm, emptyRow, formatStrength, fromForm, toForm, type StructureForm } from "@/lib/drugStructure";
 import { cn } from "@/lib/utils";
 
 const STATUS: Record<DrugMatch["status"], { label: string; className: string; hint: string }> = {
@@ -114,7 +114,8 @@ function StructureEditor({
   onCancel: () => void;
 }) {
   const [form, setForm] = useState(initial);
-  const structure = fromForm(form);
+  const errors = checkForm(form);
+  const structure = errors.length ? null : fromForm(form);
   const setRow = (i: number, key: keyof StructureForm["rows"][number], value: string) =>
     setForm((f) => ({ ...f, rows: f.rows.map((r, j) => (j === i ? { ...r, [key]: value } : r)) }));
   const field = "h-8 text-sm";
@@ -239,6 +240,13 @@ function StructureEditor({
           />
         </div>
       </div>
+      {errors.length > 0 && (
+        <ul aria-live="polite" className="text-destructive list-disc space-y-0.5 pl-4 text-xs">
+          {errors.map((e) => (
+            <li key={e}>{e}</li>
+          ))}
+        </ul>
+      )}
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={!structure}>
           Match
@@ -263,10 +271,23 @@ type Props = {
   /** Tick the matched drugs */
   onUse: () => void;
   used: boolean;
+  /** The user typed their own search text: it is searched as typed, without the drug filters */
+  searchEdited: boolean;
 };
 
 /** The term's drug structure, how it was read and what it matches, as auto-mapping sees it. */
-export function DrugPanel({ match, loading, error, edited, onEdit, showBranded, onShowBranded, onUse, used }: Props) {
+export function DrugPanel({
+  match,
+  loading,
+  error,
+  edited,
+  onEdit,
+  showBranded,
+  onShowBranded,
+  onUse,
+  used,
+  searchEdited,
+}: Props) {
   const [editing, setEditing] = useState(false);
   const status = match ? STATUS[match.status] : null;
   const hidesBranded = (match?.exclude_classes?.length ?? 0) > 0;
@@ -352,18 +373,25 @@ export function DrugPanel({ match, loading, error, edited, onEdit, showBranded, 
               The AI does not read this term as a drug product. Search other domains, or Edit to give its structure.
             </p>
           )}
-          {match.search_text && (
+          {searchEdited ? (
             <p className="text-muted-foreground">
-              <span className="font-medium">Also searching:</span>{" "}
-              <span className="font-mono">{match.search_text}</span>
+              Your search text is searched as typed: the structure query, its matches and the brand filter apply to the
+              source term only.
             </p>
+          ) : (
+            match.search_text && (
+              <p className="text-muted-foreground">
+                <span className="font-medium">Also searching:</span>{" "}
+                <span className="font-mono">{match.search_text}</span>
+              </p>
+            )
           )}
           {match.brand_in_name && (
             <p className="text-muted-foreground">
               The name contains the brand <b>{match.brand_in_name}</b>, so branded drugs stay in the results.
             </p>
           )}
-          {hidesBranded && (
+          {hidesBranded && !searchEdited && (
             <div className="flex items-center gap-2 pt-0.5">
               <Switch id="show-branded" size="sm" checked={showBranded} onCheckedChange={onShowBranded} />
               <Label htmlFor="show-branded" className="text-xs font-normal">

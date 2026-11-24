@@ -34,6 +34,11 @@ class MatchDrugParams(BaseModel):
     parse_free_text: bool = True
     # Confidence given to a unique deterministic match
     confidence: int = 10
+    # A term without a brand (none in its structure, no RxNorm brand name written in it): later
+    # searches leave branded drugs out (meta.drug_exclude_branded). They outnumber clinical
+    # drugs and score almost the same, so they would fill the candidate list; deterministic
+    # matches are kept either way.
+    skip_branded_without_brand: bool = True
 
 
 def _rx_number(value: float) -> str:
@@ -213,8 +218,8 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
     notes = [f"Parsed drug structure ({origin}): {described}"]
     brand_in_name = None
     if not structure.brand_name and ctx.brand_finder is not None:
-        # The structure names no brand: is one written in the term anyway? Then the search keeps
-        # branded drugs (see retrieve.skip_branded_without_brand)
+        # The structure names no brand: is one written in the term anyway? Then the searches
+        # keep branded drugs (see skip_branded_without_brand)
         brand_in_name = await asyncio.to_thread(ctx.brand_finder, state.get("source_name", ""))
     if match.resolved:
         notes.append("Names read as: " + "; ".join(match.resolved))
@@ -228,6 +233,9 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
             "drug_level": match.level,
             "drug_search_text": search_text(match.rxnorm or structure),
             **({"drug_brand_in_name": brand_in_name} if brand_in_name else {}),
+            "drug_exclude_branded": params.skip_branded_without_brand
+            and not structure.brand_name
+            and not brand_in_name,
             "drug_status": "approximate"
             if match.approximate
             else ("tie" if match.concept_ids else "none"),

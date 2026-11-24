@@ -27,13 +27,12 @@ from app.schemas.api import (
 )
 from app.services import mapping, suggestions
 from app.services.atc7 import is_valid_atc7
-from app.services.drug_matching import BRANDED_CLASSES
 from app.services.settings_store import EffectiveConfig, get_effective_config
 from app.vector.store import CollectionMissing
 from app.worker.tasks.automap import run_automap
 from app.workflows.builder import PipelineError, get_pipeline
 from app.workflows.nodes.drug import MatchDrugParams, match_drug
-from app.workflows.nodes.retrieve import unbranded_drug
+from app.workflows.nodes.retrieve import excluded_drug_classes
 from app.workflows.service import build_context, default_pipeline, initial_state, run_pipeline
 from app.workflows.steps import decision_path, step_label
 
@@ -159,7 +158,7 @@ async def suggest(
             default_pipeline, bool(state["drug_specific"])
         )
         compiled = await asyncio.to_thread(get_pipeline, pipeline)
-        ctx = build_context(cfg)
+        ctx = await asyncio.to_thread(build_context, cfg)
         if progress:
             key = _progress_key(progress)
 
@@ -193,6 +192,16 @@ async def suggest(
     )
 
 
+def _drug_step_params() -> MatchDrugParams:
+    """The drug step's settings in the default drug pipeline, so the panel decides like
+    auto-mapping (e.g. whether branded drugs are left out)."""
+    _graph, definition = get_pipeline(default_pipeline(True))
+    for ref in definition.nodes.values():
+        if ref.uses == "match_drug":
+            return MatchDrugParams.model_validate(ref.params)
+    return MatchDrugParams()
+
+
 @router.post("/source-concepts/{source_id}/drug-match", response_model=DrugMatchResponse)
 async def drug_match(source_id: int, body: DrugMatchRequest, _: CurrentUser):
     """Run auto-mapping's deterministic drug step for one term: its structure (provided, edited
@@ -212,11 +221,13 @@ async def drug_match(source_id: int, body: DrugMatchRequest, _: CurrentUser):
             body.structure.model_dump(exclude_none=True) if edited else source.get("drug_structure")
         ),
     )
-    ctx = build_context(cfg)
+    # build_context reads the database and Redis: off the event loop
+    ctx, params = await asyncio.to_thread(lambda: (build_context(cfg), _drug_step_params()))
     if ctx.drug_matcher is None:
         return DrugMatchResponse(source_id=source_id, status="unavailable")
     # An edited structure is matched as it is, not replaced by a parse of the name
-    _route, update = await match_drug(state, ctx, MatchDrugParams(parse_free_text=not edited))
+    params = params.model_copy(update={"parse_free_text": params.parse_free_text and not edited})
+    _route, update = await match_drug(state, ctx, params)
     meta = update.get("meta") or {}
     concepts = update.get("selected_concepts") or (
         [update["selected"]] if update.get("selected") else update.get("structured_candidates")
@@ -234,7 +245,7 @@ async def drug_match(source_id: int, body: DrugMatchRequest, _: CurrentUser):
         approximate=meta.get("drug_match_approximate") or [],
         search_text=meta.get("drug_search_text"),
         brand_in_name=meta.get("drug_brand_in_name"),
-        exclude_classes=list(BRANDED_CLASSES) if unbranded_drug({**state, "meta": meta}) else [],
+        exclude_classes=list(excluded_drug_classes({**state, "meta": meta})),
         candidates=[{"rank": i + 1, "score": 1.0, **c} for i, c in enumerate(concepts or [])],
     )
 

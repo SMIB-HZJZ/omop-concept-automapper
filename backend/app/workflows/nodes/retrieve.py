@@ -28,10 +28,8 @@ class RetrieveParams(BaseModel):
     rrf_k: int = Field(default=60, ge=1)
     # domain_mode "prefer": how many candidates from other domains are added
     other_domains: int = Field(default=5, ge=0, le=50)
-    # Drugs whose structure (provided or parsed) names no brand: leave branded drugs out of the
-    # search. They outnumber clinical drugs and score almost the same, so they would fill the
-    # candidate list; deterministic matches (structured candidates) are kept either way.
-    skip_branded_without_brand: bool = True
+    # Drugs: also search the structure written like an RxNorm name (set by match_drug)
+    drug_search_text: bool = True
 
     @model_validator(mode="before")
     @classmethod
@@ -45,17 +43,12 @@ class RetrieveParams(BaseModel):
         return data
 
 
-def unbranded_drug(state: AutomapState) -> bool:
-    """A drug without a brand: its structure (provided or parsed by the drug step) names none
-    and no RxNorm brand name is written in the term. Unknown (no structure) counts as branded."""
-    meta = state.get("meta") or {}
-    structure = meta.get("drug_structure")
-    return (
-        bool(state.get("drug_specific"))
-        and structure is not None
-        and not structure.get("brand_name")
-        and not meta.get("drug_brand_in_name")
-    )
+def excluded_drug_classes(state: AutomapState) -> tuple[str, ...]:
+    """Concept classes every search for this term leaves out: branded drugs when the drug step
+    decided the term has no brand (``meta.drug_exclude_branded``, see MatchDrugParams)."""
+    if state.get("drug_specific") and (state.get("meta") or {}).get("drug_exclude_branded"):
+        return BRANDED_CLASSES
+    return ()
 
 
 def _merge(result_lists: list[list[dict]], k: int) -> list[dict]:
@@ -96,20 +89,21 @@ async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams
     atc7 = (state.get("atc7_codes") or []) if (drug and params.use_atc7) else []
     domains = state.get("domains") or []
     mode = state.get("domain_mode") or "restrict"
-    no_brand = unbranded_drug(state)
     filters = SearchFilters(
         domains=domains if mode != "all" else [],
         vocabulary_id=state.get("vocabulary_id"),
         atc7_codes=atc7,
-        exclude_concept_classes=(
-            BRANDED_CLASSES if no_brand and params.skip_branded_without_brand else ()
-        ),
+        exclude_concept_classes=excluded_drug_classes(state),
     )
     query = state.get("query") or state.get("source_name", "")
     queries = [query]
-    translated = state.get("translated_query")
-    if translated and translated.strip().lower() != query.strip().lower():
-        queries.append(translated)
+    extra = [state.get("translated_query")]
+    if drug and params.drug_search_text:
+        # e.g. "acetaminophen 500 MG Oral Tablet": RxNorm drug names follow this pattern
+        extra.append((state.get("meta") or {}).get("drug_search_text"))
+    for q in extra:
+        if q and q.strip().lower() not in {x.strip().lower() for x in queries}:
+            queries.append(q)
     keyword = params.keyword and ctx.lexical is not None
 
     async def search(f: SearchFilters, limit: int) -> list[dict]:
@@ -125,12 +119,12 @@ async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams
 
     results = await search(filters, k)
     note = f"ATC7 {', '.join(atc7)}" if atc7 else ("vector+keyword" if keyword else "similarity")
-    if filters.exclude_concept_classes:
-        note += ", no branded drugs (the source names no brand)"
     if not results and atc7 and params.atc7_fallback:
         filters.atc7_codes = ()
         results = await search(filters, k)
         note = "no ATC7 match, fell back to similarity"
+    if filters.exclude_concept_classes:
+        note += ", no branded drugs (the source names no brand)"
     if mode == "prefer" and domains and params.other_domains:
         others = await search(
             SearchFilters(

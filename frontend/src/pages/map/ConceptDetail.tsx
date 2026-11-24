@@ -223,9 +223,10 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
           concept_classes: conceptClasses,
           atc7_codes: atc7Codes,
           // As auto-mapping: also search the structure written like an RxNorm name, leave
-          // branded drugs out when the term names no brand, and drop a fruitless ATC7 filter
+          // branded drugs out when the term names no brand, and drop a fruitless ATC7 filter.
+          // Text the user typed is searched as typed (it may be a brand name).
           extra_queries: !edited && dm?.search_text ? [dm.search_text] : [],
-          exclude_concept_classes: showBranded ? [] : (dm?.exclude_classes ?? []),
+          exclude_concept_classes: edited || showBranded ? [] : (dm?.exclude_classes ?? []),
           atc7_fallback: isDrug,
         }
       : null;
@@ -233,11 +234,12 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const results = useMemo(() => {
     const found = (search.data?.results ?? []) as ConceptLike[];
     const status = dm?.status;
-    if (!dm?.candidates.length || (status !== "exact" && status !== "tie" && status !== "approximate")) return found;
+    if (edited || !dm?.candidates.length || (status !== "exact" && status !== "tie" && status !== "approximate"))
+      return found;
     // Structured matches first, as auto-mapping gives them to the AI first
     const ids = new Set(dm.candidates.map((c) => c.concept_id));
     return [...dm.candidates.map((c) => ({ ...c, match: status })), ...found.filter((r) => !ids.has(r.concept_id))];
-  }, [search.data, dm]);
+  }, [search.data, dm, edited]);
   const drugIds = (dm?.candidates ?? []).map((c) => c.concept_id);
   const drugUsed = drugIds.length > 0 && drugIds.every((id) => selected.has(id));
 
@@ -468,6 +470,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
             showBranded={showBranded}
             onShowBranded={setShowBranded}
             used={drugUsed}
+            searchEdited={edited}
             onUse={() => {
               for (const c of dm?.candidates ?? [])
                 addConcept({ ...c, match: dm?.status === "exact" ? "exact" : undefined });
