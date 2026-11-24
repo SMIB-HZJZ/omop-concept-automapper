@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ApiError, errorMessage } from "@/api/client";
 import {
   useDecideSuggestions,
+  useDrugMatch,
   useMapConcepts,
   useSearch,
   useSuggest,
@@ -14,7 +15,7 @@ import {
   useSuggestions,
   useUnmap,
 } from "@/api/queries";
-import type { SearchRequest, SuggestResponse, UnmappedItem } from "@/api/types";
+import type { DrugStructure, SearchRequest, SuggestResponse, UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
 import { ErrorAlert } from "@/components/common";
 import { ConceptFilterFields } from "@/components/ConceptFilterFields";
@@ -32,6 +33,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import { isValidAtc7 } from "@/lib/atc7";
 import { ManualConceptIds } from "./ManualConceptIds";
+import { DrugPanel } from "./DrugPanel";
 import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 import { SelectedConcepts } from "./SelectedConcepts";
 import { SuggestionAlert } from "./SuggestionAlert";
@@ -113,6 +115,24 @@ const RESULT_COLUMNS: ColumnDef<ConceptLike, unknown>[] = [
           <ConceptLink conceptId={c.concept_id} className="leading-snug font-medium">
             {c.concept_name}
           </ConceptLink>
+          {c.match && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "ml-1.5 align-middle text-[10px]",
+                c.match === "approximate"
+                  ? "border-warning/40 bg-warning/10 text-warning"
+                  : "border-success/40 bg-success/10 text-success",
+              )}
+              title="Found by matching the drug structure (ingredients, strengths, form) on drug_strength"
+            >
+              {c.match === "exact"
+                ? "structure match"
+                : c.match === "tie"
+                  ? "structure match (one of several)"
+                  : "close structure match"}
+            </Badge>
+          )}
           <div className="text-muted-foreground text-xs">
             {c.concept_class_id} · {c.vocabulary_id} · {c.concept_id}
             {atc7.length > 0 && <span className="font-mono"> · {atc7.slice(0, 2).join(", ")}</span>}
@@ -126,7 +146,12 @@ const RESULT_COLUMNS: ColumnDef<ConceptLike, unknown>[] = [
     accessorKey: "score",
     header: "Score",
     size: 70,
-    cell: ({ row }) => <span className="text-xs tabular-nums">{row.original.score?.toFixed(3) ?? "—"}</span>,
+    cell: ({ row }) =>
+      row.original.match ? (
+        <span className="text-muted-foreground text-xs">match</span>
+      ) : (
+        <span className="text-xs tabular-nums">{row.original.score?.toFixed(3) ?? "—"}</span>
+      ),
   },
   {
     id: "explain",
@@ -167,6 +192,12 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const [suggestion, setSuggestion] = useState<SuggestResponse | null>(null);
   const [threshold] = useAutomapThreshold();
   const [domainMode] = useDomainMode();
+  // Drugs: the structure as auto-mapping reads it (from the CSV, or the name read by the AI),
+  // which the user can edit; its matches are listed first and it shapes the search below
+  const [editedStructure, setEditedStructure] = useState<DrugStructure | null>(null);
+  const [showBranded, setShowBranded] = useState(false);
+  const drugMatch = useDrugMatch(concept.source_id, editedStructure, isDrug);
+  const dm = isDrug ? drugMatch.data : undefined;
   // No reset effect: the parent keys this component by source_id, so state starts fresh per concept
 
   const manualValid = manualAtc7 === "" || isValidAtc7(manualAtc7);
@@ -179,18 +210,36 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const edited = name.trim() !== concept.source_concept_name.trim();
   const debouncedName = useDebounce(name.trim(), 400);
   const debouncedLimit = useDebounce(limit, 400);
-  const request: SearchRequest | null = debouncedName
-    ? {
-        query: debouncedName,
-        k: debouncedLimit,
-        domains,
-        vocabularies,
-        concept_classes: conceptClasses,
-        atc7_codes: atc7Codes,
-      }
-    : null;
+  // A provided structure is matched quickly (no AI): wait for it, so the first search is already
+  // the drug search. A name the AI must read is searched as typed meanwhile.
+  const waitForDrug = isDrug && !!concept.drug_structure && drugMatch.isPending;
+  const request: SearchRequest | null =
+    debouncedName && !waitForDrug
+      ? {
+          query: debouncedName,
+          k: debouncedLimit,
+          domains,
+          vocabularies,
+          concept_classes: conceptClasses,
+          atc7_codes: atc7Codes,
+          // As auto-mapping: also search the structure written like an RxNorm name, leave
+          // branded drugs out when the term names no brand, and drop a fruitless ATC7 filter
+          extra_queries: !edited && dm?.search_text ? [dm.search_text] : [],
+          exclude_concept_classes: showBranded ? [] : (dm?.exclude_classes ?? []),
+          atc7_fallback: isDrug,
+        }
+      : null;
   const search = useSearch(request);
-  const results = (search.data?.results ?? []) as ConceptLike[];
+  const results = useMemo(() => {
+    const found = (search.data?.results ?? []) as ConceptLike[];
+    const status = dm?.status;
+    if (!dm?.candidates.length || (status !== "exact" && status !== "tie" && status !== "approximate")) return found;
+    // Structured matches first, as auto-mapping gives them to the AI first
+    const ids = new Set(dm.candidates.map((c) => c.concept_id));
+    return [...dm.candidates.map((c) => ({ ...c, match: status })), ...found.filter((r) => !ids.has(r.concept_id))];
+  }, [search.data, dm]);
+  const drugIds = (dm?.candidates ?? []).map((c) => c.concept_id);
+  const drugUsed = drugIds.length > 0 && drugIds.every((id) => selected.has(id));
 
   const suggest = useSuggest();
   // Polled while AI suggest runs, to show which step it is at
@@ -408,6 +457,23 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
             )}
           </div>
         </motion.div>
+
+        {isDrug && (
+          <DrugPanel
+            match={drugMatch.data}
+            loading={drugMatch.isFetching}
+            error={drugMatch.error}
+            edited={editedStructure}
+            onEdit={setEditedStructure}
+            showBranded={showBranded}
+            onShowBranded={setShowBranded}
+            used={drugUsed}
+            onUse={() => {
+              for (const c of dm?.candidates ?? [])
+                addConcept({ ...c, match: dm?.status === "exact" ? "exact" : undefined });
+            }}
+          />
+        )}
 
         {/* Search and AI. The box starts with the source term; first-time users need to be told
             they can change it */}

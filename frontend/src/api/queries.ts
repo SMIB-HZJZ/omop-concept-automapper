@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { api, unwrap } from "./client";
-import type { ConfigUpdate, SearchRequest, SuggestRequest } from "./types";
+import type { ConfigUpdate, DrugStructure, SearchRequest, SuggestRequest } from "./types";
 
 /** Query keys. Everything about one source vocabulary lives under ["vocab", id]. */
 export const keys = {
@@ -27,6 +27,7 @@ export const keys = {
   workflows: ["workflows"] as const,
   users: ["users"] as const,
   search: (body: object) => ["search", body] as const,
+  drugMatch: (sourceId: number, structure: object | null) => ["drug-match", sourceId, structure] as const,
   concepts: (ids: string) => ["concepts", ids] as const,
   conceptDetails: (id: number) => ["concept-details", id] as const,
   presence: (vocabularyId: number) => ["presence", vocabularyId] as const,
@@ -308,6 +309,24 @@ export const useSuggestProgress = (progressId: string | null) =>
   });
 
 // ----------------------------------------------------------------------------- search / concepts
+
+/** Auto-mapping's deterministic drug step for one term: its structure (from the CSV, edited, or
+ * read from the name by the AI) matched on drug_strength, with the matching drugs. */
+export const useDrugMatch = (sourceId: number, structure: DrugStructure | null, enabled: boolean) =>
+  useQuery({
+    queryKey: keys.drugMatch(sourceId, structure),
+    queryFn: async () =>
+      unwrap(
+        await api.POST("/api/source-concepts/{source_id}/drug-match", {
+          params: { path: { source_id: sourceId } },
+          body: { structure },
+        }),
+      ),
+    enabled,
+    // The match only changes with the vocabulary; parsing a name costs an AI call
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
 
 export const useSearch = (body: SearchRequest | null) =>
   useQuery({

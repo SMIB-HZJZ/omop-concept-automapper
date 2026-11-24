@@ -321,6 +321,22 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
     const idx = items.findIndex((i) => String(i.source_id) === selectedSource);
     const next = idx >= 0 ? items[idx + 1] : undefined;
     if (!next) return;
+    if (isDrug && next.drug_structure) {
+      // Its first search waits for the structure match: load that instead (no AI call for
+      // names the vocabulary knows)
+      void qc.prefetchQuery({
+        queryKey: keys.drugMatch(next.source_id, null),
+        queryFn: async () =>
+          unwrap(
+            await api.POST("/api/source-concepts/{source_id}/drug-match", {
+              params: { path: { source_id: next.source_id } },
+              body: { structure: null },
+            }),
+          ),
+        staleTime: 10 * 60_000,
+      });
+      return;
+    }
     const body = defaultSearchRequest(next, isDrug, mapDomains);
     void qc.prefetchQuery({
       queryKey: keys.search(body),

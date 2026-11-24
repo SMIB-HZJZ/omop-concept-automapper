@@ -8,4 +8,6 @@ export type ConceptLike = {
   concept_code?: string;
   atc7_codes?: string[] | null;
   score?: number;
+  /** Set for drugs found by the structured drug match (not by the similarity search) */
+  match?: "exact" | "tie" | "approximate";
 };
