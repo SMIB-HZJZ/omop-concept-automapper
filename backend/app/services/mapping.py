@@ -134,8 +134,9 @@ def get_unmapped(
     )
     params: dict = {"v": vocabulary_id}
     if q and q.strip():
-        where += " AND (sc.source_concept_name ILIKE :q OR sc.source_value ILIKE :q)"
-        params["q"] = f"%{q.strip()}%"
+        # lower() LIKE: served by the trigram indexes on both columns (migration 0018)
+        where += " AND (lower(sc.source_concept_name) LIKE :q OR lower(sc.source_value) LIKE :q)"
+        params["q"] = _search_params(q)["q"]
     joins = (
         "FROM source_concepts sc"
         " LEFT JOIN mapping_suggestion ms ON ms.source_id = sc.source_id AND ms.status = 'pending'"
@@ -296,8 +297,8 @@ _MAPPED_FROM = """
     WHERE sc.source_vocabulary_id = :v
       AND (NOT CAST(:flagged AS boolean) OR sc.flag IS NOT NULL)
       AND (CAST(:q AS text) IS NULL
-           OR sc.source_value ILIKE :q OR sc.source_concept_name ILIKE :q
-           OR c.concept_name ILIKE :q OR CAST(c.concept_id AS text) = :q_exact)
+           OR lower(sc.source_value) LIKE :q OR lower(sc.source_concept_name) LIKE :q
+           OR lower(c.concept_name) LIKE :q OR CAST(c.concept_id AS text) = :q_exact)
 """
 _MAPPED_SELECT = """
     SELECT sc.source_id, sc.source_value, sc.source_concept_name,
@@ -312,7 +313,8 @@ def _search_params(q: str | None) -> dict:
     q = (q or "").strip()
     if not q:
         return {"q": None, "q_exact": None}
-    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    escaped = q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    # A lower-case LIKE pattern (``%`` and ``_`` typed by the user match themselves)
     return {"q": f"%{escaped}%", "q_exact": q}
 
 
@@ -588,6 +590,23 @@ def map_concepts(
     if commit:
         session.commit()
     return True
+
+
+def current_mapping(session: Session, source_id: int) -> dict | None:
+    """The term's current mapping: its concept ids, who made it and when; None if unmapped."""
+    row = session.execute(
+        text(
+            """
+            SELECT array_agg(m.concept_id ORDER BY m.concept_id) AS concept_ids,
+                   (array_agg(u.username ORDER BY m.created_at DESC))[1] AS mapped_by,
+                   MAX(m.created_at) AS mapped_at
+            FROM source_standard_map m LEFT JOIN app_user u ON u.id = m.created_by
+            WHERE m.source_id = :s
+            """
+        ),
+        {"s": source_id},
+    ).one()
+    return dict(row._mapping) if row.concept_ids else None
 
 
 def all_mapped_by(session: Session, source_ids: Sequence[int], user_id: int | None) -> bool:

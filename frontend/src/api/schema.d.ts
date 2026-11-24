@@ -1594,6 +1594,11 @@ export interface components {
              * @enum {string}
              */
             match_type: "exact" | "broader" | "narrower" | "related";
+            /**
+             * Replace
+             * @default false
+             */
+            replace: boolean;
         };
         /** MappedPage */
         MappedPage: {

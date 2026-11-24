@@ -4,7 +4,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { ApiError, errorMessage } from "@/api/client";
+import { alreadyMapped, ApiError, errorMessage } from "@/api/client";
+import { formatDate } from "@/lib/format";
 import {
   useDecideSuggestions,
   useDrugMatch,
@@ -380,8 +381,13 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
       decideWaiting("accept");
       return;
     }
+    save(false);
+  };
+
+  /** Save the selection; ``replace`` overwrites a mapping someone else made meanwhile. */
+  const save = (replace: boolean) =>
     mapConcepts.mutate(
-      { source_id: concept.source_id, concept_ids: [...selected.keys()], match_type: matchType },
+      { source_id: concept.source_id, concept_ids: [...selected.keys()], match_type: matchType, replace },
       {
         onSuccess: (res) => {
           const sourceId = concept.source_id;
@@ -403,10 +409,20 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
           setMatchType("exact");
           onMapped();
         },
-        onError: (err) => toast.error(errorMessage(err)),
+        onError: (err) => {
+          const conflict = alreadyMapped(err);
+          if (!conflict) {
+            toast.error(errorMessage(err));
+            return;
+          }
+          toast.warning(`Already mapped by ${conflict.mapped_by ?? "an automatic step"}`, {
+            description: `${formatDate(conflict.mapped_at)}: concept ${conflict.concept_ids.join(", ")}. Replace it with your choice?`,
+            duration: 15000,
+            action: { label: "Replace", onClick: () => save(true) },
+          });
+        },
       },
     );
-  };
 
   // Shortcuts: 1-9 tick a candidate, Enter confirms, S asks the AI (not while typing or in a dialog)
   const shortcuts = useRef({ results, selected, confirm, runSuggest, toggle: onTableSelection, selectedIds });

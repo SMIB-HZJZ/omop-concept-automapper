@@ -107,7 +107,7 @@ def test_release_locks_the_vocabulary_and_keeps_history(
     for source, concepts in (("A", [202]), ("C", [201])):
         resp = client.post(
             "/api/mappings",
-            json={"source_id": ids[source], "concept_ids": concepts},
+            json={"source_id": ids[source], "concept_ids": concepts, "replace": True},
             headers=admin_headers,
         )
         assert resp.status_code == 200, resp.text

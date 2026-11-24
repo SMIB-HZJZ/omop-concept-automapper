@@ -402,6 +402,9 @@ class MapRequest(BaseModel):
     concept_ids: list[int] = Field(min_length=1)
     # How the concept(s) relate to the source term, as the mapper judges it
     match_type: MatchType = "exact"
+    # False: refuse (409, code "already_mapped") when someone else (or an automatic step) has
+    # mapped the term to other concepts, e.g. meanwhile; True: replace that mapping
+    replace: bool = False
 
 
 class UnmapRequest(BaseModel):

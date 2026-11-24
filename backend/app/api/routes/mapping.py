@@ -1,6 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
+from sqlalchemy import text
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.api.routes._tasks import start_task
@@ -55,6 +56,31 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
     missing = [c for c in body.concept_ids if c not in found]
     if missing:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Concept ID(s) not found: {missing}")
+    if not body.replace:
+        # Serialise with other writers of this term, then check nobody mapped it meanwhile
+        session.execute(
+            text("SELECT 1 FROM source_concepts WHERE source_id = :s FOR UPDATE"),
+            {"s": body.source_id},
+        )
+        current = mapping.current_mapping(session, body.source_id)
+        # Changing one's own mapping is fine; another person's (or an automatic one) is asked
+        if (
+            current
+            and sorted(set(body.concept_ids)) != current["concept_ids"]
+            and not mapping.all_mapped_by(session, [body.source_id], user.id)
+        ):
+            session.rollback()
+            who = current["mapped_by"] or "an automatic step"
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                {
+                    "code": "already_mapped",
+                    "message": f"Already mapped by {who}; replace that mapping?",
+                    "mapped_by": current["mapped_by"],
+                    "mapped_at": current["mapped_at"].isoformat() if current["mapped_at"] else None,
+                    "concept_ids": current["concept_ids"],
+                },
+            )
     mapping.map_concepts(
         session,
         body.source_id,

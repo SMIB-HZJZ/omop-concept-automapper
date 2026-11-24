@@ -7,7 +7,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
-import { api, unwrap } from "./client";
+import { alreadyMapped, api, unwrap } from "./client";
 import type { ConfigUpdate, DrugStructure, MatchType, SearchRequest, SuggestRequest } from "./types";
 
 /** Query keys. Everything about one source vocabulary lives under ["vocab", id]. */
@@ -157,6 +157,9 @@ export const useUnmapped = (id: number | null, page: number, perPage: number, vi
       ),
     enabled: id !== null,
     placeholderData: keepPreviousData,
+    // Colleagues map terms too: refresh while the page is open (not in a background tab)
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
 export const useMapped = (id: number | null, page: number, perPage: number, q: string, flagged = false) =>
@@ -234,9 +237,13 @@ export const useSuggestions = (id: number | null, filters: SuggestionFilters) =>
 export function useMapConcepts(vocabularyId: number | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { source_id: number; concept_ids: number[]; match_type: MatchType }) =>
+    mutationFn: async (body: { source_id: number; concept_ids: number[]; match_type: MatchType; replace: boolean }) =>
       unwrap(await api.POST("/api/mappings", { body })),
     onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
+    // Mapped by someone else meanwhile: the term list is out of date
+    onError: (error) => {
+      if (alreadyMapped(error)) invalidateVocabulary(qc, vocabularyId ?? undefined);
+    },
   });
 }
 

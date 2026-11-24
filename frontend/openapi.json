@@ -4786,6 +4786,11 @@
             ],
             "title": "Match Type",
             "default": "exact"
+          },
+          "replace": {
+            "type": "boolean",
+            "title": "Replace",
+            "default": false
           }
         },
         "type": "object",
