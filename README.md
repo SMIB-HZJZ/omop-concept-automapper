@@ -57,12 +57,15 @@ The UI runs on port 8501. Put it behind HTTPS and sign in as `ADMIN_USERNAME` / 
    N02BE01-1,Paracetamol 500 mg tbl,paracetamol,500,mg,tablet
    ```
 
-4. **Map Concepts**. Work through the unmapped terms. Search, select one or more concepts and confirm.
+4. **Map Concepts**. Work through the unmapped terms. Search, select one or more concepts, say how they relate to the term (exact by default; broader, narrower or related) and confirm.
    - **AI suggest** runs the mapping pipeline for one term and shows its pick, confidence and trace.
    - **Auto map** runs the pipeline for the whole vocabulary in the background. In *review* mode (the default) its picks become suggestions. Its settings choose target domains and, optionally, target vocabularies (e.g. LOINC), as *only these*, *preferred* or not used.
    - For drugs, the panel shows the structure (ingredients, strengths, dose form, brand, quantity) and its exact match. You can edit the structure and match again. Branded drugs are hidden unless the term names a brand.
 5. **Review**. Accept or reject suggestions one by one, as a selection, or all above a confidence level.
-6. **Check & Commit**. See and undo mappings, view statistics and download `vocabulary_<id>_mappings.csv`.
+6. **Check & Commit**. See and undo mappings with their match type, view statistics and download `vocabulary_<id>_mappings.csv`.
+   - **Publish release** (admin) makes the current mappings the official version and locks the vocabulary: no mapping, unmapping, auto-mapping or accepting suggestions until an admin clicks **Start release N+1**.
+   - Each release has its OMOP `source_to_concept_map`. Mappings of an earlier release that were later changed or removed stay in it, with a `valid_end_date` of the day before the release that changed them and `invalid_reason` `U` (remapped) or `D` (removed).
+   - An OMOP vocabulary update that has to replace or remove mappings of a released vocabulary starts its next release automatically, with a note.
 7. **Search**. Semantic search with domain, vocabulary and ATC7 filters.
 8. **Configuration** (admin). LLM and embedding models, mapping pipelines, and **Users**.
 
