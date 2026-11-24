@@ -379,9 +379,14 @@ export function ConceptDetail({
       {
         onSuccess: (res) => {
           if (kind === "accept" && res.count === 0) {
-            // No longer waiting: someone mapped or decided the term meanwhile. Saving the same
-            // choice tells whether it is mapped differently (and offers Replace)
-            save(selectionBody());
+            // No longer waiting: someone mapped or decided the term meanwhile. Saving the
+            // suggestion itself tells whether it is mapped differently (and offers Replace)
+            save({
+              source_id: concept.source_id,
+              concept_ids: waitingIds,
+              match_type: asMatchType(waiting.match_type),
+              replace: false,
+            });
           } else if (kind === "accept") {
             toast.success(`"${concept.source_concept_name}" mapped (AI suggestion accepted)`);
             onMapped();
@@ -419,9 +424,19 @@ export function ConceptDetail({
   });
 
   /** Save a mapping; with ``replace`` it overwrites one someone else made meanwhile. */
-  const save = (body: MapBody) =>
+  const save = (body: MapBody) => {
+    const version = selectionVersion.current;
     mapConcepts.mutate(body, {
       onSuccess: (res) => {
+        if (res.unchanged) {
+          // Exactly what a colleague mapped: nothing was written, so there is nothing to undo
+          toast.message(
+            `"${concept.source_concept_name}" was already mapped like this by ${res.mapped_by ?? "someone"}`,
+          );
+          setSelected(new Map());
+          onMapped();
+          return;
+        }
         const sourceId = concept.source_id;
         toast.success(`"${concept.source_concept_name}" mapped to ${res.count} concept(s)`, {
           duration: 8000,
@@ -449,6 +464,14 @@ export function ConceptDetail({
         }
         // The request that got the conflict is what Replace sends; the toast goes away when the
         // selection changes or the term is closed, so it never saves an outdated choice
+        if (version !== selectionVersion.current) {
+          // The selection changed while saving: Replace would send the old choice
+          toast.warning(
+            `"${concept.source_concept_name}" is already mapped by ${conflict.mapped_by ?? "an automatic step"}`,
+            { description: "Your selection changed meanwhile; confirm again to replace that mapping." },
+          );
+          return;
+        }
         conflictToast.current = toast.warning(
           `"${concept.source_concept_name}" is already mapped by ${conflict.mapped_by ?? "an automatic step"}`,
           {
@@ -461,9 +484,13 @@ export function ConceptDetail({
         );
       },
     });
+  };
 
   const conflictToast = useRef<string | number | undefined>(undefined);
+  // Counts selection changes, so a conflict that arrives after one does not offer Replace
+  const selectionVersion = useRef(0);
   useEffect(() => {
+    selectionVersion.current += 1;
     if (conflictToast.current !== undefined) toast.dismiss(conflictToast.current);
     conflictToast.current = undefined;
   }, [selected, matchType]);

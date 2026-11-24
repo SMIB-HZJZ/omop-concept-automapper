@@ -83,6 +83,8 @@ def persist_outcome(
         "path": decision_path(state),
     }
     with session_scope() as session:
+        # The term before any suggestion or mapping row (see mapping.lock_terms)
+        mapping.lock_terms(session, [state["source_id"]])
         if not accepted:
             if selected and state.get("confidence") is not None:
                 stored = session.execute(_BELOW_THRESHOLD_SQL, params).rowcount

@@ -83,8 +83,13 @@ def list_suggestions(
 
 
 def _select_pending(
-    session: Session, ids: list[int] | None, vocabulary_id: int | None, min_confidence: int | None
+    session: Session,
+    ids: list[int] | None,
+    vocabulary_id: int | None,
+    min_confidence: int | None,
+    only_sources: list[int] | None = None,
 ) -> list[dict]:
+    """Pending suggestions, locked; with ``only_sources``, only those of these (locked) terms."""
     if ids:
         sql = "SELECT ms.* FROM mapping_suggestion ms WHERE ms.status = 'pending' AND ms.id = ANY(:ids)"
         params: dict = {"ids": ids}
@@ -96,7 +101,28 @@ def _select_pending(
         params = {"v": vocabulary_id, "minc": min_confidence or 0}
     else:
         return []
+    if only_sources is not None:
+        sql += " AND ms.source_id = ANY(:only)"
+        params["only"] = only_sources
     return [dict(r) for r in session.execute(text(sql + " FOR UPDATE OF ms"), params).mappings()]
+
+
+def _pending_sources(
+    session: Session, ids: list[int] | None, vocabulary_id: int | None, min_confidence: int | None
+) -> list[int]:
+    """The terms of the pending suggestions _select_pending will take (read without locks)."""
+    if ids:
+        sql = "SELECT ms.source_id FROM mapping_suggestion ms WHERE ms.status = 'pending' AND ms.id = ANY(:ids)"
+        params: dict = {"ids": ids}
+    elif vocabulary_id is not None:
+        sql = (
+            "SELECT ms.source_id FROM mapping_suggestion ms JOIN source_concepts sc ON sc.source_id = ms.source_id "
+            "WHERE ms.status = 'pending' AND sc.source_vocabulary_id = :v AND ms.confidence >= :minc"
+        )
+        params = {"v": vocabulary_id, "minc": min_confidence or 0}
+    else:
+        return []
+    return list(session.execute(text(sql), params).scalars())
 
 
 def accept(
@@ -107,23 +133,11 @@ def accept(
     vocabulary_id: int | None = None,
     min_confidence: int | None = None,
 ) -> int:
-    # The vocabulary lock comes before the suggestion rows (see mapping.lock_vocabularies)
-    if vocabulary_id is not None:
-        mapping.lock_vocabularies(session, [vocabulary_id])
-    elif ids:
-        mapping.lock_vocabularies(
-            session,
-            session.execute(
-                text(
-                    "SELECT DISTINCT sc.source_vocabulary_id FROM mapping_suggestion ms "
-                    "JOIN source_concepts sc ON sc.source_id = ms.source_id WHERE ms.id = ANY(:ids)"
-                ),
-                {"ids": ids},
-            )
-            .scalars()
-            .all(),
-        )
-    rows = _select_pending(session, ids, vocabulary_id, min_confidence)
+    # The terms (and their vocabularies) before the suggestion rows: see mapping.lock_terms
+    sources = _pending_sources(session, ids, vocabulary_id, min_confidence)
+    mapping.lock_terms(session, sources)
+    # A suggestion that appeared meanwhile for another term waits for the next accept
+    rows = _select_pending(session, ids, vocabulary_id, min_confidence, only_sources=sources)
     now = datetime.now(UTC)
     for row in rows:
         mapping.map_concepts(

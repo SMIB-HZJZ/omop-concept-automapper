@@ -1600,6 +1600,18 @@ export interface components {
              */
             replace: boolean;
         };
+        /** MapResult */
+        MapResult: {
+            /** Count */
+            count: number;
+            /**
+             * Unchanged
+             * @default false
+             */
+            unchanged: boolean;
+            /** Mapped By */
+            mapped_by?: string | null;
+        };
         /** MappedPage */
         MappedPage: {
             /** Items */
@@ -3603,7 +3615,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CountResult"];
+                    "application/json": components["schemas"]["MapResult"];
                 };
             };
             /** @description Validation Error */

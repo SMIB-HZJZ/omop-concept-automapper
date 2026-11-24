@@ -71,7 +71,9 @@ def test_stale_confirmation_of_the_same_concepts(
     body = {"source_id": term, "concept_ids": [201], "match_type": "narrower"}
     assert client.post("/api/mappings", json=body, headers=user_headers).status_code == 200
     # Same concepts and match type from someone else: kept as it is, with its author
-    assert client.post("/api/mappings", json=body, headers=admin_headers).status_code == 200
+    same = client.post("/api/mappings", json=body, headers=admin_headers)
+    assert same.status_code == 200
+    assert same.json() == {"count": 1, "unchanged": True, "mapped_by": "mapper"}
     row = client.get(f"/api/source-vocabularies/{vid}/mapped", headers=user_headers).json()
     assert (row["items"][0]["mapped_by"], row["items"][0]["match_type"]) == ("mapper", "narrower")
     # Same concepts with another match type: asked like any other change
@@ -176,3 +178,63 @@ def test_mapping_during_vocabulary_update_waits_instead_of_deadlocking(
         update.commit()
     worker.join(timeout=10)
     assert outcome == {"user": "ok"}
+
+
+def _race(first, then, second) -> dict:
+    """``first(session)`` takes its locks; while it holds them ``second`` starts in another
+    thread; then ``then(session)`` finishes the first transaction. Returns each outcome."""
+    outcome: dict = {}
+
+    def run(name, fn):
+        try:
+            with session_scope() as s:
+                fn(s)
+            outcome[name] = "ok"
+        except Exception as exc:  # reported in the outcome
+            outcome[name] = type(exc).__name__
+
+    started = threading.Event()
+
+    def first_holding(s):
+        first(s)
+        started.set()
+        time.sleep(0.8)  # the second writer starts and takes what it can
+        then(s)
+        s.commit()
+
+    a = threading.Thread(target=run, args=("first", first_holding))
+    a.start()
+    started.wait(5)
+    b = threading.Thread(target=run, args=("second", second))
+    b.start()
+    a.join(15)
+    b.join(15)
+    return outcome
+
+
+def test_accept_and_manual_map_of_one_term_do_not_deadlock(
+    client, admin_headers, loaded_vocabulary
+):
+    """A manual map locks the term, then deletes the term's pending suggestion; an accept used to
+    lock the suggestion first, then wait for the term: a deadlock."""
+    from app.services import suggestions
+
+    vid = 155
+    import_source_csv(client, admin_headers, vid, b"source_value,source_concept_name\nA,dm2\n")
+    term = _ids(vid)["A"]
+    with session_scope() as s:
+        suggestion = s.execute(
+            text(
+                "INSERT INTO mapping_suggestion (source_id, concept_id, confidence, method, status) "
+                "VALUES (:s, 201, 9, 'auto_standard', 'pending') RETURNING id"
+            ),
+            {"s": term},
+        ).scalar_one()
+        s.commit()
+
+    outcome = _race(
+        lambda s: mapping.lock_terms(s, [term]),
+        lambda s: mapping.map_concepts(s, term, [202], user_id=None, commit=False),
+        lambda s: suggestions.accept(s, user_id=None, ids=[suggestion]),
+    )
+    assert outcome == {"first": "ok", "second": "ok"}

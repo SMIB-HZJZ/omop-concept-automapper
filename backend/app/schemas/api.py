@@ -407,6 +407,14 @@ class MapRequest(BaseModel):
     replace: bool = False
 
 
+class MapResult(BaseModel):
+    count: int
+    # The term was already mapped exactly like this by someone else: nothing was written, and
+    # the mapping (with its author) stays theirs
+    unchanged: bool = False
+    mapped_by: str | None = None
+
+
 class UnmapRequest(BaseModel):
     source_ids: list[int] = Field(min_length=1)
 

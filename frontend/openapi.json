@@ -1505,7 +1505,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CountResult"
+                  "$ref": "#/components/schemas/MapResult"
                 }
               }
             }
@@ -4799,6 +4799,35 @@
           "concept_ids"
         ],
         "title": "MapRequest"
+      },
+      "MapResult": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "unchanged": {
+            "type": "boolean",
+            "title": "Unchanged",
+            "default": false
+          },
+          "mapped_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapped By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "title": "MapResult"
       },
       "MappedPage": {
         "properties": {

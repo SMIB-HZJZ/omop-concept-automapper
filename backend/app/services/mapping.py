@@ -504,6 +504,23 @@ def lock_vocabularies(session: Session, vocabulary_ids: Sequence[int]) -> None:
         )
 
 
+def lock_terms(session: Session, source_ids: Sequence[int]) -> None:
+    """Lock source terms for writing: their vocabularies (shared) first, then the term rows in id
+    order. Every writer of mappings or suggestions takes these before any mapping or suggestion
+    row, so writers of the same term wait for each other instead of deadlocking (a manual map
+    deletes the term's suggestions, an accept writes its mapping)."""
+    ids = sorted(set(source_ids))
+    if not ids:
+        return
+    lock_vocabularies(session, list(vocabulary_of_sources(session, ids)))
+    session.execute(
+        text(
+            "SELECT 1 FROM source_concepts WHERE source_id = ANY(:ids) ORDER BY source_id FOR UPDATE"
+        ),
+        {"ids": ids},
+    )
+
+
 def vocabulary_of_sources(session: Session, source_ids: Sequence[int]) -> set[int]:
     if not source_ids:
         return set()
@@ -548,11 +565,9 @@ def map_concepts(
     mapped in the meantime, e.g. by hand while a long run was going. Returns whether it wrote.
     """
     concept_ids = list(dict.fromkeys(concept_ids))
-    lock_vocabularies(session, list(vocabulary_of_sources(session, [source_id])))
-    # Serialise writers of the same source concept (manual mapping vs. a running auto-map)
-    session.execute(
-        text("SELECT 1 FROM source_concepts WHERE source_id = :s FOR UPDATE"), {"s": source_id}
-    )
+    # Serialise writers of the same source concept (manual mapping vs. a running auto-map); a
+    # no-op when the caller already holds the locks
+    lock_terms(session, [source_id])
     if (
         only_if_unmapped
         and session.execute(
@@ -640,7 +655,7 @@ def all_mapped_by(session: Session, source_ids: Sequence[int], user_id: int | No
 def unmap(session: Session, source_ids: Sequence[int]) -> int:
     if not source_ids:
         return 0
-    lock_vocabularies(session, list(vocabulary_of_sources(session, source_ids)))
+    lock_terms(session, source_ids)
     deleted = session.execute(
         text("DELETE FROM source_standard_map WHERE source_id = ANY(:ids)"),
         {"ids": list(source_ids)},

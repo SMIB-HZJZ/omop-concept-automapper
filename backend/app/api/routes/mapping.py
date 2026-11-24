@@ -16,6 +16,7 @@ from app.schemas.api import (
     DrugMatchRequest,
     DrugMatchResponse,
     MapRequest,
+    MapResult,
     Message,
     SourceFlag,
     SuggestionDecision,
@@ -47,7 +48,7 @@ from app.workflows.steps import decision_path, step_label
 router = APIRouter(tags=["mapping"])
 
 
-@router.post("/mappings", response_model=CountResult)
+@router.post("/mappings", response_model=MapResult)
 def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
     source = mapping.get_source_concept(session, body.source_id)
     if source is None:
@@ -58,11 +59,7 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Concept ID(s) not found: {missing}")
     if not body.replace:
         # Serialise with other writers of this term, then check nobody mapped it meanwhile
-        mapping.lock_vocabularies(session, [source["source_vocabulary_id"]])
-        session.execute(
-            text("SELECT 1 FROM source_concepts WHERE source_id = :s FOR UPDATE"),
-            {"s": body.source_id},
-        )
+        mapping.lock_terms(session, [body.source_id])
         current = mapping.current_mapping(session, body.source_id)
         # Changing one's own mapping is fine; another person's (or an automatic one) is asked
         if current and not mapping.all_mapped_by(session, [body.source_id], user.id):
@@ -70,7 +67,11 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
             if same and set(current["match_types"]) == {body.match_type}:
                 # Exactly what is there already (e.g. a stale screen): keep it, and its author
                 session.rollback()
-                return CountResult(count=len(current["concept_ids"]))
+                return MapResult(
+                    count=len(current["concept_ids"]),
+                    unchanged=True,
+                    mapped_by=current["mapped_by"],
+                )
             session.rollback()
             who = current["mapped_by"] or "an automatic step"
             raise HTTPException(
@@ -93,7 +94,7 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
         match_type=body.match_type,
     )
     mapping.invalidate_vocabulary(source["source_vocabulary_id"])
-    return CountResult(count=len(set(body.concept_ids)))
+    return MapResult(count=len(set(body.concept_ids)))
 
 
 @router.post("/mappings/unmap", response_model=CountResult)
