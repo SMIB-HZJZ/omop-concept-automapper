@@ -6,6 +6,30 @@ Maps source medical terms (in any language) to OMOP standard concepts. It combin
 
 The full reference (deployment, every setting, providers and costs, drug mapping, pipelines, development) is in [docs/reference.md](docs/reference.md).
 
+![Mapping a term: the last auto-mapping pick with its reason, and the candidate concepts](docs/screenshots/map.png)
+
+<details>
+<summary>More screenshots</summary>
+
+**Drug mapping:** the structure read from the name and its exact RxNorm match.
+![Drug structure panel](docs/screenshots/map-drug.png)
+
+**Review:** AI suggestions with confidence and reason.
+![Review queue](docs/screenshots/review.png)
+
+**Search:** semantic search in any language.
+![Search concepts](docs/screenshots/search.png)
+
+**Check & commit:** final mappings, ready for export.
+![Check and commit](docs/screenshots/commit.png)
+
+**Import:** OMOP vocabulary tables, source terms and embeddings.
+![Import data](docs/screenshots/import.png)
+
+</details>
+
+All data shown is synthetic.
+
 ## Quick start
 
 You need Docker with Compose v2, an OMOP vocabulary download from [Athena](https://athena.ohdsi.org/) and an API key for an LLM provider.
