@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 class _Result(BaseModel):
     model_config = ConfigDict(extra="allow")
+    # Problems that did not fail the task but need the admin's attention (shown with the result)
+    warnings: list[str] = []
 
 
 class TableImportResult(_Result):

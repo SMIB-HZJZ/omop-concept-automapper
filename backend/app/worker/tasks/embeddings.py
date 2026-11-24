@@ -88,14 +88,26 @@ def embed_standard_concepts(
             pending = cur.fetchone()[0]
         read_conn.commit()
         if pending == 0:
-            return {
+            result = {
                 "collection": col.name,
                 "embedded": 0,
                 "message": "All concepts are already embedded",
+                "warnings": [],
             }
+            if not _index_exists(write_conn, table):
+                # A previous build failed or was stopped: a new run repairs it
+                progress.phase("Building the missing DiskANN index", cancellable=False)
+                warning = _build_index(write_conn, table)
+                cache.invalidate("embeddings")
+                if warning:
+                    result["warnings"] = [warning]
+                else:
+                    result["message"] += "; the missing vector index was rebuilt"
+            return result
 
         rebuild = pending > get_settings().diskann_rebuild_threshold
         embedded = 0
+        index_warning: str | None = None
         try:
             if rebuild:
                 # Bulk loads are much faster without the index; the finally block rebuilds it
@@ -147,14 +159,39 @@ def embed_standard_concepts(
             # cancel (that would skip the index build).
             write_conn.rollback()
             progress.phase("Building the DiskANN index", cancellable=False)
-            try:
-                store.create_index(write_conn, table)
-            except Exception:
-                logger.exception("Could not build the DiskANN index on %s", table)
-                write_conn.rollback()
+            index_warning = _build_index(write_conn, table)
             cache.invalidate("embeddings")
 
-    return {"collection": col.name, "embedded": embedded, "pending_before": pending}
+    return {
+        "collection": col.name,
+        "embedded": embedded,
+        "pending_before": pending,
+        "warnings": [index_warning] if index_warning else [],
+    }
+
+
+def _index_exists(conn, table: str) -> bool:
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass(%s) IS NOT NULL", (store.index_name(table),))
+        exists = cur.fetchone()[0]
+    conn.rollback()
+    return exists
+
+
+def _build_index(conn, table: str) -> str | None:
+    """Build the DiskANN index; a failure is returned as a warning, not raised, so the vectors
+    written so far count as done and the task finishes (with the warning shown to the admin)."""
+    try:
+        store.create_index(conn, table)
+    except Exception as exc:
+        logger.exception("Could not build the DiskANN index on %s", table)
+        conn.rollback()
+        reason = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+        return (
+            f"The vector index could not be built ({reason}). Search still works but is slow "
+            "and may miss concepts; start Embed again to rebuild the index."
+        )
+    return None
 
 
 @celery_app.task(bind=True, base=TrackedTask, name="embeddings.sync_metadata", lock_name="embed")

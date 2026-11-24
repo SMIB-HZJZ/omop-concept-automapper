@@ -26,3 +26,10 @@ export function taskVocabularyId(task: Task): number | undefined {
   const id = task.params?.vocabulary_id;
   return typeof id === "number" ? id : undefined;
 }
+
+/** Problems a finished task reported without failing (e.g. the vector index could not be built).
+ * Results stored before the field existed have none. */
+export function taskWarnings(task: Task): string[] {
+  const warnings = task.result?.warnings;
+  return Array.isArray(warnings) ? warnings.filter((w): w is string => typeof w === "string" && w !== "") : [];
+}

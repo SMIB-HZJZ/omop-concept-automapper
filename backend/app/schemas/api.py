@@ -482,6 +482,8 @@ class EmbeddingStatus(BaseModel):
     # Embedded concepts whose text changed in a vocabulary update (re-embedded by the next run)
     changed: int = 0
     percentage: float
+    # False when vectors exist but the DiskANN index is missing (a failed or stopped build)
+    index_ready: bool = True
 
 
 class EmbedRequest(BaseModel):

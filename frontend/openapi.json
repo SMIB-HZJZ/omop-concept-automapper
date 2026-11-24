@@ -3992,6 +3992,11 @@
           "percentage": {
             "type": "number",
             "title": "Percentage"
+          },
+          "index_ready": {
+            "type": "boolean",
+            "title": "Index Ready",
+            "default": true
           }
         },
         "type": "object",
@@ -6243,6 +6248,14 @@
       "AutomapResult": {
         "additionalProperties": true,
         "properties": {
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
           "vocabulary_id": {
             "title": "Vocabulary Id",
             "type": "integer"
@@ -6373,6 +6386,14 @@
       "EmbedResult": {
         "additionalProperties": true,
         "properties": {
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
           "collection": {
             "title": "Collection",
             "type": "string"
@@ -6416,6 +6437,14 @@
       "EmbeddingRefresh": {
         "additionalProperties": true,
         "properties": {
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
           "changed": {
             "default": 0,
             "title": "Changed",
@@ -6457,6 +6486,14 @@
       "SourceImportResult": {
         "additionalProperties": true,
         "properties": {
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
           "inserted": {
             "title": "Inserted",
             "type": "integer"
@@ -6511,6 +6548,14 @@
       "SyncMetadataResult": {
         "additionalProperties": true,
         "properties": {
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
           "collection": {
             "anyOf": [
               {
@@ -6554,6 +6599,14 @@
       "TableImportResult": {
         "additionalProperties": true,
         "properties": {
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -6585,6 +6638,14 @@
       "VocabularyImportResult": {
         "additionalProperties": true,
         "properties": {
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
           "tables": {
             "additionalProperties": {
               "$ref": "#/components/schemas/TableImportResult"

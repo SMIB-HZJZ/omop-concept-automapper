@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -11,6 +12,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorAlert, StatCard } from "@/components/common";
 import { MultiSelect } from "@/components/MultiSelect";
 import { TaskProgress } from "@/components/TaskProgress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -172,6 +174,16 @@ export function EmbeddingsTab() {
             }
           />
         </div>
+        {s?.exists && !s.index_ready && !anyActive && (
+          <Alert className="border-warning/50 bg-warning/10">
+            <AlertTriangle className="text-warning" />
+            <AlertTitle>No vector index</AlertTitle>
+            <AlertDescription>
+              The last index build failed or was stopped. Search still works but is slow and may miss concepts.
+              {isAdmin ? " Start Embed again to rebuild the index." : " Ask an admin to start Embed again."}
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="space-y-1">
           <Progress value={s?.percentage ?? 0} aria-label="Embedded standard concepts" />
           <div className="text-muted-foreground text-xs">

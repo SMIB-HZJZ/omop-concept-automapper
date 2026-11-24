@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { taskResult, taskVocabularyId } from "./taskResults";
+import { taskResult, taskVocabularyId, taskWarnings } from "./taskResults";
 import type { Task } from "./types";
 
 const task = (overrides: Partial<Task>): Task => ({
@@ -29,5 +29,16 @@ describe("taskVocabularyId", () => {
     expect(taskVocabularyId(task({ params: { vocabulary_id: 7 } }))).toBe(7);
     expect(taskVocabularyId(task({ params: { vocabulary_id: "7" } }))).toBeUndefined();
     expect(taskVocabularyId(task({ params: null }))).toBeUndefined();
+  });
+});
+
+describe("taskWarnings", () => {
+  it("lists the warnings of a finished task", () => {
+    expect(taskWarnings(task({ result: { warnings: ["index missing", ""] } }))).toEqual(["index missing"]);
+  });
+
+  it("is empty for results without warnings", () => {
+    expect(taskWarnings(task({ result: { embedded: 3 } }))).toEqual([]);
+    expect(taskWarnings(task({ result: null }))).toEqual([]);
   });
 });

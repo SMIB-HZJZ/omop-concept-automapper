@@ -378,6 +378,7 @@ def embedding_status(
         ).one()
         points = session.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar_one()
         total, embedded, changed = int(row.total), int(row.embedded), int(row.changed)
+        index_ready = has_index(session, col.table_name) or points == 0  # type: ignore[union-attr]
     else:
         total = session.execute(
             text(
@@ -387,6 +388,7 @@ def embedding_status(
             params,
         ).scalar_one()
         embedded, points, changed = 0, 0, 0
+        index_ready = True
     return {
         "collection": collection,
         "exists": exists,
@@ -396,6 +398,7 @@ def embedding_status(
         "pending": int(total) - embedded,
         "changed": changed,
         "percentage": (embedded / total * 100) if total else 0.0,
+        "index_ready": index_ready,
     }
 
 

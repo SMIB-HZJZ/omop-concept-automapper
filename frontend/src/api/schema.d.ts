@@ -1314,6 +1314,11 @@ export interface components {
             changed: number;
             /** Percentage */
             percentage: number;
+            /**
+             * Index Ready
+             * @default true
+             */
+            index_ready: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2015,6 +2020,11 @@ export interface components {
         };
         /** AutomapResult */
         AutomapResult: {
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
             /** Vocabulary Id */
             vocabulary_id: number;
             /** Total Concepts */
@@ -2087,6 +2097,11 @@ export interface components {
         };
         /** EmbedResult */
         EmbedResult: {
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
             /** Collection */
             collection: string;
             /** Embedded */
@@ -2106,6 +2121,11 @@ export interface components {
         };
         /** EmbeddingRefresh */
         EmbeddingRefresh: {
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
             /**
              * Changed
              * @default 0
@@ -2131,6 +2151,11 @@ export interface components {
         };
         /** SourceImportResult */
         SourceImportResult: {
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
             /** Inserted */
             inserted: number;
             /** Premapped Sources */
@@ -2157,6 +2182,11 @@ export interface components {
         /** SyncMetadataResult */
         SyncMetadataResult: {
             /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+            /**
              * Collection
              * @default null
              */
@@ -2175,6 +2205,11 @@ export interface components {
         };
         /** TableImportResult */
         TableImportResult: {
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
             /** Status */
             status: string;
             /** Records Imported */
@@ -2189,6 +2224,11 @@ export interface components {
         };
         /** VocabularyImportResult */
         VocabularyImportResult: {
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
             /** Tables */
             tables: {
                 [key: string]: components["schemas"]["TableImportResult"];

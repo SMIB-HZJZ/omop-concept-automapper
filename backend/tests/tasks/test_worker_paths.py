@@ -51,6 +51,43 @@ def test_cancelled_embedding_still_builds_the_index(client, admin_headers, embed
         client.post("/api/config/reset", headers=admin_headers)
 
 
+def test_failed_index_build_finishes_with_a_warning_and_a_rerun_repairs_it(
+    client, admin_headers, embedded, monkeypatch
+):
+    """A failed DiskANN build keeps the vectors, finishes with a visible warning, shows in the
+    status, and the next Embed run (with nothing left to embed) builds the missing index."""
+    from app.vector import store
+
+    client.put("/api/config", json={"embedding_dims": 40}, headers=admin_headers)
+    try:
+
+        def broken(conn, table):
+            raise RuntimeError("canceling statement due to user request")
+
+        monkeypatch.setattr(store, "create_index", broken)
+        resp = client.post("/api/embeddings/embed", json={"batch_size": 10}, headers=admin_headers)
+        task = _status(client, admin_headers, resp)
+        assert task["status"] == "SUCCESS", task
+        assert task["result"]["embedded"] > 0
+        [warning] = task["result"]["warnings"]
+        assert "could not be built (canceling statement" in warning
+        status = client.get("/api/embeddings/status", headers=admin_headers).json()
+        assert status["index_ready"] is False and status["pending"] == 0
+        monkeypatch.undo()
+
+        resp = client.post("/api/embeddings/embed", json={"batch_size": 10}, headers=admin_headers)
+        task = _status(client, admin_headers, resp)
+        assert task["status"] == "SUCCESS" and task["result"]["warnings"] == [], task
+        assert "index was rebuilt" in task["result"]["message"]
+        status = client.get("/api/embeddings/status", headers=admin_headers).json()
+        assert status["index_ready"] is True
+    finally:
+        client.delete(
+            "/api/embeddings", params={"confirm": "test_embedder_40"}, headers=admin_headers
+        )
+        client.post("/api/config/reset", headers=admin_headers)
+
+
 def test_bulk_upsert_handles_different_vector_sizes_on_one_connection(loaded_vocabulary):
     """The staging table must not keep the vector size of the first collection loaded."""
     from sqlmodel import Session

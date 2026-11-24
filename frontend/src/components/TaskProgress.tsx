@@ -1,6 +1,7 @@
-import { CheckCircle2, Loader2, XCircle, Ban } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, XCircle, Ban } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { taskWarnings } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 import { formatDate } from "@/lib/format";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -54,6 +55,27 @@ export function TaskProgress({
         <Ban />
         <AlertTitle>{taskLabel(task.kind)} cancelled</AlertTitle>
         <AlertDescription>{task.message}</AlertDescription>
+      </Alert>
+    );
+  }
+  const warnings = task.status === "SUCCESS" ? taskWarnings(task) : [];
+  if (warnings.length) {
+    // Finished, but something needs the admin's attention: kept apart from a plain success
+    return (
+      <Alert className="border-warning/50 bg-warning/10">
+        <AlertTriangle className="text-warning" />
+        <AlertTitle>
+          {taskLabel(task.kind)} finished with {warnings.length === 1 ? "a warning" : `${warnings.length} warnings`}{" "}
+          <span className="text-muted-foreground font-normal">· {formatDate(task.finished_at)}</span>
+        </AlertTitle>
+        <AlertDescription>
+          <ul className="list-disc space-y-1 pl-4">
+            {warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+          {renderResult && task.result && <div className="mt-1">{renderResult(task)}</div>}
+        </AlertDescription>
       </Alert>
     );
   }
