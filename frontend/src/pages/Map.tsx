@@ -13,11 +13,11 @@ import {
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
-import { api, unwrap } from "@/api/client";
 import { useAuth } from "@/auth/useAuth";
 import {
-  keys,
+  drugMatchQuery,
   leaveVocabulary,
+  searchQuery,
   useAuditRecent,
   useAuditStats,
   useMappingStats,
@@ -322,27 +322,14 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
     const next = idx >= 0 ? items[idx + 1] : undefined;
     if (!next) return;
     if (isDrug && next.drug_structure) {
-      // Its first search waits for the structure match: load that instead (no AI call for
-      // names the vocabulary knows)
-      void qc.prefetchQuery({
-        queryKey: keys.drugMatch(next.source_id, null),
-        queryFn: async () =>
-          unwrap(
-            await api.POST("/api/source-concepts/{source_id}/drug-match", {
-              params: { path: { source_id: next.source_id } },
-              body: { structure: null },
-            }),
-          ),
-        staleTime: 10 * 60_000,
-      });
+      // Its first search waits for the structure match (no AI call for names the vocabulary
+      // knows): load the match, then the search built from it
+      qc.fetchQuery(drugMatchQuery(next.source_id, null))
+        .then((match) => qc.prefetchQuery(searchQuery(defaultSearchRequest(next, isDrug, mapDomains, match))))
+        .catch(() => {}); // the panel loads it again and shows any error
       return;
     }
-    const body = defaultSearchRequest(next, isDrug, mapDomains);
-    void qc.prefetchQuery({
-      queryKey: keys.search(body),
-      queryFn: async () => ({ ...unwrap(await api.POST("/api/search", { body })), request: body }),
-      staleTime: 60_000,
-    });
+    void qc.prefetchQuery(searchQuery(defaultSearchRequest(next, isDrug, mapDomains)));
   }, [items, selectedSource, isDrug, mapDomains, qc]);
 
   const allMapped = stats.data && stats.data.unmapped === 0;

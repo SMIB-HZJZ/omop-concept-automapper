@@ -75,6 +75,10 @@ class DrugMatch:
     unresolved_units: list[str] = field(default_factory=list)
     # The structure as finally matched (ingredients translated), set by the workflow step
     structure: DrugStructure | None = None
+    # The match left out part of the source, named in ``reason``: a stated quantity no drug has
+    # (matched the drug without it), or a brand with no matching product (clinical level)
+    dropped_quantity: bool = False
+    dropped_brand: bool = False
     # The structure in RxNorm names (standard ingredients, the chosen RxNorm dose form), once
     # every name was resolved; used to write a search query like an RxNorm drug name
     rxnorm: DrugStructure | None = None
@@ -502,12 +506,21 @@ def _drug_forms(
     forms: list[int] | None,
     brand_id: int | None = None,
 ) -> list[int]:
-    """Clinical/Branded Drug Forms with exactly these ingredients (and form/brand if given)."""
+    """Clinical/Branded Drug Forms with exactly these ingredients (and form/brand if given).
+
+    Only drugs with the first ingredient are compared (an indexed lookup), not every Drug Form:
+    comparing each one's ingredient list took about half a second per call."""
+    ingredients = sorted(set(ingredient_ids))
     rows = session.execute(
         text(
             """
             SELECT c.concept_id, c.vocabulary_id
             FROM concept c
+            JOIN (
+                SELECT DISTINCT concept_id_1 FROM concept_relationship
+                WHERE concept_id_2 = :first AND relationship_id = 'RxNorm has ing'
+                  AND invalid_reason IS NULL
+            ) with_first ON with_first.concept_id_1 = c.concept_id
             WHERE c.concept_class_id = :cls AND c.standard_concept = 'S'
               AND c.invalid_reason IS NULL AND c.vocabulary_id = ANY(:vocabs)
               AND (
@@ -525,7 +538,8 @@ def _drug_forms(
             "vocabs": list(DRUG_VOCABULARIES),
             "forms": forms or None,
             "brand": brand_id,
-            "ingredients": sorted(set(ingredient_ids)),
+            "ingredients": ingredients,
+            "first": ingredients[0],
         },
     ).all()
     return _prefer_rxnorm({cid: voc for cid, voc in rows}, [cid for cid, _ in rows])
@@ -706,6 +720,7 @@ def _match_level(
         found = _match_strengths(session, structure, ingredient_ids, levels, forms, brand_id)
         if found and with_quantity and found.level == plain[0]:
             found.reason += "; no drug with this quantity, used the one without"
+            found.dropped_quantity = True
         return found
     if with_strength:
         return _match_comps(
@@ -735,12 +750,13 @@ def _match_levels(
     branded = (
         _match_level(session, structure, ingredient_ids, forms, brand_id) if brand_id else None
     )
-    if branded is not None and "used the one without" not in branded.reason:
+    if branded is not None and not branded.dropped_quantity:
         return branded
     clinical = _match_level(session, structure, ingredient_ids, forms, None)
     if branded is None:
         if clinical is not None and brand_id is not None:
             clinical.reason += "; no branded match, used the clinical level"
+            clinical.dropped_brand = True
         return clinical
     if clinical is not None and clinical.level and clinical.level.startswith("quant_"):
         return DrugMatch(

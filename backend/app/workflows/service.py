@@ -73,21 +73,20 @@ def _drug_vocabulary_info(session: Session) -> dict:
     }
 
 
-def _drug_parser(llm_model: str) -> DrugParser | None:
-    """None when drug_strength is not loaded (the drug step then falls back right away)."""
+def _drug_parts(llm_model: str) -> dict:
+    """The drug step's dependencies; none when drug_strength is not loaded (the drug step then
+    falls back right away). The vocabulary facts are read once for all of them."""
     with Session(get_engine()) as session:
         info = _drug_vocabulary_info(session)
     if not info["has_drug_strength"]:
-        return None
-    return DrugParser(llm_model, info["dose_forms"], effort=get_settings().llm_reasoning_effort)
-
-
-def _dose_form_picker(llm_model: str) -> DoseFormPicker | None:
-    with Session(get_engine()) as session:
-        info = _drug_vocabulary_info(session)
-    if not info["has_drug_strength"]:
-        return None
-    return DoseFormPicker(llm_model, info["dose_forms"], effort=get_settings().llm_reasoning_effort)
+        return {}
+    effort = get_settings().llm_reasoning_effort
+    return {
+        "drug_parser": DrugParser(llm_model, info["dose_forms"], effort=effort),
+        "dose_form_picker": DoseFormPicker(llm_model, info["dose_forms"], effort=effort),
+        "drug_matcher": _match_drug,
+        "brand_finder": _brand_in_name,
+    }
 
 
 def default_pipeline(drug_specific: bool) -> str:
@@ -135,7 +134,6 @@ def build_reranker(llm_model: str) -> Reranker | CascadeReranker | EscalatingRer
 
 
 def build_context(cfg: EffectiveConfig) -> NodeContext:
-    drug_parser = _drug_parser(cfg.llm_model)
     return NodeContext(
         searcher=SessionSearcher(
             cfg.collection_name,
@@ -143,17 +141,27 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
         ),
         reranker=build_reranker(cfg.llm_model),
         translator=Translator(cfg.llm_model, effort=get_settings().llm_reasoning_effort),
-        drug_parser=drug_parser,
-        dose_form_picker=_dose_form_picker(cfg.llm_model) if drug_parser is not None else None,
-        # Both need drug_strength; without it the drug step falls back immediately
-        drug_matcher=_match_drug if drug_parser is not None else None,
-        brand_finder=_brand_in_name if drug_parser is not None else None,
+        **_drug_parts(cfg.llm_model),
         lexical=lexical,
         get_concepts=_get_concepts,
         get_concept_context=_concept_context,
         get_details=_agent_details,
         settings=get_settings(),
         llm_model=cfg.llm_model,
+    )
+
+
+def build_drug_context(cfg: EffectiveConfig) -> NodeContext:
+    """Only what the drug step needs (the mapping panel's drug match): no search index,
+    reranker or agent."""
+    return NodeContext(
+        searcher=None,  # type: ignore[arg-type]  # not used by the drug step
+        reranker=None,  # type: ignore[arg-type]
+        get_concepts=_get_concepts,
+        settings=get_settings(),
+        llm_model=cfg.llm_model,
+        translator=Translator(cfg.llm_model, effort=get_settings().llm_reasoning_effort),
+        **_drug_parts(cfg.llm_model),
     )
 
 

@@ -254,3 +254,41 @@ def test_concentration_without_volume_is_approximate_on_quant_drugs(drug_vocabul
             session, structure.model_copy(update={"quantity_value": 2, "quantity_unit": "mL"})
         )
     assert exact.concept_ids == [9037] and not exact.approximate
+
+
+class UsualFormPicker:
+    """Knows only the usual form for a listed one no product uses (the ``unused`` question)."""
+
+    def __init__(self, answer):
+        self.answer = answer
+        self.calls = []
+
+    async def pick(self, form, product=None, unused=False):
+        self.calls.append((form, unused))
+        return self.answer if unused else []
+
+
+async def test_usual_form_question_decides_the_match(drug_vocabulary):
+    """ "Tablet" is an RxNorm form, but no acetaminophen product uses it: the step asks for the
+    usual form and matches with that; without an answer there is no match."""
+    tablet = {
+        "components": [{"ingredient": "acetaminophen", "amount_value": 500, "amount_unit": "mg"}],
+        "dose_form": "Tablet",
+    }
+    picker = UsualFormPicker(["Oral Tablet"])
+    route, update = await match_drug(
+        drug_state("acetaminophen 500 mg tablet", tablet),
+        drug_ctx(picker=picker),
+        MatchDrugParams(parse_free_text=False),
+    )
+    assert picker.calls == [("Tablet", True)]
+    assert route == "matched" and update["selected"]["concept_id"] == 3
+
+    silent = UsualFormPicker([])
+    route, update = await match_drug(
+        drug_state("acetaminophen 500 mg tablet", tablet),
+        drug_ctx(picker=silent),
+        MatchDrugParams(parse_free_text=False),
+    )
+    assert silent.calls == [("Tablet", True)]
+    assert route == "fallback" and update["meta"]["drug_status"] == "none"

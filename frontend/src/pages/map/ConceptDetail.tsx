@@ -38,7 +38,7 @@ import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 import { SelectedConcepts } from "./SelectedConcepts";
 import { SuggestionAlert } from "./SuggestionAlert";
 import { BelowThresholdPick, FlagBanner, FlagButton, WaitingSuggestion } from "./TermExtras";
-import { DEFAULT_LIMIT } from "./searchRequest";
+import { buildSearchRequest, DEFAULT_LIMIT } from "./searchRequest";
 import type { ConceptLike } from "./types";
 import { ConceptLink } from "@/components/ConceptLink";
 import { UserAvatar } from "@/components/UserAvatar";
@@ -215,20 +215,18 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const waitForDrug = isDrug && !!concept.drug_structure && drugMatch.isPending;
   const request: SearchRequest | null =
     debouncedName && !waitForDrug
-      ? {
+      ? buildSearchRequest({
           query: debouncedName,
-          k: debouncedLimit,
+          edited,
+          limit: debouncedLimit,
           domains,
           vocabularies,
-          concept_classes: conceptClasses,
-          atc7_codes: atc7Codes,
-          // As auto-mapping: also search the structure written like an RxNorm name, leave
-          // branded drugs out when the term names no brand, and drop a fruitless ATC7 filter.
-          // Text the user typed is searched as typed (it may be a brand name).
-          extra_queries: !edited && dm?.search_text ? [dm.search_text] : [],
-          exclude_concept_classes: edited || showBranded ? [] : (dm?.exclude_classes ?? []),
-          atc7_fallback: isDrug,
-        }
+          conceptClasses,
+          atc7Codes,
+          isDrug,
+          drugMatch: dm,
+          showBranded,
+        })
       : null;
   const search = useSearch(request);
   const results = useMemo(() => {

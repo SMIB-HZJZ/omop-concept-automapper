@@ -33,7 +33,13 @@ from app.worker.tasks.automap import run_automap
 from app.workflows.builder import PipelineError, get_pipeline
 from app.workflows.nodes.drug import MatchDrugParams, match_drug
 from app.workflows.nodes.retrieve import excluded_drug_classes
-from app.workflows.service import build_context, default_pipeline, initial_state, run_pipeline
+from app.workflows.service import (
+    build_context,
+    build_drug_context,
+    default_pipeline,
+    initial_state,
+    run_pipeline,
+)
 from app.workflows.steps import decision_path, step_label
 
 router = APIRouter(tags=["mapping"])
@@ -222,7 +228,7 @@ async def drug_match(source_id: int, body: DrugMatchRequest, _: CurrentUser):
         ),
     )
     # build_context reads the database and Redis: off the event loop
-    ctx, params = await asyncio.to_thread(lambda: (build_context(cfg), _drug_step_params()))
+    ctx, params = await asyncio.to_thread(lambda: (build_drug_context(cfg), _drug_step_params()))
     if ctx.drug_matcher is None:
         return DrugMatchResponse(source_id=source_id, status="unavailable")
     # An edited structure is matched as it is, not replaced by a parse of the name

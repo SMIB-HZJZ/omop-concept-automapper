@@ -255,7 +255,7 @@ class FakeFormPicker:
         self.calls = []
 
     async def pick(self, form, product=None, unused=False):
-        self.calls.append((form, product))
+        self.calls.append((form, product, unused))
         return self.forms.get(form, [])
 
 

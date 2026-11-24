@@ -1,4 +1,11 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import { api, unwrap } from "./client";
 import type { ConfigUpdate, DrugStructure, SearchRequest, SuggestRequest } from "./types";
@@ -312,8 +319,8 @@ export const useSuggestProgress = (progressId: string | null) =>
 
 /** Auto-mapping's deterministic drug step for one term: its structure (from the CSV, edited, or
  * read from the name by the AI) matched on drug_strength, with the matching drugs. */
-export const useDrugMatch = (sourceId: number, structure: DrugStructure | null, enabled: boolean) =>
-  useQuery({
+export const drugMatchQuery = (sourceId: number, structure: DrugStructure | null) =>
+  queryOptions({
     queryKey: keys.drugMatch(sourceId, structure),
     queryFn: async () =>
       unwrap(
@@ -322,21 +329,29 @@ export const useDrugMatch = (sourceId: number, structure: DrugStructure | null, 
           body: { structure },
         }),
       ),
-    enabled,
     // The match only changes with the vocabulary; parsing a name costs an AI call
     staleTime: 10 * 60_000,
     retry: false,
   });
 
-export const useSearch = (body: SearchRequest | null) =>
-  useQuery({
-    queryKey: keys.search(body ?? {}),
+export const useDrugMatch = (sourceId: number, structure: DrugStructure | null, enabled: boolean) =>
+  useQuery({ ...drugMatchQuery(sourceId, structure), enabled });
+
+/** One search; also used to load the next term's candidates early (same key, same data). */
+export const searchQuery = (body: SearchRequest) =>
+  queryOptions({
+    queryKey: keys.search(body),
     // Results carry their request: with keepPreviousData the shown results may belong to an older one
-    queryFn: async () => ({ ...unwrap(await api.POST("/api/search", { body: body! })), request: body! }),
-    enabled: body !== null && body.query.trim().length > 0,
-    placeholderData: keepPreviousData,
+    queryFn: async () => ({ ...unwrap(await api.POST("/api/search", { body })), request: body }),
     staleTime: 60_000,
     retry: false,
+  });
+
+export const useSearch = (body: SearchRequest | null) =>
+  useQuery({
+    ...searchQuery(body ?? ({ query: "" } as SearchRequest)),
+    enabled: body !== null && body.query.trim().length > 0,
+    placeholderData: keepPreviousData,
   });
 
 export const useConceptLookup = (ids: string) =>

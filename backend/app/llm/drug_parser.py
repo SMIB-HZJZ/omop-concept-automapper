@@ -53,7 +53,11 @@ Dose forms:
 {dose_forms}"""
 
 
-_PARSE_VERSION = hashlib.sha1(DRUG_PARSE_PROMPT.encode()).hexdigest()[:8]
+def _digest(text: str) -> str:
+    return hashlib.sha1(text.encode()).hexdigest()
+
+
+_PARSE_VERSION = _digest(DRUG_PARSE_PROMPT)[:8]
 
 
 class DrugParser:
@@ -68,12 +72,15 @@ class DrugParser:
     ):
         self.model = model
         self.dose_forms = dose_forms
+        # Part of the cache key: the prompt lists these forms, so a vocabulary update that
+        # renames or drops one must not reuse answers given for the old list
+        self._forms_digest = _digest("\n".join(dose_forms))
         self.effort = effort or None
         self._client = client
 
     def _key(self, term: str) -> str:
         # The prompt is part of the key: a changed prompt must not reuse old answers
-        digest = hashlib.sha1(f"{_PARSE_VERSION}\n{term.strip()}".encode()).hexdigest()
+        digest = _digest(f"{_PARSE_VERSION}\n{self._forms_digest}\n{term.strip()}")
         label = f"{self.model}@{self.effort}" if self.effort else self.model
         return f"drugparse:{label}:{digest}"
 
@@ -130,7 +137,7 @@ Dose forms:
 {dose_forms}"""
 
 
-_FORM_VERSION = hashlib.sha1(DOSE_FORM_PROMPT.encode()).hexdigest()[:8]
+_FORM_VERSION = _digest(DOSE_FORM_PROMPT)[:8]
 
 
 class DoseFormPicker:
@@ -147,11 +154,14 @@ class DoseFormPicker:
     ):
         self.model = model
         self.dose_forms = dose_forms
+        # Part of the cache key: the prompt lists these forms, so a vocabulary update that
+        # renames or drops one must not reuse answers given for the old list
+        self._forms_digest = _digest("\n".join(dose_forms))
         self.effort = effort or None
         self._client = client
 
     def _key(self, text: str) -> str:
-        digest = hashlib.sha1(f"{_FORM_VERSION}\n{text}".encode()).hexdigest()
+        digest = _digest(f"{_FORM_VERSION}\n{self._forms_digest}\n{text}")
         label = f"{self.model}@{self.effort}" if self.effort else self.model
         return f"doseform:{label}:{digest}"
 
@@ -170,7 +180,10 @@ class DoseFormPicker:
         try:
             hit = await asyncio.to_thread(get_redis().get, key)
             if hit:
-                return DoseFormChoice.model_validate_json(hit).forms
+                # Checked against the current list like a fresh answer (a stale one is asked again)
+                return DoseFormChoice.model_validate_json(
+                    hit, context={"dose_forms": self.dose_forms}
+                ).forms
         except Exception:
             logger.debug("Dose form cache read failed", exc_info=True)
         client = self._client or get_instructor(self.model)

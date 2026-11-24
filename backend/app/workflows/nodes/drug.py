@@ -257,7 +257,7 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
                 confidence=params.confidence,
                 rationale=(
                     f"Deterministic {level} match on {described} ({origin} structure"
-                    + (f"; {match.reason}" if "used the" in match.reason else "")
+                    + (f"; {match.reason}" if match.dropped_quantity or match.dropped_brand else "")
                     + (f"; {'; '.join(match.resolved)}" if match.resolved else "")
                     + ")"
                 ),
