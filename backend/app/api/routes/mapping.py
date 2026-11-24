@@ -58,6 +58,7 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Concept ID(s) not found: {missing}")
     if not body.replace:
         # Serialise with other writers of this term, then check nobody mapped it meanwhile
+        mapping.lock_vocabularies(session, [source["source_vocabulary_id"]])
         session.execute(
             text("SELECT 1 FROM source_concepts WHERE source_id = :s FOR UPDATE"),
             {"s": body.source_id},

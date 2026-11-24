@@ -25,7 +25,7 @@ from app.api.routes import (
     workflows,
 )
 from app.core.config import get_settings
-from app.core.db import LOCKED_SQLSTATE
+from app.core.db import DEADLOCK_SQLSTATE, LOCKED_SQLSTATE
 from app.core.logging import setup_logging
 from app.llm.embeddings import GatewayUnavailable
 from app.vector.store import CollectionMissing
@@ -91,9 +91,18 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(DBAPIError)
     async def _locked_vocabulary(_: Request, exc: DBAPIError):
-        # The lock trigger of released vocabularies (migration 0016); other errors stay 500s
-        if getattr(exc.orig, "sqlstate", None) == LOCKED_SQLSTATE:
+        # The lock trigger of released vocabularies (migration 0016), and a deadlock (one of two
+        # writers cancelled; trying again works); other errors stay 500s
+        sqlstate = getattr(exc.orig, "sqlstate", None)
+        if sqlstate == LOCKED_SQLSTATE:
             return JSONResponse(status_code=409, content={"detail": exc.orig.diag.message_primary})
+        if sqlstate == DEADLOCK_SQLSTATE:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "detail": "Someone else changed the same data at the same moment; try again."
+                },
+            )
         raise exc
 
     api = APIRouter(prefix="/api")

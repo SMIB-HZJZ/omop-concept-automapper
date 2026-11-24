@@ -107,6 +107,22 @@ def accept(
     vocabulary_id: int | None = None,
     min_confidence: int | None = None,
 ) -> int:
+    # The vocabulary lock comes before the suggestion rows (see mapping.lock_vocabularies)
+    if vocabulary_id is not None:
+        mapping.lock_vocabularies(session, [vocabulary_id])
+    elif ids:
+        mapping.lock_vocabularies(
+            session,
+            session.execute(
+                text(
+                    "SELECT DISTINCT sc.source_vocabulary_id FROM mapping_suggestion ms "
+                    "JOIN source_concepts sc ON sc.source_id = ms.source_id WHERE ms.id = ANY(:ids)"
+                ),
+                {"ids": ids},
+            )
+            .scalars()
+            .all(),
+        )
     rows = _select_pending(session, ids, vocabulary_id, min_confidence)
     now = datetime.now(UTC)
     for row in rows:

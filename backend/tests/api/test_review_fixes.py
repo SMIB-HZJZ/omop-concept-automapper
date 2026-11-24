@@ -140,3 +140,39 @@ def test_source_to_concept_map_history_is_per_source_code(client, admin_headers,
         ("Y", 201, "20991231", ""),
         ("Y", 202, "20991231", ""),
     ]
+
+
+def test_mapping_during_vocabulary_update_waits_instead_of_deadlocking(
+    client, admin_headers, loaded_vocabulary
+):
+    """The OMOP vocabulary update reopens a locked vocabulary (updating its row) and then changes
+    its mappings; a mapping write on that vocabulary takes the vocabulary lock first, so it waits
+    and then goes through, instead of a deadlock."""
+    vid = 154
+    import_source_csv(
+        client, admin_headers, vid, b"source_value,source_concept_name,concept_id\nA,alpha,201\n"
+    )
+    term = _ids(vid)["A"]
+    with session_scope() as s:
+        releases.publish(s, vid, None, None)
+    outcome: dict = {}
+
+    def user():
+        try:
+            with session_scope() as s:
+                mapping.map_concepts(s, term, [202], user_id=None)
+            outcome["user"] = "ok"
+        except Exception as exc:  # reported below
+            outcome["user"] = type(exc).__name__
+
+    with session_scope() as update:
+        update.execute(
+            text("UPDATE source_vocabulary SET locked = FALSE WHERE id = :v"), {"v": vid}
+        )
+        worker = threading.Thread(target=user)
+        worker.start()
+        time.sleep(0.5)
+        update.execute(text("DELETE FROM source_standard_map WHERE source_id = :s"), {"s": term})
+        update.commit()
+    worker.join(timeout=10)
+    assert outcome == {"user": "ok"}

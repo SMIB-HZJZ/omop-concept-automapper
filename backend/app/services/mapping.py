@@ -492,6 +492,18 @@ def _floats(row: dict) -> dict:
 # --------------------------------------------------------------------------- writes
 
 
+def lock_vocabularies(session: Session, vocabulary_ids: Sequence[int]) -> None:
+    """Share-lock source vocabulary rows, in id order. Every mapping writer takes this first,
+    before any term, mapping or suggestion row: the lock trigger takes it too (migration 0019),
+    and taking it last would deadlock against an OMOP vocabulary update that reopens a locked
+    vocabulary (it updates the vocabulary row, then changes mappings and suggestions)."""
+    if vocabulary_ids:
+        session.execute(
+            text("SELECT id FROM source_vocabulary WHERE id = ANY(:ids) ORDER BY id FOR SHARE"),
+            {"ids": sorted(set(vocabulary_ids))},
+        )
+
+
 def vocabulary_of_sources(session: Session, source_ids: Sequence[int]) -> set[int]:
     if not source_ids:
         return set()
@@ -536,6 +548,7 @@ def map_concepts(
     mapped in the meantime, e.g. by hand while a long run was going. Returns whether it wrote.
     """
     concept_ids = list(dict.fromkeys(concept_ids))
+    lock_vocabularies(session, list(vocabulary_of_sources(session, [source_id])))
     # Serialise writers of the same source concept (manual mapping vs. a running auto-map)
     session.execute(
         text("SELECT 1 FROM source_concepts WHERE source_id = :s FOR UPDATE"), {"s": source_id}
@@ -627,6 +640,7 @@ def all_mapped_by(session: Session, source_ids: Sequence[int], user_id: int | No
 def unmap(session: Session, source_ids: Sequence[int]) -> int:
     if not source_ids:
         return 0
+    lock_vocabularies(session, list(vocabulary_of_sources(session, source_ids)))
     deleted = session.execute(
         text("DELETE FROM source_standard_map WHERE source_id = ANY(:ids)"),
         {"ids": list(source_ids)},

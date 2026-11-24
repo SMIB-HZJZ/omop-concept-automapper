@@ -294,7 +294,8 @@ def _snapshots(session: Session, vocabulary_id: int, release: int | str | None) 
         rows = session.execute(
             text(
                 "SELECT source_id, concept_id, source_value, source_concept_name, "
-                "target_vocabulary_id FROM mapping_release_row WHERE release_id = :r"
+                "target_vocabulary_id FROM mapping_release_row WHERE release_id = :r "
+                "ORDER BY source_id, concept_id"
             ),
             {"r": r.id},
         ).all()
@@ -309,6 +310,7 @@ def _snapshots(session: Session, vocabulary_id: int, release: int | str | None) 
                 JOIN source_concepts sc ON sc.source_id = m.source_id
                 JOIN concept c ON c.concept_id = m.concept_id
                 WHERE sc.source_vocabulary_id = :v
+                ORDER BY sc.source_id, c.concept_id
                 """
             ),
             {"v": vocabulary_id},

@@ -183,6 +183,8 @@ type Props = {
   leftList?: boolean;
 };
 
+type MapBody = { source_id: number; concept_ids: number[]; match_type: MatchType; replace: boolean };
+
 function isTyping(target: EventTarget | null) {
   const el = target as HTMLElement | null;
   return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
@@ -375,8 +377,12 @@ export function ConceptDetail({
     (kind === "accept" ? acceptSuggestion : rejectSuggestion).mutate(
       { ids: [waiting.id] },
       {
-        onSuccess: () => {
-          if (kind === "accept") {
+        onSuccess: (res) => {
+          if (kind === "accept" && res.count === 0) {
+            // No longer waiting: someone mapped or decided the term meanwhile. Saving the same
+            // choice tells whether it is mapped differently (and offers Replace)
+            save(selectionBody());
+          } else if (kind === "accept") {
             toast.success(`"${concept.source_concept_name}" mapped (AI suggestion accepted)`);
             onMapped();
           } else {
@@ -401,50 +407,67 @@ export function ConceptDetail({
       decideWaiting("accept");
       return;
     }
-    save(false);
+    save(selectionBody());
   };
 
-  /** Save the selection; ``replace`` overwrites a mapping someone else made meanwhile. */
-  const save = (replace: boolean) =>
-    mapConcepts.mutate(
-      { source_id: concept.source_id, concept_ids: [...selected.keys()], match_type: matchType, replace },
-      {
-        onSuccess: (res) => {
-          const sourceId = concept.source_id;
-          toast.success(`"${concept.source_concept_name}" mapped to ${res.count} concept(s)`, {
-            duration: 8000,
-            action: {
-              label: "Undo",
-              onClick: () =>
-                unmap.mutate([sourceId], {
-                  onSuccess: () => {
-                    toast.message("Mapping undone");
-                    onUndone(sourceId);
-                  },
-                  onError: (err) => toast.error(errorMessage(err)),
-                }),
-            },
-          });
-          setSelected(new Map());
-          setMatchType("exact");
-          onMapped();
-        },
-        onError: (err) => {
-          const conflict = alreadyMapped(err);
-          if (!conflict) {
-            toast.error(errorMessage(err));
-            return;
-          }
-          toast.warning(`Already mapped by ${conflict.mapped_by ?? "an automatic step"}`, {
+  /** What is selected now, as a request that does not overwrite someone else's mapping. */
+  const selectionBody = (): MapBody => ({
+    source_id: concept.source_id,
+    concept_ids: [...selected.keys()],
+    match_type: matchType,
+    replace: false,
+  });
+
+  /** Save a mapping; with ``replace`` it overwrites one someone else made meanwhile. */
+  const save = (body: MapBody) =>
+    mapConcepts.mutate(body, {
+      onSuccess: (res) => {
+        const sourceId = concept.source_id;
+        toast.success(`"${concept.source_concept_name}" mapped to ${res.count} concept(s)`, {
+          duration: 8000,
+          action: {
+            label: "Undo",
+            onClick: () =>
+              unmap.mutate([sourceId], {
+                onSuccess: () => {
+                  toast.message("Mapping undone");
+                  onUndone(sourceId);
+                },
+                onError: (err) => toast.error(errorMessage(err)),
+              }),
+          },
+        });
+        setSelected(new Map());
+        setMatchType("exact");
+        onMapped();
+      },
+      onError: (err) => {
+        const conflict = alreadyMapped(err);
+        if (!conflict) {
+          toast.error(errorMessage(err));
+          return;
+        }
+        // The request that got the conflict is what Replace sends; the toast goes away when the
+        // selection changes or the term is closed, so it never saves an outdated choice
+        conflictToast.current = toast.warning(
+          `"${concept.source_concept_name}" is already mapped by ${conflict.mapped_by ?? "an automatic step"}`,
+          {
             description: `${formatDate(conflict.mapped_at)}: concept ${conflict.concept_ids.join(", ")}${
               conflict.match_types?.[0] ? ` (${conflict.match_types[0]} match)` : ""
             }. Replace it with your choice?`,
             duration: 15000,
-            action: { label: "Replace", onClick: () => save(true) },
-          });
-        },
+            action: { label: "Replace", onClick: () => save({ ...body, replace: true }) },
+          },
+        );
       },
-    );
+    });
+
+  const conflictToast = useRef<string | number | undefined>(undefined);
+  useEffect(() => {
+    if (conflictToast.current !== undefined) toast.dismiss(conflictToast.current);
+    conflictToast.current = undefined;
+  }, [selected, matchType]);
+  useEffect(() => () => void (conflictToast.current !== undefined && toast.dismiss(conflictToast.current)), []);
 
   // Shortcuts: 1-9 tick a candidate, Enter confirms, S asks the AI (not while typing or in a dialog)
   const shortcuts = useRef({ results, selected, confirm, runSuggest, toggle: onTableSelection, selectedIds });

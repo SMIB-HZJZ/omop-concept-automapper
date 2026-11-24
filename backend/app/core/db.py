@@ -13,6 +13,8 @@ _engine: Engine | None = None
 
 # SQLSTATE of the lock trigger on released source vocabularies (object_not_in_prerequisite_state)
 LOCKED_SQLSTATE = "55000"
+# Two writers waited for each other; Postgres cancelled one of them (it can simply try again)
+DEADLOCK_SQLSTATE = "40P01"
 
 
 def get_engine() -> Engine:
