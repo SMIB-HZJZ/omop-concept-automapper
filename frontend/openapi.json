@@ -1187,6 +1187,7 @@
           "source vocabularies"
         ],
         "summary": "Mapped",
+        "description": "Every user can review the mapped set (Check & commit); changing it follows the usual rules.",
         "operationId": "mapped_api_source_vocabularies__vocabulary_id__mapped_get",
         "security": [
           {
@@ -1242,6 +1243,18 @@
               ],
               "title": "Q"
             }
+          },
+          {
+            "name": "flagged",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only terms flagged with a question or a note",
+              "default": false,
+              "title": "Flagged"
+            },
+            "description": "Only terms flagged with a question or a note"
           }
         ],
         "responses": {
@@ -4881,6 +4894,51 @@
             ],
             "title": "Mapped By"
           },
+          "flag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flag"
+          },
+          "flag_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flag Note"
+          },
+          "flagged_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flagged By"
+          },
+          "flagged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flagged At"
+          },
           "mapped_at": {
             "anyOf": [
               {
@@ -5314,6 +5372,11 @@
               }
             ],
             "title": "Draft Note"
+          },
+          "open_questions": {
+            "type": "integer",
+            "title": "Open Questions",
+            "default": 0
           },
           "releases": {
             "items": {

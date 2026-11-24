@@ -24,13 +24,15 @@ import { Progress } from "@/components/ui/progress";
 import { useDebounce } from "@/hooks/useDebounce";
 import { formatNumber } from "@/lib/format";
 import { ConceptLink } from "@/components/ConceptLink";
+import { MappingFlag } from "./commit/MappingFlag";
 import { ReleasePanel } from "./commit/ReleasePanel";
+import { Switch } from "@/components/ui/switch";
 
 const chartConfig = { count: { label: "Mappings", color: "var(--chart-1)" } } satisfies ChartConfig;
 
 const rowId = (row: MappedRow) => `${row.source_id}:${row.concept_id}`;
 
-const columns: ColumnDef<MappedRow, unknown>[] = [
+const baseColumns: ColumnDef<MappedRow, unknown>[] = [
   {
     accessorKey: "source_value",
     header: "Source code",
@@ -74,7 +76,20 @@ function MappedTable({
   const [perPage, setPerPage] = useState(50);
   const [query, setQuery] = useState("");
   const q = useDebounce(query.trim(), 400);
-  const mapped = useMapped(vocabularyId, page, perPage, q);
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const mapped = useMapped(vocabularyId, page, perPage, q, flaggedOnly);
+  const columns = useMemo<ColumnDef<MappedRow, unknown>[]>(
+    () => [
+      ...baseColumns,
+      {
+        id: "flag",
+        header: "",
+        size: 48,
+        cell: ({ row }) => <MappingFlag row={row.original} vocabularyId={vocabularyId} />,
+      },
+    ],
+    [vocabularyId],
+  );
   const unmap = useUnmap(vocabularyId);
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -105,6 +120,19 @@ function MappedTable({
             }}
           />
         </div>
+        <div className="flex h-9 items-center gap-2">
+          <Switch
+            id="mapped-flagged"
+            checked={flaggedOnly}
+            onCheckedChange={(v) => {
+              setFlaggedOnly(v);
+              setPage(1);
+            }}
+          />
+          <Label htmlFor="mapped-flagged" className="font-normal">
+            Flagged only
+          </Label>
+        </div>
         <PageControls
           idPrefix="mapped"
           page={data?.page ?? page}
@@ -133,7 +161,13 @@ function MappedTable({
         }
         sortable={false}
         isLoading={mapped.isLoading}
-        emptyText={q ? "No mappings match your search." : "No mapped concepts found for this vocabulary."}
+        emptyText={
+          flaggedOnly
+            ? "No flagged mappings."
+            : q
+              ? "No mappings match your search."
+              : "No mapped concepts found for this vocabulary."
+        }
         maxHeight="36rem"
       />
       {actions(
@@ -202,7 +236,7 @@ export function CommitPage() {
         icon={ClipboardCheck}
         step={4}
         title="Check & commit"
-        description="Look over the final mappings, remove wrong ones, publish them as a release and download them as CSV."
+        description="Look over the final mappings, flag doubtful ones for review, publish them as a release and download them as CSV."
       />
       <VocabularySelector selection={selection} releaseNotice={false} />
       <ErrorAlert error={stats.error} title="Could not load mapping statistics" />

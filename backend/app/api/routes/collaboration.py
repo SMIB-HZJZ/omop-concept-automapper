@@ -5,7 +5,7 @@ import re
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import AdminUser, CurrentUser, SessionDep
+from app.api.deps import CurrentUser, SessionDep
 from app.models import SourceVocabulary
 from app.schemas.api import Message, Presence, TeamActivity
 from app.services import collaboration, mapping, releases
@@ -56,7 +56,7 @@ def team_activity(vocabulary_id: int, _: CurrentUser, session: SessionDep):
 )
 def source_to_concept_map(
     vocabulary_id: int,
-    _: AdminUser,
+    _: CurrentUser,
     session: SessionDep,
     source_vocabulary_id: str | None = Query(
         None, max_length=20, description="SOURCE_VOCABULARY_ID to write (default: from the name)"

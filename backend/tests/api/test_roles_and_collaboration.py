@@ -26,12 +26,20 @@ def test_admin_only_endpoints(client, user_headers, admin_headers, loaded_vocabu
         ("post", "/api/source-vocabularies", {"json": {"id": 94, "name": "x"}}),
         ("patch", "/api/source-vocabularies/93", {"json": {"is_drug": True}}),
         ("post", "/api/source-vocabularies/93/automap", {"json": {"domains": ["Condition"]}}),
-        ("get", "/api/source-vocabularies/93/mapped", {}),
-        ("get", "/api/source-vocabularies/93/mapped.csv", {}),
-        ("get", "/api/source-vocabularies/93/source_to_concept_map.csv", {}),
+        ("post", "/api/source-vocabularies/93/releases", {"json": {}}),
+        ("post", "/api/source-vocabularies/93/releases/next", {}),
+        ("delete", "/api/source-vocabularies/93", {}),
     ):
         resp = getattr(client, method)(url, headers=user_headers, **kwargs)
         assert resp.status_code == 403, (method, url, resp.status_code)
+    # Check & commit is open to users for review: the mapped set and its exports
+    for url in (
+        "/api/source-vocabularies/93/mapped",
+        "/api/source-vocabularies/93/mapped.csv",
+        "/api/source-vocabularies/93/source_to_concept_map.csv",
+        "/api/source-vocabularies/93/releases",
+    ):
+        assert client.get(url, headers=user_headers).status_code == 200, url
 
 
 def test_users_undo_only_their_own_mappings(client, user_headers, admin_headers, loaded_vocabulary):

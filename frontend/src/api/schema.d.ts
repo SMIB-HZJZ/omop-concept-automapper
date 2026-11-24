@@ -427,7 +427,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Mapped */
+        /**
+         * Mapped
+         * @description Every user can review the mapped set (Check & commit); changing it follows the usual rules.
+         */
         get: operations["mapped_api_source_vocabularies__vocabulary_id__mapped_get"];
         put?: never;
         post?: never;
@@ -1627,6 +1630,14 @@ export interface components {
             match_type?: string | null;
             /** Mapped By */
             mapped_by?: string | null;
+            /** Flag */
+            flag?: string | null;
+            /** Flag Note */
+            flag_note?: string | null;
+            /** Flagged By */
+            flagged_by?: string | null;
+            /** Flagged At */
+            flagged_at?: string | null;
             /** Mapped At */
             mapped_at?: string | null;
         };
@@ -1770,6 +1781,11 @@ export interface components {
             locked: boolean;
             /** Draft Note */
             draft_note?: string | null;
+            /**
+             * Open Questions
+             * @default 0
+             */
+            open_questions: number;
             /** Releases */
             releases: components["schemas"]["ReleaseInfo"][];
             draft?: components["schemas"]["ReleaseChanges"] | null;
@@ -3408,6 +3424,8 @@ export interface operations {
                 page?: number;
                 per_page?: number;
                 q?: string | null;
+                /** @description Only terms flagged with a question or a note */
+                flagged?: boolean;
             };
             header?: never;
             path: {

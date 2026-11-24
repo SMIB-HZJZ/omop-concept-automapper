@@ -336,6 +336,11 @@ class MappedRow(BaseModel):
     # exact / broader / narrower / related; None when unknown (e.g. mapped in the import CSV)
     match_type: str | None = None
     mapped_by: str | None = None
+    # A flag on the source term: e.g. a reviewer's question about this mapping
+    flag: str | None = None
+    flag_note: str | None = None
+    flagged_by: str | None = None
+    flagged_at: datetime | None = None
     mapped_at: datetime | None = None
 
 
@@ -781,6 +786,8 @@ class ReleaseInfo(ReleaseChanges):
 class ReleaseState(BaseModel):
     locked: bool
     draft_note: str | None = None
+    # Mapped terms with a flag (a question about the mapping): worth settling before publishing
+    open_questions: int = 0
     releases: list[ReleaseInfo]  # newest first
     draft: ReleaseChanges | None = None  # while unlocked: changes against the latest release
 

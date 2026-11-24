@@ -112,9 +112,20 @@ def release_state(session: Session, vocabulary_id: int) -> dict:
     if not vocab.locked:
         old = _RELEASED.format(param=":old") if previous else _NO_ROWS
         draft = _changes(session, old, _CURRENT, {"old": previous, "v": vocabulary_id})
+    open_questions = session.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM source_concepts sc
+            WHERE sc.source_vocabulary_id = :v AND sc.flag IS NOT NULL
+              AND EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
+            """
+        ),
+        {"v": vocabulary_id},
+    ).scalar_one()
     return {
         "locked": vocab.locked,
         "draft_note": vocab.draft_note,
+        "open_questions": open_questions,
         "releases": list(reversed(releases)),
         "draft": draft,
     }

@@ -278,18 +278,20 @@ def unmapped(
 @router.get("/{vocabulary_id}/mapped", response_model=MappedPage)
 def mapped(
     vocabulary_id: int,
-    _: AdminUser,
+    _: CurrentUser,
     session: SessionDep,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=500),
     q: str | None = Query(None, max_length=200),
+    flagged: bool = Query(False, description="Only terms flagged with a question or a note"),
 ):
+    """Every user can review the mapped set (Check & commit); changing it follows the usual rules."""
     _get_vocab(session, vocabulary_id)
-    return mapping.get_mapped_page(session, vocabulary_id, page, per_page, q)
+    return mapping.get_mapped_page(session, vocabulary_id, page, per_page, q, flagged)
 
 
 @router.get("/{vocabulary_id}/mapped.csv", response_class=StreamingResponse)
-def mapped_csv(vocabulary_id: int, _: AdminUser, session: SessionDep):
+def mapped_csv(vocabulary_id: int, _: CurrentUser, session: SessionDep):
     _get_vocab(session, vocabulary_id)
     return StreamingResponse(
         mapping.iter_mapped_csv(vocabulary_id),

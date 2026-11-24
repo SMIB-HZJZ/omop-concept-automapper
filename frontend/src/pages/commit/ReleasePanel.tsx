@@ -1,4 +1,4 @@
-import { Download, Lock, LockOpen, PackageCheck } from "lucide-react";
+import { Download, Lock, LockOpen, MessageCircleQuestion, PackageCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -29,6 +29,21 @@ function changeSummary(c: Changes): string {
     c.removed && `${c.removed} removed`,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "no changes";
+}
+
+/** Mapped terms someone flagged with a question: settle them before publishing. */
+function OpenQuestions({ count }: { count: number }) {
+  return (
+    <Alert className="border-warning/40 bg-warning/10">
+      <MessageCircleQuestion className="text-warning" />
+      <AlertDescription>
+        <span>
+          {count === 1 ? "1 mapping has" : `${count} mappings have`} an open question. Use <b>Flagged only</b> below to
+          see {count === 1 ? "it" : "them"}; clear a flag once it is settled.
+        </span>
+      </AlertDescription>
+    </Alert>
+  );
 }
 
 function ReleaseRow({ vocabularyId, release }: { vocabularyId: number; release: ReleaseInfo }) {
@@ -134,6 +149,7 @@ export function ReleasePanel({ vocabularyId }: { vocabularyId: number }) {
                 <AlertDescription>{s.draft_note}</AlertDescription>
               </Alert>
             )}
+            {s.open_questions > 0 && <OpenQuestions count={s.open_questions} />}
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-sm">
                 {latest
@@ -171,6 +187,7 @@ export function ReleasePanel({ vocabularyId }: { vocabularyId: number }) {
                           source_to_concept_map with a valid_end_date of the day before this release.
                         </p>
                       )}
+                      {s.open_questions > 0 && <OpenQuestions count={s.open_questions} />}
                       <div className="grid gap-1.5 pt-1">
                         <Label htmlFor="release-note">Note (optional)</Label>
                         <Textarea

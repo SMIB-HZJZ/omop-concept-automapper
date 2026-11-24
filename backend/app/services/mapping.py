@@ -292,7 +292,9 @@ _MAPPED_FROM = """
     JOIN source_standard_map ssm ON sc.source_id = ssm.source_id
     JOIN concept c ON ssm.concept_id = c.concept_id
     LEFT JOIN app_user u ON u.id = ssm.created_by
+    LEFT JOIN app_user fu ON fu.id = sc.flagged_by
     WHERE sc.source_vocabulary_id = :v
+      AND (NOT CAST(:flagged AS boolean) OR sc.flag IS NOT NULL)
       AND (CAST(:q AS text) IS NULL
            OR sc.source_value ILIKE :q OR sc.source_concept_name ILIKE :q
            OR c.concept_name ILIKE :q OR CAST(c.concept_id AS text) = :q_exact)
@@ -300,7 +302,8 @@ _MAPPED_FROM = """
 _MAPPED_SELECT = """
     SELECT sc.source_id, sc.source_value, sc.source_concept_name,
            c.concept_name, c.concept_id, c.domain_id, c.vocabulary_id, sc.freq,
-           ssm.match_type, u.username AS mapped_by, ssm.created_at AS mapped_at
+           ssm.match_type, u.username AS mapped_by, ssm.created_at AS mapped_at,
+           sc.flag, sc.flag_note, fu.username AS flagged_by, sc.flagged_at
 """
 _MAPPED_ORDER = " ORDER BY sc.freq DESC NULLS LAST, sc.source_id, c.concept_id"
 
@@ -314,10 +317,16 @@ def _search_params(q: str | None) -> dict:
 
 
 def get_mapped_page(
-    session: Session, vocabulary_id: int, page: int, per_page: int, q: str | None = None
+    session: Session,
+    vocabulary_id: int,
+    page: int,
+    per_page: int,
+    q: str | None = None,
+    flagged: bool = False,
 ) -> dict:
-    """One page of mapped rows (one row per source → standard concept pair)."""
-    params = {"v": vocabulary_id, **_search_params(q)}
+    """One page of mapped rows (one row per source → standard concept pair); ``flagged``: only
+    terms with a flag (e.g. a reviewer's question about the mapping)."""
+    params = {"v": vocabulary_id, "flagged": flagged, **_search_params(q)}
     total = session.execute(text("SELECT COUNT(*)" + _MAPPED_FROM), params).scalar_one()
     pages = max(1, math.ceil(total / per_page))
     page = min(max(page, 1), pages)
@@ -354,7 +363,7 @@ def iter_mapped_csv(vocabulary_id: int) -> Iterator[str]:
     with session_scope() as session:
         result = session.execute(
             text(_MAPPED_SELECT + _MAPPED_FROM + _MAPPED_ORDER).execution_options(yield_per=5000),
-            {"v": vocabulary_id, **_search_params(None)},
+            {"v": vocabulary_id, "flagged": False, **_search_params(None)},
         ).mappings()
         for i, row in enumerate(result, 1):
             writer.writerow(row)

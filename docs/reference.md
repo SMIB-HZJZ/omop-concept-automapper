@@ -93,7 +93,7 @@ This version starts from an empty database: import the vocabulary and embed conc
      - In **review** mode (default), results above the confidence threshold become suggestions.
      - In **commit** mode, they are mapped directly, as the old app did.
 6. **Review**. Accept or reject suggestions one at a time, as a selection, or all at once above a confidence level.
-7. **Check & Commit**. Review the mappings, unmap, download `vocabulary_<id>_mappings.csv`, and view statistics. Admins can delete a source vocabulary.
+7. **Check & Commit** (every user). Review the mappings, unmap (users their own, admins any), download `vocabulary_<id>_mappings.csv` and the OMOP `source_to_concept_map`, and view statistics. The flag button on a row adds a question with a note (who and when are kept); **Flagged only** lists flagged mappings, and clearing the flag marks it settled. Flags live on the source term, so they also work on a released, locked set. The release panel counts open questions and the publish dialog repeats the warning. Admins can delete a source vocabulary.
    - **Releases** (admin). **Publish release N** copies the current mappings into release N (with an optional note) and locks the vocabulary. A database trigger then refuses any change to its mappings and source terms, whichever path tries it (manual mapping, unmapping, accepting suggestions, auto-map, CSV import); the API answers 409. Rejecting suggestions and flagging terms stay possible. **Start release N+1** unlocks it. A release with no changes against the previous one is refused, and so is publishing while an auto-map or import of the vocabulary runs.
    - The OMOP `source_to_concept_map` download takes `?release=N` (default: the latest release; without releases, the current mappings) or `?release=draft` (the current mappings as the next release would be). It is built from the copies of every release up to N: a mapping is valid from the release it first appeared in; one that a later release changed or removed ends the day before that release, with `invalid_reason` `U` (the source code was remapped) or `D` (its mapping was removed). A mapping removed and later added again gets one row per period.
    - An OMOP vocabulary import that has to replace or remove mappings of a locked vocabulary (concepts no longer standard) unlocks it first and leaves a note on its draft; the replacements show as vocabulary updates.
@@ -108,10 +108,10 @@ The sidebar and the sign-in page show the logos of the Croatian Institute of Pub
 
 | | user | admin |
 |---|---|---|
-| Search, map, unmap, auto-map, AI suggest, review, export, upload source CSVs | ✓ | ✓ |
+| Search, map, unmap own mappings, auto-map, AI suggest, review, Check & commit (view, flag, export), upload source CSVs | ✓ | ✓ |
 | See and cancel own tasks | ✓ | ✓ (all tasks) |
 | Vocabulary import, ATC7, embeddings (embed, sync, clear) | | ✓ |
-| Change configuration, delete source vocabularies, manage users | | ✓ |
+| Publish and start releases, change configuration, delete source vocabularies, manage users | | ✓ |
 
 **New accounts.** Admins add users on the Users page, or people create their own account on the sign-in page (**Create one**: email and password, at least 8 characters). A self-registered account has the role *user* and cannot sign in until an admin approves it: it is listed under **Waiting for approval** on the Users page (the sidebar shows how many wait), with **Approve** and **Reject** (deletes it). Signing in before that shows "waiting for an administrator's approval", but only with the right password. No email is sent; the address is checked only for its shape. `SELF_REGISTRATION=false` hides the option; `REGISTRATIONS_PER_IP_HOUR` (default 5) limits new accounts per client address.
 

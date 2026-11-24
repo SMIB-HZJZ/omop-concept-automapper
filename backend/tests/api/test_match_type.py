@@ -65,3 +65,36 @@ def test_manual_mapping_match_type(client, admin_headers, user_headers, loaded_v
             {"s": ids["B"]},
         ).scalar_one()
     assert dict(released) == {"A": "exact", "B": "broader"} and audited == "broader"
+
+
+def test_reviewers_flag_mappings(client, admin_headers, user_headers, loaded_vocabulary):
+    """Users review the mapped set: a flag (question with a note) on a mapped term shows in the
+    list, filters it, and counts as an open question before publishing."""
+    vid = 131
+    import_source_csv(
+        client,
+        admin_headers,
+        vid,
+        b"source_value,source_concept_name,concept_id\nA,dm2,201\nB,hypertension,202\n",
+    )
+    rows = client.get(f"/api/source-vocabularies/{vid}/mapped", headers=user_headers).json()
+    source_a = next(r["source_id"] for r in rows["items"] if r["source_value"] == "A")
+    resp = client.put(
+        f"/api/source-concepts/{source_a}/flag",
+        json={"flag": "question", "note": "narrower concept?"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200
+    flagged = client.get(
+        f"/api/source-vocabularies/{vid}/mapped", params={"flagged": True}, headers=user_headers
+    ).json()
+    assert [
+        (r["source_value"], r["flag"], r["flag_note"], r["flagged_by"]) for r in flagged["items"]
+    ] == [("A", "question", "narrower concept?", "mapper")]
+    releases = client.get(f"/api/source-vocabularies/{vid}/releases", headers=user_headers).json()
+    assert releases["open_questions"] == 1
+    # A published (locked) release can still be reviewed and flagged
+    client.post(f"/api/source-vocabularies/{vid}/releases", json={}, headers=admin_headers)
+    client.put(f"/api/source-concepts/{source_a}/flag", json={"flag": None}, headers=user_headers)
+    releases = client.get(f"/api/source-vocabularies/{vid}/releases", headers=user_headers).json()
+    assert releases["locked"] is True and releases["open_questions"] == 0

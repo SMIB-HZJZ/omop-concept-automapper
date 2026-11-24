@@ -23,7 +23,8 @@ export const keys = {
   vocab: (id: number) => ["vocab", id] as const,
   unmapped: (id: number, page: number, perPage: number, view: UnmappedView, q: string) =>
     ["vocab", id, "unmapped", page, perPage, view, q] as const,
-  mapped: (id: number, page: number, perPage: number, q: string) => ["vocab", id, "mapped", page, perPage, q] as const,
+  mapped: (id: number, page: number, perPage: number, q: string, flagged: boolean) =>
+    ["vocab", id, "mapped", page, perPage, q, flagged] as const,
   stats: (id: number) => ["vocab", id, "stats"] as const,
   releases: (id: number) => ["vocab", id, "releases"] as const,
   auditStats: (id: number) => ["vocab", id, "audit-stats"] as const,
@@ -158,13 +159,16 @@ export const useUnmapped = (id: number | null, page: number, perPage: number, vi
     placeholderData: keepPreviousData,
   });
 
-export const useMapped = (id: number | null, page: number, perPage: number, q: string) =>
+export const useMapped = (id: number | null, page: number, perPage: number, q: string, flagged = false) =>
   useQuery({
-    queryKey: keys.mapped(id ?? 0, page, perPage, q),
+    queryKey: keys.mapped(id ?? 0, page, perPage, q, flagged),
     queryFn: async () =>
       unwrap(
         await api.GET("/api/source-vocabularies/{vocabulary_id}/mapped", {
-          params: { path: { vocabulary_id: id! }, query: { page, per_page: perPage, q: q || undefined } },
+          params: {
+            path: { vocabulary_id: id! },
+            query: { page, per_page: perPage, q: q || undefined, flagged: flagged || undefined },
+          },
         }),
       ),
     enabled: id !== null,

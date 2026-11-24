@@ -87,7 +87,6 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         icon: ClipboardCheck,
         step: 4,
         hint: "Verify and export mappings",
-        adminOnly: true,
       },
     ],
   },

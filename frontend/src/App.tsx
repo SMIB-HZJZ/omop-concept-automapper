@@ -50,7 +50,7 @@ const router = createBrowserRouter([
       { path: "search", element: page(<SearchPage />) },
       { path: "map", element: page(<MapPage />) },
       { path: "review", element: page(<ReviewPage />) },
-      { path: "commit", element: <RequireAdmin>{page(<CommitPage />)}</RequireAdmin> },
+      { path: "commit", element: page(<CommitPage />) },
       { path: "settings", element: <RequireAdmin>{page(<SettingsPage />)}</RequireAdmin> },
       {
         path: "users",
