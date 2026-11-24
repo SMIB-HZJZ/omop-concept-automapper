@@ -59,6 +59,8 @@ export function ReviewPage() {
   const accept = useDecideSuggestions(vocabularyId, "accept");
   const reject = useDecideSuggestions(vocabularyId, "reject");
   const busy = accept.isPending || reject.isPending;
+  // A released vocabulary is locked: suggestions can be rejected but not accepted
+  const locked = selection.vocabulary?.locked ?? false;
 
   const data = suggestions.data;
   const pending = status === "pending";
@@ -67,6 +69,10 @@ export function ReviewPage() {
     kind: "accept" | "reject",
     body: { ids?: number[]; vocabulary_id?: number; min_confidence?: number },
   ) => {
+    if (kind === "accept" && locked) {
+      toast.error("This vocabulary is released and locked. Start the next release on Check & commit first.");
+      return;
+    }
     const mutation = kind === "accept" ? accept : reject;
     mutation.mutate(body, {
       onSuccess: (result) => {
@@ -243,7 +249,8 @@ export function ReviewPage() {
               variant="outline"
               className="hover:bg-success/15 hover:text-success"
               aria-label="Accept"
-              title="Accept (A)"
+              title={locked ? "Locked by a release" : "Accept (A)"}
+              disabled={locked}
               onClick={(e) => {
                 e.stopPropagation();
                 decideRef.current("accept", { ids: [row.original.id] });
@@ -282,7 +289,7 @@ export function ReviewPage() {
       );
     }
     return cols;
-  }, [pending]);
+  }, [pending, locked]);
 
   return (
     <div className="space-y-6">
@@ -360,7 +367,7 @@ export function ReviewPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="cta"
-                disabled={selected.length === 0 || busy}
+                disabled={selected.length === 0 || busy || locked}
                 onClick={() => decide("accept", { ids: selected.map(Number) })}
               >
                 <Check /> Accept selected ({selected.length})
@@ -387,7 +394,7 @@ export function ReviewPage() {
               </Select>
               <ConfirmDialog
                 trigger={
-                  <Button variant="secondary" disabled={busy}>
+                  <Button variant="secondary" disabled={busy || locked}>
                     Accept all ≥ {bulkLevel}
                   </Button>
                 }

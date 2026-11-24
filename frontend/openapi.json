@@ -3036,11 +3036,181 @@
               "title": "Source Vocabulary Id"
             },
             "description": "SOURCE_VOCABULARY_ID to write (default: from the name)"
+          },
+          {
+            "name": "release",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([1-9][0-9]{0,5}|draft)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Release number, or 'draft' for the current mappings as the next release (default: the latest release; the current mappings when there is none)",
+              "title": "Release"
+            },
+            "description": "Release number, or 'draft' for the current mappings as the next release (default: the latest release; the current mappings when there is none)"
           }
         ],
         "responses": {
           "200": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/source-vocabularies/{vocabulary_id}/releases": {
+      "get": {
+        "tags": [
+          "releases"
+        ],
+        "summary": "Release State",
+        "operationId": "release_state_api_source_vocabularies__vocabulary_id__releases_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vocabulary_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vocabulary Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "releases"
+        ],
+        "summary": "Publish",
+        "description": "Publish the current mappings as the next release and lock the vocabulary.",
+        "operationId": "publish_api_source_vocabularies__vocabulary_id__releases_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vocabulary_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vocabulary Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/source-vocabularies/{vocabulary_id}/releases/next": {
+      "post": {
+        "tags": [
+          "releases"
+        ],
+        "summary": "Start Next",
+        "description": "Unlock a released vocabulary; changes from now on go into the next release.",
+        "operationId": "start_next_api_source_vocabularies__vocabulary_id__releases_next_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vocabulary_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vocabulary Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseState"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -4989,6 +5159,156 @@
         ],
         "title": "RelatedConcept"
       },
+      "ReleaseChanges": {
+        "properties": {
+          "added": {
+            "type": "integer",
+            "title": "Added"
+          },
+          "changed": {
+            "type": "integer",
+            "title": "Changed"
+          },
+          "removed": {
+            "type": "integer",
+            "title": "Removed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "added",
+          "changed",
+          "removed"
+        ],
+        "title": "ReleaseChanges",
+        "description": "Source concepts whose mappings were added, changed or removed against the release before."
+      },
+      "ReleaseCreate": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "ReleaseCreate"
+      },
+      "ReleaseInfo": {
+        "properties": {
+          "added": {
+            "type": "integer",
+            "title": "Added"
+          },
+          "changed": {
+            "type": "integer",
+            "title": "Changed"
+          },
+          "removed": {
+            "type": "integer",
+            "title": "Removed"
+          },
+          "number": {
+            "type": "integer",
+            "title": "Number"
+          },
+          "released_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Released At"
+          },
+          "released_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Released By"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "mapped_sources": {
+            "type": "integer",
+            "title": "Mapped Sources"
+          },
+          "rows": {
+            "type": "integer",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "added",
+          "changed",
+          "removed",
+          "number",
+          "released_at",
+          "mapped_sources",
+          "rows"
+        ],
+        "title": "ReleaseInfo"
+      },
+      "ReleaseState": {
+        "properties": {
+          "locked": {
+            "type": "boolean",
+            "title": "Locked"
+          },
+          "draft_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Note"
+          },
+          "releases": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseInfo"
+            },
+            "type": "array",
+            "title": "Releases"
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReleaseChanges"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "locked",
+          "releases"
+        ],
+        "title": "ReleaseState"
+      },
       "SearchRequest": {
         "properties": {
           "query": {
@@ -5353,6 +5673,33 @@
             "type": "integer",
             "title": "Mapped Count",
             "default": 0
+          },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked",
+            "default": false
+          },
+          "latest_release": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Release"
+          },
+          "draft_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Note"
           }
         },
         "type": "object",
@@ -7241,6 +7588,11 @@
           "stale_suggestions_removed": {
             "default": 0,
             "title": "Stale Suggestions Removed",
+            "type": "integer"
+          },
+          "released_vocabularies_reopened": {
+            "default": 0,
+            "title": "Released Vocabularies Reopened",
             "type": "integer"
           },
           "vectors_pruned": {

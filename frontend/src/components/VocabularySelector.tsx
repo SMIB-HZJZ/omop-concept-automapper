@@ -1,4 +1,4 @@
-import { Pill, Stethoscope } from "lucide-react";
+import { Lock, LockOpen, Pill, Stethoscope } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 
@@ -11,7 +11,15 @@ import type { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 
 type Selection = ReturnType<typeof useSelectedVocabulary>;
 
-export function VocabularySelector({ selection }: { selection: Selection }) {
+/** ``releaseNotice``: say below the selector when the vocabulary is locked by a release (Check &
+ * commit shows this in its release panel instead). */
+export function VocabularySelector({
+  selection,
+  releaseNotice = true,
+}: {
+  selection: Selection;
+  releaseNotice?: boolean;
+}) {
   const { vocabularies, vocabulary, isLoading } = selection;
   const sorted = useMemo(() => [...vocabularies].sort((a, b) => a.id - b.id), [vocabularies]);
 
@@ -56,6 +64,17 @@ export function VocabularySelector({ selection }: { selection: Selection }) {
             {vocabulary.is_drug ? <Pill className="size-3" /> : <Stethoscope className="size-3" />}
             {vocabulary.is_drug ? "Drugs" : "General"}
           </Badge>
+          {vocabulary.locked ? (
+            <Badge className="gap-1" title="Published release: the mappings cannot be changed">
+              <Lock className="size-3" /> Release {vocabulary.latest_release} · locked
+            </Badge>
+          ) : (
+            vocabulary.latest_release != null && (
+              <Badge variant="outline" className="gap-1" title="Changes go into the next release">
+                <LockOpen className="size-3" /> Draft of release {vocabulary.latest_release + 1}
+              </Badge>
+            )
+          )}
           {(vocabulary.code_vocabularies ?? []).length > 0 && (
             <span className="text-muted-foreground" title="Source codes are looked up in these code systems first">
               codes: {(vocabulary.code_vocabularies ?? []).join(", ")}
@@ -64,6 +83,27 @@ export function VocabularySelector({ selection }: { selection: Selection }) {
         </div>
       )}
       {vocabulary && <VocabularyAbout vocabulary={vocabulary} />}
+      {releaseNotice && vocabulary?.locked && (
+        <Alert className="w-full">
+          <Lock />
+          <AlertDescription>
+            <span>
+              Release {vocabulary.latest_release} of this vocabulary is published, so its mappings are locked. An admin
+              can start the next release on{" "}
+              <Link to="/commit" className="underline">
+                Check & commit
+              </Link>
+              .
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+      {releaseNotice && !vocabulary?.locked && vocabulary?.draft_note && (
+        <Alert className="w-full">
+          <LockOpen />
+          <AlertDescription>{vocabulary.draft_note}</AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

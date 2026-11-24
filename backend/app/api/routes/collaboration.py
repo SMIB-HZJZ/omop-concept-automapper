@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.models import SourceVocabulary
 from app.schemas.api import Message, Presence, TeamActivity
-from app.services import collaboration, mapping
+from app.services import collaboration, mapping, releases
 
 router = APIRouter(tags=["collaboration"])
 
@@ -61,14 +61,26 @@ def source_to_concept_map(
     source_vocabulary_id: str | None = Query(
         None, max_length=20, description="SOURCE_VOCABULARY_ID to write (default: from the name)"
     ),
+    release: str | None = Query(
+        None,
+        pattern=r"^([1-9][0-9]{0,5}|draft)$",
+        description="Release number, or 'draft' for the current mappings as the next release "
+        "(default: the latest release; the current mappings when there is none)",
+    ),
 ):
     vocab = _vocabulary(session, vocabulary_id)
+    which: int | str | None = int(release) if release and release.isdigit() else release
+    if isinstance(which, int) and not releases.release_exists(session, vocabulary_id, which):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Release {which} not found")
     # OMOP vocabulary_id is at most 20 characters; derive one from the name when not given
     label = source_vocabulary_id or re.sub(r"[^A-Za-z0-9_-]+", "_", vocab.name).strip("_")[:20]
     return StreamingResponse(
-        collaboration.iter_source_to_concept_map(vocabulary_id, label or f"SOURCE_{vocabulary_id}"),
+        releases.iter_source_to_concept_map(
+            vocabulary_id, label or f"SOURCE_{vocabulary_id}", which
+        ),
         media_type="text/csv",
         headers={
-            "Content-Disposition": f'attachment; filename="source_to_concept_map_{vocabulary_id}.csv"'
+            "Content-Disposition": "attachment; "
+            f'filename="source_to_concept_map_{vocabulary_id}{"_" + release if release else ""}.csv"'
         },
     )

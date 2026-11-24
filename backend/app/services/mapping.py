@@ -41,7 +41,9 @@ def list_source_vocabularies(session: Session) -> list[dict]:
         text(
             """
             SELECT v.id, v.name, v.description, v.is_drug, v.source_language, v.code_vocabularies,
-                   v.created_at,
+                   v.created_at, v.locked, v.draft_note,
+                   (SELECT MAX(number) FROM mapping_release r WHERE r.vocabulary_id = v.id)
+                       AS latest_release,
                    COUNT(sc.source_id) AS concept_count,
                    COUNT(sc.source_id) FILTER (
                        WHERE EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
@@ -91,7 +93,11 @@ def create_vocabulary(
 
 
 def delete_vocabulary(session: Session, vocabulary_id: int) -> int:
-    """Delete a source vocabulary with its concepts, mappings, audit rows and suggestions."""
+    """Delete a source vocabulary with its concepts, mappings, audit rows, suggestions and
+    releases (unlocked first: the lock trigger would refuse deleting its concepts)."""
+    session.execute(
+        text("UPDATE source_vocabulary SET locked = FALSE WHERE id = :v"), {"v": vocabulary_id}
+    )
     deleted = session.execute(
         text("DELETE FROM source_concepts WHERE source_vocabulary_id = :v"), {"v": vocabulary_id}
     ).rowcount
@@ -625,6 +631,10 @@ def update_non_standard_mappings(conn) -> dict[str, int]:
              AND t.standard_concept = 'S' AND t.invalid_reason IS NULL
             """
         )
+        # Released vocabularies are locked: the changes below go into their next release
+        from app.services.releases import reopen_for_vocabulary_update
+
+        reopened = reopen_for_vocabulary_update(cur)
         cur.execute(
             """
             INSERT INTO source_standard_map (source_id, concept_id)
@@ -680,4 +690,5 @@ def update_non_standard_mappings(conn) -> dict[str, int]:
         "non_standard_mappings_replaced": stale - removed,
         "non_standard_mappings_removed": removed,
         "stale_suggestions_removed": suggestions,
+        "released_vocabularies_reopened": reopened,
     }

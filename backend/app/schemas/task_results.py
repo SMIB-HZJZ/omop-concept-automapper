@@ -39,6 +39,7 @@ class VocabularyImportResult(_Result):
     non_standard_mappings_removed: int
     non_standard_mappings_replaced: int = 0
     stale_suggestions_removed: int = 0
+    released_vocabularies_reopened: int = 0
     vectors_pruned: int = 0
     vectors_relabeled: int = 0
     vectors_text_changed: int = 0

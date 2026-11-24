@@ -5,6 +5,7 @@ import { ConceptLink } from "@/components/ConceptLink";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ConceptLike } from "./types";
+import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 
 /** The concepts chosen for the current source term, with "Confirm mapping" (kept at the top of the
  * panel, so confirming never needs scrolling). */
@@ -20,6 +21,8 @@ export function SelectedConcepts({
   confirming: boolean;
 }) {
   const empty = concepts.length === 0;
+  // A released vocabulary is locked until an admin starts the next release
+  const locked = useSelectedVocabulary().vocabulary?.locked ?? false;
   return (
     <div
       className={cn(
@@ -59,7 +62,13 @@ export function SelectedConcepts({
           </motion.span>
         ))}
       </AnimatePresence>
-      <Button variant="cta" className="ml-auto gap-1.5" onClick={onConfirm} disabled={empty || confirming}>
+      <Button
+        variant="cta"
+        className="ml-auto gap-1.5"
+        onClick={onConfirm}
+        disabled={empty || confirming || locked}
+        title={locked ? "This vocabulary is released and locked" : undefined}
+      >
         <Check /> {confirming ? "Saving…" : "Confirm mapping"}
       </Button>
     </div>

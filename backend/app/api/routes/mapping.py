@@ -27,6 +27,7 @@ from app.schemas.api import (
 )
 from app.services import mapping, suggestions
 from app.services.atc7 import is_valid_atc7
+from app.services.releases import LOCKED_MESSAGE
 from app.services.settings_store import EffectiveConfig, get_effective_config
 from app.vector.store import CollectionMissing
 from app.worker.tasks.automap import run_automap
@@ -81,10 +82,13 @@ def unmap(body: UnmapRequest, user: CurrentUser, session: SessionDep):
     status_code=status.HTTP_202_ACCEPTED,
 )
 def automap(vocabulary_id: int, body: AutomapRequest, user: AdminUser, session: SessionDep):
-    if session.get(SourceVocabulary, vocabulary_id) is None:
+    vocab = session.get(SourceVocabulary, vocabulary_id)
+    if vocab is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, f"Source vocabulary {vocabulary_id} not found"
         )
+    if vocab.locked:
+        raise HTTPException(status.HTTP_409_CONFLICT, LOCKED_MESSAGE.format(name=vocab.name))
     try:
         get_pipeline(body.pipeline)
     except PipelineError as exc:

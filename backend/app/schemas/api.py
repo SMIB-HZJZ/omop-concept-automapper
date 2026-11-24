@@ -175,6 +175,10 @@ class SourceVocabularyOut(BaseModel):
     created_at: datetime | None = None
     concept_count: int = 0
     mapped_count: int = 0
+    # Releases: a published release locks the mappings until the next one is started
+    locked: bool = False
+    latest_release: int | None = None
+    draft_note: str | None = None
 
 
 VOCABULARY_NAME_MAX = 100
@@ -746,3 +750,31 @@ class WorkflowCatalog(BaseModel):
     pipelines: list[WorkflowInfo]
     nodes: list[WorkflowNodeInfo]
     errors: dict[str, str]
+
+
+class ReleaseChanges(BaseModel):
+    """Source concepts whose mappings were added, changed or removed against the release before."""
+
+    added: int
+    changed: int
+    removed: int
+
+
+class ReleaseInfo(ReleaseChanges):
+    number: int
+    released_at: datetime
+    released_by: str | None = None
+    note: str | None = None
+    mapped_sources: int
+    rows: int
+
+
+class ReleaseState(BaseModel):
+    locked: bool
+    draft_note: str | None = None
+    releases: list[ReleaseInfo]  # newest first
+    draft: ReleaseChanges | None = None  # while unlocked: changes against the latest release
+
+
+class ReleaseCreate(BaseModel):
+    note: str | None = Field(None, max_length=500)

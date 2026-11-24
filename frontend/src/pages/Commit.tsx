@@ -24,6 +24,7 @@ import { Progress } from "@/components/ui/progress";
 import { useDebounce } from "@/hooks/useDebounce";
 import { formatNumber } from "@/lib/format";
 import { ConceptLink } from "@/components/ConceptLink";
+import { ReleasePanel } from "./commit/ReleasePanel";
 
 const chartConfig = { count: { label: "Mappings", color: "var(--chart-1)" } } satisfies ChartConfig;
 
@@ -53,9 +54,11 @@ const columns: ColumnDef<MappedRow, unknown>[] = [
 
 function MappedTable({
   vocabularyId,
+  locked,
   actions,
 }: {
   vocabularyId: number;
+  locked: boolean;
   actions: (selection: ReactNode) => ReactNode;
 }) {
   const [page, setPage] = useState(1);
@@ -125,7 +128,12 @@ function MappedTable({
         maxHeight="36rem"
       />
       {actions(
-        <Button variant="secondary" disabled={selected.length === 0 || unmap.isPending} onClick={onUnmap}>
+        <Button
+          variant="secondary"
+          disabled={selected.length === 0 || unmap.isPending || locked}
+          title={locked ? "This vocabulary is released and locked" : undefined}
+          onClick={onUnmap}
+        >
           <Unlink /> Unmap selected {selectedSources.length > 0 && `(${selectedSources.length})`}
         </Button>,
       )}
@@ -185,10 +193,11 @@ export function CommitPage() {
         icon={ClipboardCheck}
         step={4}
         title="Check & commit"
-        description="Look over the final mappings, remove wrong ones, and download them as CSV."
+        description="Look over the final mappings, remove wrong ones, publish them as a release and download them as CSV."
       />
-      <VocabularySelector selection={selection} />
+      <VocabularySelector selection={selection} releaseNotice={false} />
       <ErrorAlert error={stats.error} title="Could not load mapping statistics" />
+      {vocabularyId !== null && <ReleasePanel key={vocabularyId} vocabularyId={vocabularyId} />}
 
       {vocabularyId !== null && s && s.total_mappings === 0 && (
         <div className="space-y-4">
@@ -205,6 +214,7 @@ export function CommitPage() {
           <MappedTable
             key={vocabularyId}
             vocabularyId={vocabularyId}
+            locked={vocabulary?.locked ?? false}
             actions={(unmapButton) => (
               <div className="flex flex-wrap items-center gap-2">
                 {unmapButton}
@@ -219,9 +229,14 @@ export function CommitPage() {
                   href={`/api/source-vocabularies/${vocabularyId}/source_to_concept_map.csv`}
                   download={`source_to_concept_map_${vocabularyId}.csv`}
                   className={buttonVariants({ variant: "outline" })}
-                  title="The OMOP SOURCE_TO_CONCEPT_MAP table: load it into your CDM's vocabulary schema"
+                  title={
+                    vocabulary?.latest_release
+                      ? `The OMOP SOURCE_TO_CONCEPT_MAP of release ${vocabulary.latest_release}, the official version: load it into your CDM's vocabulary schema`
+                      : "The OMOP SOURCE_TO_CONCEPT_MAP table: load it into your CDM's vocabulary schema"
+                  }
                 >
                   <Download /> OMOP source_to_concept_map
+                  {vocabulary?.latest_release ? ` (release ${vocabulary.latest_release})` : ""}
                 </a>
                 <div className="ml-auto">{deleteButton}</div>
               </div>

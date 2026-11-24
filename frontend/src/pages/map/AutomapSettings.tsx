@@ -18,6 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { DEFAULT_THRESHOLD, useAutomapThreshold } from "@/hooks/useAutomapThreshold";
 import { DOMAIN_MODES, type DomainMode, useDomainMode } from "@/hooks/useDomainMode";
 import { usePersistentState } from "@/hooks/usePersistentState";
+import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 import { useStartTask } from "@/hooks/useStartTask";
 import { useLatestTask } from "@/hooks/useTasks";
 import { AutomapDoneLine, AutomapResult } from "./AutomapResult";
@@ -43,6 +44,8 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
   const [pipeline, setPipeline] = useState(DEFAULT_PIPELINE);
   const [limit, setLimit] = useState("");
   const [open, setOpen] = useState(false);
+  // A released vocabulary is locked until an admin starts the next release
+  const locked = useSelectedVocabulary().vocabulary?.locked ?? false;
   // The last finished run the user closed (its result line stays hidden)
   const [dismissed, setDismissed] = usePersistentState<string | null>("automap-dismissed", null);
 
@@ -79,7 +82,12 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
     trigger: (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="cta" className="gap-2">
+          <Button
+            variant="cta"
+            className="gap-2"
+            disabled={locked}
+            title={locked ? "This vocabulary is released and locked" : undefined}
+          >
             <Bot className="size-4" /> Auto-map with AI
             <Settings2 className="size-4 opacity-70" />
           </Button>

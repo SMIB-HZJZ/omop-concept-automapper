@@ -1,14 +1,8 @@
 """Who is working on which source term (presence, kept briefly in Redis) and team activity."""
 
-import csv
-import io
-from collections.abc import Iterator
-from datetime import date
-
 from sqlalchemy import text
 from sqlmodel import Session
 
-from app.core.db import session_scope
 from app.core.redis import get_redis
 
 # A browser renews its presence every ~20 s; without renewal it disappears after this many seconds
@@ -88,63 +82,3 @@ def activity(session: Session, vocabulary_id: int) -> list[dict]:
         {"v": vocabulary_id},
     ).mappings()
     return [dict(r) for r in rows]
-
-
-STCM_COLUMNS = [
-    "source_code",
-    "source_concept_id",
-    "source_vocabulary_id",
-    "source_code_description",
-    "target_concept_id",
-    "target_vocabulary_id",
-    "valid_start_date",
-    "valid_end_date",
-    "invalid_reason",
-]
-
-
-def iter_source_to_concept_map(vocabulary_id: int, source_vocabulary_id: str) -> Iterator[str]:
-    """The mappings as OMOP SOURCE_TO_CONCEPT_MAP rows (CSV), streamed."""
-    buffer = io.StringIO()
-    writer = csv.writer(buffer, lineterminator="\n")
-
-    def flush() -> str:
-        value = buffer.getvalue()
-        buffer.seek(0)
-        buffer.truncate(0)
-        return value
-
-    writer.writerow(STCM_COLUMNS)
-    yield flush()
-    with session_scope() as session:
-        result = session.execute(
-            text(
-                """
-                SELECT sc.source_value, sc.source_concept_name, c.concept_id, c.vocabulary_id,
-                       COALESCE(m.created_at::date, CURRENT_DATE) AS valid_start_date
-                FROM source_standard_map m
-                JOIN source_concepts sc ON sc.source_id = m.source_id
-                JOIN concept c ON c.concept_id = m.concept_id
-                WHERE sc.source_vocabulary_id = :v
-                ORDER BY sc.source_value, c.concept_id
-                """
-            ).execution_options(yield_per=5000),
-            {"v": vocabulary_id},
-        )
-        for i, (code, name, target, target_vocab, start) in enumerate(result, 1):
-            writer.writerow(
-                [
-                    code[:50],
-                    0,
-                    source_vocabulary_id,
-                    (name or "")[:255],
-                    target,
-                    target_vocab,
-                    start.strftime("%Y%m%d") if isinstance(start, date) else start,
-                    "20991231",
-                    "",
-                ]
-            )
-            if i % 5000 == 0:
-                yield flush()
-    yield flush()

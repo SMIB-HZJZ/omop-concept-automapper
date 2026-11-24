@@ -93,6 +93,9 @@ This version starts from an empty database: import the vocabulary and embed conc
      - In **commit** mode, they are mapped directly, as the old app did.
 6. **Review**. Accept or reject suggestions one at a time, as a selection, or all at once above a confidence level.
 7. **Check & Commit**. Review the mappings, unmap, download `vocabulary_<id>_mappings.csv`, and view statistics. Admins can delete a source vocabulary.
+   - **Releases** (admin). **Publish release N** copies the current mappings into release N (with an optional note) and locks the vocabulary. A database trigger then refuses any change to its mappings and source terms, whichever path tries it (manual mapping, unmapping, accepting suggestions, auto-map, CSV import); the API answers 409. Rejecting suggestions and flagging terms stay possible. **Start release N+1** unlocks it. A release with no changes against the previous one is refused, and so is publishing while an auto-map or import of the vocabulary runs.
+   - The OMOP `source_to_concept_map` download takes `?release=N` (default: the latest release; without releases, the current mappings) or `?release=draft` (the current mappings as the next release would be). It is built from the copies of every release up to N: a mapping is valid from the release it first appeared in; one that a later release changed or removed ends the day before that release, with `invalid_reason` `U` (the source code was remapped) or `D` (its mapping was removed). A mapping removed and later added again gets one row per period.
+   - An OMOP vocabulary import that has to replace or remove mappings of a locked vocabulary (concepts no longer standard) unlocks it first and leaves a note on its draft; the replacements show as vocabulary updates.
 8. **Configuration**.
    - LLM model, embedding model and dimensions; changes are stored as overrides of the `.env` defaults.
    - The available mapping pipelines.

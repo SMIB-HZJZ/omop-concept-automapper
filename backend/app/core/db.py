@@ -11,6 +11,9 @@ from app.core.config import get_settings
 
 _engine: Engine | None = None
 
+# SQLSTATE of the lock trigger on released source vocabularies (object_not_in_prerequisite_state)
+LOCKED_SQLSTATE = "55000"
+
 
 def get_engine() -> Engine:
     global _engine

@@ -1017,6 +1017,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source-vocabularies/{vocabulary_id}/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Release State */
+        get: operations["release_state_api_source_vocabularies__vocabulary_id__releases_get"];
+        put?: never;
+        /**
+         * Publish
+         * @description Publish the current mappings as the next release and lock the vocabulary.
+         */
+        post: operations["publish_api_source_vocabularies__vocabulary_id__releases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/source-vocabularies/{vocabulary_id}/releases/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Next
+         * @description Unlock a released vocabulary; changes from now on go into the next release.
+         */
+        post: operations["start_next_api_source_vocabularies__vocabulary_id__releases_next_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1669,6 +1710,57 @@ export interface components {
             /** Relationship Id */
             relationship_id: string;
         };
+        /**
+         * ReleaseChanges
+         * @description Source concepts whose mappings were added, changed or removed against the release before.
+         */
+        ReleaseChanges: {
+            /** Added */
+            added: number;
+            /** Changed */
+            changed: number;
+            /** Removed */
+            removed: number;
+        };
+        /** ReleaseCreate */
+        ReleaseCreate: {
+            /** Note */
+            note?: string | null;
+        };
+        /** ReleaseInfo */
+        ReleaseInfo: {
+            /** Added */
+            added: number;
+            /** Changed */
+            changed: number;
+            /** Removed */
+            removed: number;
+            /** Number */
+            number: number;
+            /**
+             * Released At
+             * Format: date-time
+             */
+            released_at: string;
+            /** Released By */
+            released_by?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Mapped Sources */
+            mapped_sources: number;
+            /** Rows */
+            rows: number;
+        };
+        /** ReleaseState */
+        ReleaseState: {
+            /** Locked */
+            locked: boolean;
+            /** Draft Note */
+            draft_note?: string | null;
+            /** Releases */
+            releases: components["schemas"]["ReleaseInfo"][];
+            draft?: components["schemas"]["ReleaseChanges"] | null;
+        };
         /** SearchRequest */
         SearchRequest: {
             /** Query */
@@ -1813,6 +1905,15 @@ export interface components {
              * @default 0
              */
             mapped_count: number;
+            /**
+             * Locked
+             * @default false
+             */
+            locked: boolean;
+            /** Latest Release */
+            latest_release?: number | null;
+            /** Draft Note */
+            draft_note?: string | null;
         };
         /** SourceVocabularyUpdate */
         SourceVocabularyUpdate: {
@@ -2467,6 +2568,11 @@ export interface components {
              * @default 0
              */
             stale_suggestions_removed: number;
+            /**
+             * Released Vocabularies Reopened
+             * @default 0
+             */
+            released_vocabularies_reopened: number;
             /**
              * Vectors Pruned
              * @default 0
@@ -4353,6 +4459,8 @@ export interface operations {
             query?: {
                 /** @description SOURCE_VOCABULARY_ID to write (default: from the name) */
                 source_vocabulary_id?: string | null;
+                /** @description Release number, or 'draft' for the current mappings as the next release (default: the latest release; the current mappings when there is none) */
+                release?: string | null;
             };
             header?: never;
             path: {
@@ -4368,6 +4476,103 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_state_api_source_vocabularies__vocabulary_id__releases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vocabulary_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_api_source_vocabularies__vocabulary_id__releases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vocabulary_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_next_api_source_vocabularies__vocabulary_id__releases_next_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vocabulary_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseState"];
+                };
             };
             /** @description Validation Error */
             422: {

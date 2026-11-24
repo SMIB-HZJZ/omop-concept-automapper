@@ -25,6 +25,7 @@ export const keys = {
     ["vocab", id, "unmapped", page, perPage, view, q] as const,
   mapped: (id: number, page: number, perPage: number, q: string) => ["vocab", id, "mapped", page, perPage, q] as const,
   stats: (id: number) => ["vocab", id, "stats"] as const,
+  releases: (id: number) => ["vocab", id, "releases"] as const,
   auditStats: (id: number) => ["vocab", id, "audit-stats"] as const,
   auditRecent: (id: number) => ["vocab", id, "audit-recent"] as const,
   suggestions: (id: number, params: object) => ["vocab", id, "suggestions", params] as const,
@@ -261,6 +262,49 @@ export function useUpdateVocabulary() {
         await api.PATCH("/api/source-vocabularies/{vocabulary_id}", { params: { path: { vocabulary_id: id } }, body }),
       ),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.sourceVocabularies }),
+  });
+}
+
+// ----------------------------------------------------------------------------- releases
+
+export const useReleases = (vocabularyId: number | null) =>
+  useQuery({
+    queryKey: keys.releases(vocabularyId ?? 0),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/source-vocabularies/{vocabulary_id}/releases", {
+          params: { path: { vocabulary_id: vocabularyId! } },
+        }),
+      ),
+    enabled: vocabularyId !== null,
+  });
+
+/** Publish the current mappings as the next release (locks the vocabulary). */
+export function usePublishRelease(vocabularyId: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (note: string) =>
+      unwrap(
+        await api.POST("/api/source-vocabularies/{vocabulary_id}/releases", {
+          params: { path: { vocabulary_id: vocabularyId! } },
+          body: { note: note.trim() || null },
+        }),
+      ),
+    onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
+  });
+}
+
+/** Unlock a released vocabulary: changes from now on go into the next release. */
+export function useStartNextRelease(vocabularyId: number | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      unwrap(
+        await api.POST("/api/source-vocabularies/{vocabulary_id}/releases/next", {
+          params: { path: { vocabulary_id: vocabularyId! } },
+        }),
+      ),
+    onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
   });
 }
 

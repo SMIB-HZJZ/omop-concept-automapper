@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
 
 from app import __version__
 from app.api.routes import (
@@ -16,6 +17,7 @@ from app.api.routes import (
     embeddings,
     mapping,
     meta,
+    releases,
     source,
     tasks,
     users,
@@ -23,6 +25,7 @@ from app.api.routes import (
     workflows,
 )
 from app.core.config import get_settings
+from app.core.db import LOCKED_SQLSTATE
 from app.core.logging import setup_logging
 from app.llm.embeddings import GatewayUnavailable
 from app.vector.store import CollectionMissing
@@ -86,6 +89,13 @@ def create_app() -> FastAPI:
     async def _gateway_unavailable(_: Request, exc: GatewayUnavailable):
         return JSONResponse(status_code=503, content={"detail": str(exc)})
 
+    @app.exception_handler(DBAPIError)
+    async def _locked_vocabulary(_: Request, exc: DBAPIError):
+        # The lock trigger of released vocabularies (migration 0016); other errors stay 500s
+        if getattr(exc.orig, "sqlstate", None) == LOCKED_SQLSTATE:
+            return JSONResponse(status_code=409, content={"detail": exc.orig.diag.message_primary})
+        raise exc
+
     api = APIRouter(prefix="/api")
     for module in (
         meta,
@@ -100,6 +110,7 @@ def create_app() -> FastAPI:
         tasks,
         workflows,
         collaboration,
+        releases,
     ):
         api.include_router(module.router)
     app.include_router(api)

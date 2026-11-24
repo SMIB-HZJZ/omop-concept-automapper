@@ -24,6 +24,11 @@ class SourceVocabulary(SQLModel, table=True):
     created_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )
+    # A published release locks the mappings (a database trigger refuses changes) until an admin
+    # starts the next release; see app.services.releases
+    locked: bool = False
+    # Why the current draft was opened, when not by hand (e.g. by an OMOP vocabulary update)
+    draft_note: str | None = None
 
 
 class SourceConcept(SQLModel, table=True):

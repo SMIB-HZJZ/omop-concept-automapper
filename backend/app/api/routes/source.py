@@ -25,6 +25,7 @@ from app.schemas.api import (
     clean_language,
 )
 from app.services import mapping
+from app.services.releases import LOCKED_MESSAGE
 from app.services.source_import import SourceImportError, read_header, validate_header
 from app.worker.tasks.source import import_source_concepts
 
@@ -224,6 +225,8 @@ def _start_import(
                 code_vocabularies=code_vocabularies,
                 source_language=source_language,
             )
+        elif vocab.locked:
+            raise HTTPException(status.HTTP_409_CONFLICT, LOCKED_MESSAGE.format(name=vocab.name))
         elif (
             name
             or is_drug is not None
