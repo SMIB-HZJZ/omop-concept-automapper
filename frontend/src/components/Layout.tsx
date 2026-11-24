@@ -26,6 +26,7 @@ import { keys, useEmbeddingStatus, useMappingStats, useUsers } from "@/api/queri
 import { taskResult } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
+import { Logos } from "@/components/Logos";
 import { ChangePasswordDialog } from "@/components/ChangePasswordDialog";
 import { PageTransition } from "@/components/motion";
 import { TaskProgress } from "@/components/TaskProgress";
@@ -416,6 +417,7 @@ export function Layout() {
               ))}
             </nav>
           </LayoutGroup>
+          <Logos className="m-3 mt-0" />
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="bg-background/80 sticky top-0 z-20 flex h-16 items-center gap-2 border-b px-4 backdrop-blur-md">

@@ -96,6 +96,8 @@ This version starts from an empty database: import the vocabulary and embed conc
    - The available mapping pipelines.
    - **Users** (admin only): create users, change roles, deactivate and reset passwords.
 
+The sidebar and the sign-in page show the logos of the Croatian Institute of Public Health (HZJZ, from hzjz.hr) and OHDSI (from ohdsi.org), in `frontend/public/logos/`. They belong to those organisations.
+
 ### Roles
 
 | | user | admin |

@@ -7,6 +7,7 @@ import { api, unwrap } from "@/api/client";
 import { useAuthOptions } from "@/api/queries";
 import { useAuth } from "@/auth/useAuth";
 import { ErrorAlert } from "@/components/common";
+import { Logos } from "@/components/Logos";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -169,6 +170,7 @@ export function LoginPage() {
             )}
           </CardContent>
         </Card>
+        <Logos large className="mt-4 shadow-[var(--shadow-soft)]" />
       </motion.div>
     </div>
   );
