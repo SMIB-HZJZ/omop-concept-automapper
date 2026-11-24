@@ -64,11 +64,12 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
         )
         current = mapping.current_mapping(session, body.source_id)
         # Changing one's own mapping is fine; another person's (or an automatic one) is asked
-        if (
-            current
-            and sorted(set(body.concept_ids)) != current["concept_ids"]
-            and not mapping.all_mapped_by(session, [body.source_id], user.id)
-        ):
+        if current and not mapping.all_mapped_by(session, [body.source_id], user.id):
+            same = sorted(set(body.concept_ids)) == current["concept_ids"]
+            if same and set(current["match_types"]) == {body.match_type}:
+                # Exactly what is there already (e.g. a stale screen): keep it, and its author
+                session.rollback()
+                return CountResult(count=len(current["concept_ids"]))
             session.rollback()
             who = current["mapped_by"] or "an automatic step"
             raise HTTPException(
@@ -79,6 +80,7 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
                     "mapped_by": current["mapped_by"],
                     "mapped_at": current["mapped_at"].isoformat() if current["mapped_at"] else None,
                     "concept_ids": current["concept_ids"],
+                    "match_types": current["match_types"],
                 },
             )
     mapping.map_concepts(
@@ -118,7 +120,12 @@ def automap(vocabulary_id: int, body: AutomapRequest, user: AdminUser, session: 
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, f"Source vocabulary {vocabulary_id} not found"
         )
-    if vocab.locked:
+    # Share lock until the task is recorded (start_task commits): a publish running at the same
+    # time either finishes first (and the lock is seen here) or sees this task and refuses
+    locked = session.execute(
+        text("SELECT locked FROM source_vocabulary WHERE id = :v FOR SHARE"), {"v": vocabulary_id}
+    ).scalar_one()
+    if locked:
         raise HTTPException(status.HTTP_409_CONFLICT, LOCKED_MESSAGE.format(name=vocab.name))
     try:
         get_pipeline(body.pipeline)

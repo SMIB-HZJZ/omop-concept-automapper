@@ -7,7 +7,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
-import { alreadyMapped, api, unwrap } from "./client";
+import { api, ApiError, unwrap } from "./client";
 import type { ConfigUpdate, DrugStructure, MatchType, SearchRequest, SuggestRequest } from "./types";
 
 /** Query keys. Everything about one source vocabulary lives under ["vocab", id]. */
@@ -47,6 +47,14 @@ export const keys = {
 export function invalidateVocabulary(qc: QueryClient, id?: number) {
   void qc.invalidateQueries({ queryKey: keys.sourceVocabularies });
   void qc.invalidateQueries({ queryKey: id === undefined ? ["vocab"] : keys.vocab(id) });
+}
+
+/** A mapping write refused with 409 (locked by a release, or mapped meanwhile): the screen is
+ * out of date, so its lock state and lists are fetched again. */
+function refreshOnConflict(qc: QueryClient, vocabularyId: number | null) {
+  return (error: unknown) => {
+    if (error instanceof ApiError && error.status === 409) invalidateVocabulary(qc, vocabularyId ?? undefined);
+  };
 }
 
 // ----------------------------------------------------------------------------- meta / config
@@ -141,6 +149,9 @@ export const useSourceVocabularies = () =>
   useQuery({
     queryKey: keys.sourceVocabularies,
     queryFn: async () => unwrap(await api.GET("/api/source-vocabularies")),
+    // Lock state and counts change through other people (a release, a colleague's mappings)
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
 /** todo: not flagged; suggested: with a waiting AI suggestion; flagged; all */
@@ -240,10 +251,7 @@ export function useMapConcepts(vocabularyId: number | null) {
     mutationFn: async (body: { source_id: number; concept_ids: number[]; match_type: MatchType; replace: boolean }) =>
       unwrap(await api.POST("/api/mappings", { body })),
     onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
-    // Mapped by someone else meanwhile: the term list is out of date
-    onError: (error) => {
-      if (alreadyMapped(error)) invalidateVocabulary(qc, vocabularyId ?? undefined);
-    },
+    onError: refreshOnConflict(qc, vocabularyId),
   });
 }
 
@@ -252,6 +260,7 @@ export function useUnmap(vocabularyId: number | null) {
   return useMutation({
     mutationFn: async (source_ids: number[]) => unwrap(await api.POST("/api/mappings/unmap", { body: { source_ids } })),
     onSuccess: () => invalidateVocabulary(qc, vocabularyId ?? undefined),
+    onError: refreshOnConflict(qc, vocabularyId),
   });
 }
 
@@ -344,6 +353,7 @@ export function useDecideSuggestions(vocabularyId: number | null, decision: "acc
       invalidateVocabulary(qc, vocabularyId ?? undefined);
       void qc.invalidateQueries({ queryKey: ["calibration"] });
     },
+    onError: refreshOnConflict(qc, vocabularyId),
   });
 }
 

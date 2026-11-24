@@ -593,11 +593,13 @@ def map_concepts(
 
 
 def current_mapping(session: Session, source_id: int) -> dict | None:
-    """The term's current mapping: its concept ids, who made it and when; None if unmapped."""
+    """The term's current mapping: its concept ids and match types, who made it and when; None
+    if unmapped."""
     row = session.execute(
         text(
             """
             SELECT array_agg(m.concept_id ORDER BY m.concept_id) AS concept_ids,
+                   array_agg(m.match_type ORDER BY m.concept_id) AS match_types,
                    (array_agg(u.username ORDER BY m.created_at DESC))[1] AS mapped_by,
                    MAX(m.created_at) AS mapped_at
             FROM source_standard_map m LEFT JOIN app_user u ON u.id = m.created_by

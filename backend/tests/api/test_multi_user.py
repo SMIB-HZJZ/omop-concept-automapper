@@ -20,26 +20,24 @@ def test_mapping_made_meanwhile_is_not_overwritten(
         "/api/mappings", json={"source_id": term, "concept_ids": [201]}, headers=user_headers
     )
     assert first.status_code == 200
-    # The same choice again (e.g. a double click, or another match type) is fine
+    # The same choice again (e.g. a double click from a stale screen) is fine and changes nothing
     again = client.post(
-        "/api/mappings",
-        json={"source_id": term, "concept_ids": [201], "match_type": "broader"},
-        headers=admin_headers,
+        "/api/mappings", json={"source_id": term, "concept_ids": [201]}, headers=admin_headers
     )
     assert again.status_code == 200
     # A different choice from a stale screen is refused, naming who mapped it
     other = client.post(
-        "/api/mappings", json={"source_id": term, "concept_ids": [202]}, headers=user_headers
+        "/api/mappings", json={"source_id": term, "concept_ids": [202]}, headers=admin_headers
     )
     assert other.status_code == 409
     detail = other.json()["detail"]
     assert detail["code"] == "already_mapped"
-    assert detail["mapped_by"] == "admin" and detail["concept_ids"] == [201]
+    assert detail["mapped_by"] == "mapper" and detail["concept_ids"] == [201]
     # ... unless the user confirms the replacement
     replaced = client.post(
         "/api/mappings",
         json={"source_id": term, "concept_ids": [202], "replace": True},
-        headers=user_headers,
+        headers=admin_headers,
     )
     assert replaced.status_code == 200
     mapped = client.get(f"/api/source-vocabularies/{vid}/mapped", headers=admin_headers).json()

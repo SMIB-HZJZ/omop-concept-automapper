@@ -223,7 +223,18 @@ export function CommitPage() {
             This permanently deletes {formatNumber(vocabulary.concept_count)} source concepts of vocabulary ID{" "}
             {vocabulary.id}, together with their mappings, audit trail and suggestions.
           </p>
-          <p>Download the CSV first if you need the mappings.</p>
+          {vocabulary.latest_release != null && (
+            <p>
+              <b>
+                Its{" "}
+                {vocabulary.latest_release === 1
+                  ? "published release"
+                  : `${vocabulary.latest_release} published releases`}{" "}
+                and their source_to_concept_map history are deleted too.
+              </b>
+            </p>
+          )}
+          <p>Download the CSV (and each release's source_to_concept_map) first if you need them.</p>
         </>
       }
       onConfirm={onDelete}

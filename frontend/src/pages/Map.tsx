@@ -284,7 +284,13 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
   const currentPage = unmapped.data?.page ?? page;
 
   const items = useMemo(() => unmapped.data?.items ?? [], [unmapped.data]);
-  const concept = items.find((i) => String(i.source_id) === selectedSource) ?? null;
+  const found = items.find((i) => String(i.source_id) === selectedSource) ?? null;
+  // The open term stays open when a refresh drops it from the list (a colleague mapped or
+  // flagged it, an auto-map queued a suggestion, or it moved to another page): work in progress
+  // in the panel is kept, and saving tells whether it was mapped meanwhile
+  const [held, setHeld] = useState<UnmappedItem | null>(null);
+  if (found && found !== held) setHeld(found);
+  const concept = found ?? (held && String(held.source_id) === selectedSource ? held : null);
 
   const select = useCallback((id: string | null) => {
     setSelectedSource(id);
@@ -423,6 +429,7 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
                 onMapped={afterMapped}
                 onUndone={(id) => select(String(id))}
                 othersHere={othersOn.get(concept.source_id) ?? []}
+                leftList={!found}
               />
             ) : (
               <div className="h-full">

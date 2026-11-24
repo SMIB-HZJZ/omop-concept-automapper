@@ -36,6 +36,7 @@ export type AlreadyMapped = {
   mapped_by: string | null;
   mapped_at: string | null;
   concept_ids: number[];
+  match_types: (string | null)[];
 };
 
 export function alreadyMapped(error: unknown): AlreadyMapped | null {

@@ -179,6 +179,8 @@ type Props = {
   onUndone: (sourceId: number) => void;
   /** Colleagues who have this term open right now */
   othersHere: string[];
+  /** The term is no longer in the list on the left (e.g. a colleague mapped or flagged it) */
+  leftList?: boolean;
 };
 
 function isTyping(target: EventTarget | null) {
@@ -186,7 +188,15 @@ function isTyping(target: EventTarget | null) {
   return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 }
 
-export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndone, othersHere }: Props) {
+export function ConceptDetail({
+  concept,
+  vocabularyId,
+  isDrug,
+  onMapped,
+  onUndone,
+  othersHere,
+  leftList = false,
+}: Props) {
   const [name, setName] = useState(concept.source_concept_name);
   const [domains, setDomains] = usePersistentState<string[]>("map-domains", []);
   const [vocabularies, setVocabularies] = useState<string[]>([]);
@@ -198,8 +208,20 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
   const [pipeline, setPipeline] = useState(DEFAULT_PIPELINE);
   const [selected, setSelected] = useState<Map<number, ConceptLike>>(new Map());
   const [suggestion, setSuggestion] = useState<SuggestResponse | null>(null);
-  // How the chosen concept(s) relate to the term; a picked AI suggestion brings its own
+  // How the chosen concept(s) relate to the term; a picked AI suggestion brings its own, and an
+  // empty selection starts again from exact
   const [matchType, setMatchType] = useState<MatchType>("exact");
+  // The selection's size as of the last render, for the effect that pre-selects a waiting suggestion
+  const selectedCount = useRef(0);
+  useEffect(() => {
+    selectedCount.current = selected.size;
+  }, [selected.size]);
+  // Nothing selected any more: the next choice starts from exact again (adjusted while rendering)
+  const [lastSize, setLastSize] = useState(selected.size);
+  if (selected.size !== lastSize) {
+    setLastSize(selected.size);
+    if (selected.size === 0) setMatchType("exact");
+  }
   const [threshold] = useAutomapThreshold();
   const [domainMode] = useDomainMode();
   // Drugs: the structure as auto-mapping reads it (from the CSV, or the name read by the AI),
@@ -304,11 +326,9 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
         concept_class_id: c.concept_class_id,
       })),
     ];
-    setSelected((prev) => {
-      if (prev.size) return prev;
-      setMatchType(asMatchType(waiting.match_type));
-      return new Map(picks.map((c) => [c.concept_id, c]));
-    });
+    if (selectedCount.current > 0) return; // the user already chose something
+    setSelected(new Map(picks.map((c) => [c.concept_id, c])));
+    setMatchType(asMatchType(waiting.match_type));
   }, [waiting]);
 
   const addConcept = (c: ConceptLike) => setSelected((prev) => new Map(prev).set(c.concept_id, c));
@@ -416,7 +436,9 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
             return;
           }
           toast.warning(`Already mapped by ${conflict.mapped_by ?? "an automatic step"}`, {
-            description: `${formatDate(conflict.mapped_at)}: concept ${conflict.concept_ids.join(", ")}. Replace it with your choice?`,
+            description: `${formatDate(conflict.mapped_at)}: concept ${conflict.concept_ids.join(", ")}${
+              conflict.match_types?.[0] ? ` (${conflict.match_types[0]} match)` : ""
+            }. Replace it with your choice?`,
             duration: 15000,
             action: { label: "Replace", onClick: () => save(true) },
           });
@@ -652,6 +674,12 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
           )}
         </div>
 
+        {leftList && (
+          <div className="border-warning/40 bg-warning/10 rounded-xl border px-3 py-2 text-sm">
+            This term is no longer in the list: a colleague may have mapped, flagged or queued it meanwhile. Saving
+            tells you if it was mapped.
+          </div>
+        )}
         {othersHere.length > 0 && (
           <div className="border-warning/40 bg-warning/10 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
             <div className="flex -space-x-1.5">

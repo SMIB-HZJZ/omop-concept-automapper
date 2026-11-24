@@ -30,11 +30,13 @@ VALID_FOREVER = date(2099, 12, 31)
 _WRITING_TASKS = ("automap.run", "source.import")
 
 _CURRENT = """
-    SELECT m.source_id, m.concept_id FROM source_standard_map m
+    SELECT m.source_id, m.concept_id, m.match_type FROM source_standard_map m
     JOIN source_concepts sc ON sc.source_id = m.source_id
     WHERE sc.source_vocabulary_id = :v
 """
-_RELEASED = "SELECT source_id, concept_id FROM mapping_release_row WHERE release_id = {param}"
+_RELEASED = (
+    "SELECT source_id, concept_id, match_type FROM mapping_release_row WHERE release_id = {param}"
+)
 
 
 # Same wording as the lock trigger's error (migration 0016)
@@ -49,14 +51,17 @@ class ReleaseError(Exception):
 
 
 def _changes(session: Session, old_sql: str, new_sql: str, params: dict) -> dict[str, int]:
-    """Source concepts whose mappings were added, changed or removed from ``old`` to ``new``."""
+    """Source concepts whose mappings were added, changed (other concepts, or another match
+    type) or removed from ``old`` to ``new``."""
     row = session.execute(
         text(
             f"""
             WITH a AS ({old_sql}), b AS ({new_sql}),
-                 sa AS (SELECT source_id, array_agg(concept_id ORDER BY concept_id) AS c
+                 sa AS (SELECT source_id, array_agg(concept_id || ':' || COALESCE(match_type, '')
+                                                    ORDER BY concept_id) AS c
                         FROM a GROUP BY source_id),
-                 sb AS (SELECT source_id, array_agg(concept_id ORDER BY concept_id) AS c
+                 sb AS (SELECT source_id, array_agg(concept_id || ':' || COALESCE(match_type, '')
+                                                    ORDER BY concept_id) AS c
                         FROM b GROUP BY source_id)
             SELECT COUNT(*) FILTER (WHERE sa.source_id IS NULL) AS added,
                    COUNT(*) FILTER (WHERE sa.c <> sb.c) AS changed,
@@ -69,7 +74,9 @@ def _changes(session: Session, old_sql: str, new_sql: str, params: dict) -> dict
     return {"added": row.added, "changed": row.changed, "removed": row.removed}
 
 
-_NO_ROWS = "SELECT NULL::int AS source_id, NULL::int AS concept_id WHERE FALSE"
+_NO_ROWS = (
+    "SELECT NULL::int AS source_id, NULL::int AS concept_id, NULL::text AS match_type WHERE FALSE"
+)
 
 
 def _releases(session: Session, vocabulary_id: int) -> list[dict]:
@@ -253,8 +260,10 @@ STCM_COLUMNS = [
 class _Snapshot:
     number: int | None  # None: the unreleased draft (current mappings)
     day: date
-    # (source_id, concept_id) -> (source_value, source_concept_name, target_vocabulary_id, since)
-    rows: dict[tuple[int, int], tuple]
+    # (source_code, concept_id) -> (source_concept_name, target_vocabulary_id, since). Keyed by
+    # code, as OMOP rows are: a code listed twice, or mapped to several concepts, has one target
+    # set per snapshot
+    rows: dict[tuple[str, int], tuple]
 
 
 def release_exists(session: Session, vocabulary_id: int, number: int) -> bool:
@@ -289,7 +298,7 @@ def _snapshots(session: Session, vocabulary_id: int, release: int | str | None) 
             ),
             {"r": r.id},
         ).all()
-        snapshots.append(_Snapshot(r.number, r.day, {(x[0], x[1]): (*x[2:], None) for x in rows}))
+        snapshots.append(_Snapshot(r.number, r.day, _by_code((*x, None) for x in rows)))
     if release == "draft" or not releases:
         rows = session.execute(
             text(
@@ -304,12 +313,29 @@ def _snapshots(session: Session, vocabulary_id: int, release: int | str | None) 
             ),
             {"v": vocabulary_id},
         ).all()
-        snapshots.append(_Snapshot(None, date.today(), {(x[0], x[1]): tuple(x[2:]) for x in rows}))
+        snapshots.append(_Snapshot(None, date.today(), _by_code(rows)))
     return snapshots
 
 
+def _by_code(rows) -> dict[tuple[str, int], tuple]:
+    """(source_id, concept_id, code, name, target vocabulary, since) rows by (code, concept_id);
+    for a code listed more than once, the first name and the earliest date are kept."""
+    out: dict[tuple[str, int], tuple] = {}
+    for _source_id, concept_id, code, name, target_vocabulary, since in rows:
+        key = (code, concept_id)
+        if key in out:
+            kept = out[key]
+            since = min(d for d in (kept[2], since) if d) if kept[2] or since else None
+            out[key] = (kept[0], kept[1], since)
+        else:
+            out[key] = (name, target_vocabulary, since)
+    return out
+
+
 def stcm_rows(session: Session, vocabulary_id: int, release: int | str | None) -> list[dict]:
-    """SOURCE_TO_CONCEPT_MAP rows: one per period a mapping was in consecutive snapshots."""
+    """SOURCE_TO_CONCEPT_MAP rows: one per period a (source code, concept) pair was in
+    consecutive snapshots. An ended pair is 'U' when the code still has a target in the next
+    snapshot (remapped), 'D' when it has none (removed)."""
     snapshots = _snapshots(session, vocabulary_id, release)
     last = len(snapshots) - 1
     sources_in = [{key[0] for key in s.rows} for s in snapshots]
@@ -327,7 +353,8 @@ def stcm_rows(session: Session, vocabulary_id: int, release: int | str | None) -
                 runs.append([i])
         for run in runs:
             first, end_index = run[0], run[-1]
-            value, name, target_vocabulary, since = snapshots[end_index].rows[key]
+            name, target_vocabulary, since = snapshots[end_index].rows[key]
+            value = key[0]
             # A draft mapping is not released yet: valid from when it was made
             start = since if snapshots[first].number is None and since else snapshots[first].day
             if end_index == last:
