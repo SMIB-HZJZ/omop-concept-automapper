@@ -20,18 +20,33 @@ class LoginLocked(Exception):
     pass
 
 
+class AccountPending(Exception):
+    """Right password, but an admin has not approved the account yet."""
+
+
+class RegistrationLimited(Exception):
+    pass
+
+
 def get_by_username(session: Session, username: str) -> AppUser | None:
     return session.exec(
         select(AppUser).where(func.lower(AppUser.username) == username.strip().lower())
     ).first()
 
 
-def create_user(session: Session, username: str, password: str, role: str = "user") -> AppUser:
+def create_user(
+    session: Session, username: str, password: str, role: str = "user", pending: bool = False
+) -> AppUser:
     if role not in ROLES:
         raise ValueError(f"Unknown role {role!r}")
     if get_by_username(session, username):
         raise ValueError(f"User {username!r} already exists")
-    user = AppUser(username=username.strip(), hashed_password=hash_password(password), role=role)
+    user = AppUser(
+        username=username.strip(),
+        hashed_password=hash_password(password),
+        role=role,
+        pending=pending,
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -68,6 +83,10 @@ def authenticate(session: Session, username: str, password: str, ip: str) -> App
     user = get_by_username(session, username)
     if user is None:
         burn_password_check(password)
+    if user is not None and user.pending and user.is_active:
+        # Said only to whoever knows the password; a wrong one counts as a failure below
+        if verify_password(password, user.hashed_password):
+            raise AccountPending()
     if user is None or not user.is_active or not verify_password(password, user.hashed_password):
         try:
             pipe = get_redis().pipeline()
@@ -84,6 +103,34 @@ def authenticate(session: Session, username: str, password: str, ip: str) -> App
     except Exception:
         logger.warning("Could not reset failed-login counters", exc_info=True)
     user.last_login_at = datetime.now(UTC)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+def register(session: Session, email: str, password: str, ip: str) -> AppUser:
+    """A self-registered account (role user, email as its username), waiting for approval.
+
+    Limited per client IP and hour, so the form cannot be used to flood the user list."""
+    settings = get_settings()
+    key = f"register:ip:{ip}"
+    try:
+        pipe = get_redis().pipeline()
+        pipe.incr(key)
+        pipe.expire(key, 3600, nx=True)
+        count = pipe.execute()[0]
+    except Exception:
+        logger.warning("Could not count registrations", exc_info=True)
+        count = 0
+    if count > settings.registrations_per_ip_hour:
+        raise RegistrationLimited()
+    return create_user(session, email.strip().lower(), password, role="user", pending=True)
+
+
+def approve(session: Session, user: AppUser) -> AppUser:
+    user.pending = False
+    user.approved_at = datetime.now(UTC)
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -117,5 +164,9 @@ def count_admins(session: Session) -> int:
     return session.exec(
         select(func.count())
         .select_from(AppUser)
-        .where(AppUser.role == "admin", AppUser.is_active == True)  # noqa: E712
+        .where(
+            AppUser.role == "admin",
+            AppUser.is_active == True,  # noqa: E712
+            AppUser.pending == False,  # noqa: E712
+        )
     ).one()

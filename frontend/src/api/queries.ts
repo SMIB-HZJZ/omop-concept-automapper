@@ -367,6 +367,15 @@ export const useConceptLookup = (ids: string) =>
 export const useUsers = (enabled = true) =>
   useQuery({ queryKey: keys.users, queryFn: async () => unwrap(await api.GET("/api/users")), enabled });
 
+/** What the sign-in page offers (public: works signed out). */
+export const useAuthOptions = () =>
+  useQuery({
+    queryKey: ["auth-options"],
+    queryFn: async () => unwrap(await api.GET("/api/auth/options")),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
 // ----------------------------------------------------------------------------- concept details
 
 export const useConceptDetails = (conceptId: number | null) =>

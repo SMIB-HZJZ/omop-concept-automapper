@@ -105,6 +105,8 @@ This version starts from an empty database: import the vocabulary and embed conc
 | Vocabulary import, ATC7, embeddings (embed, sync, clear) | | ✓ |
 | Change configuration, delete source vocabularies, manage users | | ✓ |
 
+**New accounts.** Admins add users on the Users page, or people create their own account on the sign-in page (**Create one**: email and password, at least 8 characters). A self-registered account has the role *user* and cannot sign in until an admin approves it: it is listed under **Waiting for approval** on the Users page (the sidebar shows how many wait), with **Approve** and **Reject** (deletes it). Signing in before that shows "waiting for an administrator's approval", but only with the right password. No email is sent; the address is checked only for its shape. `SELF_REGISTRATION=false` hides the option; `REGISTRATIONS_PER_IP_HOUR` (default 5) limits new accounts per client address.
+
 Authentication uses username and password. The JWT travels in an httpOnly `SameSite=Lax` cookie (or an `Authorization: Bearer` header for scripts). Changing a password ends the user's other sessions; an expired session sends the user back to the login page, and then to the page they were on.
 
 ## Configuration
@@ -112,7 +114,7 @@ Authentication uses username and password. The JWT travels in an httpOnly `SameS
 Every setting is an environment variable, and all of them are documented in [`.env.example`](.env.example). The most important groups:
 
 - **Database:** `POSTGRES_*`, plus server tuning via `PG_*`, and `DISKANN_MAINTENANCE_WORK_MEM` for DiskANN index builds.
-- **Auth:** `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `COOKIE_SECURE`, `LOGIN_MAX_FAILURES`, `LOGIN_MAX_FAILURES_PER_USER`.
+- **Auth:** `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `COOKIE_SECURE`, `LOGIN_MAX_FAILURES`, `LOGIN_MAX_FAILURES_PER_USER`, `SELF_REGISTRATION`, `REGISTRATIONS_PER_IP_HOUR`.
   - With `APP_ENV=prod` (the default), the app refuses to start while `JWT_SECRET` (or one shorter than 32 characters), `ADMIN_PASSWORD`, `POSTGRES_PASSWORD` or `LITELLM_MASTER_KEY` still hold placeholder values.
   - `COOKIE_SECURE` defaults to `true` in prod and `false` otherwise.
 - **LLM:** `LLM_CHAT_MODEL`, `LLM_EMBEDDING_MODEL`, `EMBEDDING_DIMS`, `LITELLM_MASTER_KEY` (in `.env`) and the provider keys (in `.env.litellm`).

@@ -49,6 +49,17 @@ def update_user(user_id: int, body: UserUpdate, admin: AdminUser, session: Sessi
     return user
 
 
+@router.post("/{user_id}/approve", response_model=UserOut)
+def approve_user(user_id: int, _: AdminUser, session: SessionDep):
+    """Let a self-registered account sign in (reject it with DELETE)."""
+    user = session.get(AppUser, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    if not user.pending:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"{user.username} is already approved")
+    return user_service.approve(session, user)
+
+
 @router.delete("/{user_id}", response_model=Message)
 def delete_user(user_id: int, admin: AdminUser, session: SessionDep):
     user = session.get(AppUser, user_id)

@@ -31,6 +31,9 @@ class UserOut(BaseModel):
     username: str
     role: Role
     is_active: bool
+    # Registered on the sign-in page and waiting for an admin's approval
+    pending: bool = False
+    approved_at: datetime | None = None
     created_at: datetime | None = None
     last_login_at: datetime | None = None
 
@@ -38,6 +41,20 @@ class UserOut(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=150)
     password: str = Field(min_length=1, max_length=256)
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(
+        min_length=6,
+        max_length=64,
+        # A plain shape check (no mail is sent): name@domain.tld without spaces
+        pattern=r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$",
+    )
+    password: str = Field(min_length=8, max_length=256)
+
+
+class AuthOptions(BaseModel):
+    self_registration: bool
 
 
 class LoginResponse(BaseModel):

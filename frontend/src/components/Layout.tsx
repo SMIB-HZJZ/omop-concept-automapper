@@ -22,7 +22,7 @@ import { NavLink, useLocation, useOutlet } from "react-router";
 import { toast } from "sonner";
 
 import { api, unwrap } from "@/api/client";
-import { keys, useEmbeddingStatus, useMappingStats } from "@/api/queries";
+import { keys, useEmbeddingStatus, useMappingStats, useUsers } from "@/api/queries";
 import { taskResult } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
@@ -246,6 +246,10 @@ function UserMenu() {
 
 /** What is done per workflow step: shown next to the sidebar links. */
 function useWorkflowStatus(): Record<string, ReactNode> {
+  const { isAdmin } = useAuth();
+  // Admins see how many self-registered accounts wait for approval
+  const users = useUsers(isAdmin);
+  const waiting = (users.data ?? []).filter((u) => u.pending).length;
   const selection = useSelectedVocabulary();
   const embedding = useEmbeddingStatus([]);
   const stats = useMappingStats(selection.vocabularyId);
@@ -264,6 +268,12 @@ function useWorkflowStatus(): Record<string, ReactNode> {
       s && s.pending_suggestions > 0 ? (
         <StatusText title="Suggestions waiting for review" highlight>
           {s.pending_suggestions > 999 ? "999+" : s.pending_suggestions}
+        </StatusText>
+      ) : null,
+    "/users":
+      waiting > 0 ? (
+        <StatusText title="Accounts waiting for approval" highlight>
+          {waiting}
         </StatusText>
       ) : null,
   };

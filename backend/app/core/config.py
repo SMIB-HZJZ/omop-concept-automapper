@@ -160,6 +160,11 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_max_failures_per_user: int = 20
     login_lockout_seconds: int = 900
+    # Anyone can create an account (email + password) on the sign-in page; it can sign in only
+    # after an admin approves it on the Users page
+    self_registration: bool = True
+    # Accounts one client IP may register per hour
+    registrations_per_ip_hour: int = 5
 
     @computed_field  # type: ignore[prop-decorator]
     @property

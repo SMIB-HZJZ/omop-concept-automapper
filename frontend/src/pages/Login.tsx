@@ -1,8 +1,10 @@
-import { Loader2, Map as MapIcon } from "lucide-react";
+import { CheckCircle2, Loader2, Map as MapIcon } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 
+import { api, unwrap } from "@/api/client";
+import { useAuthOptions } from "@/api/queries";
 import { useAuth } from "@/auth/useAuth";
 import { ErrorAlert } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -10,31 +12,58 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+type Mode = "signin" | "register";
+
 export function LoginPage() {
   const { user, login } = useAuth();
+  const options = useAuthOptions();
   const navigate = useNavigate();
   const location = useLocation();
+  const [mode, setMode] = useState<Mode>("signin");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  // Shown after a registration: the account exists but waits for an admin
+  const [registered, setRegistered] = useState<string | null>(null);
   const from = (location.state as { from?: string } | null)?.from ?? "/map";
+  const canRegister = options.data?.self_registration ?? false;
 
   if (user) return <Navigate to={from} replace />;
 
+  const switchTo = (next: Mode) => {
+    setMode(next);
+    setError(null);
+    setPassword("");
+    setRepeat("");
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+    if (mode === "register" && password !== repeat) {
+      setError(new Error("The two passwords differ"));
+      return;
+    }
+    setBusy(true);
     try {
-      await login(username, password);
-      navigate(from, { replace: true });
+      if (mode === "signin") {
+        await login(username, password);
+        navigate(from, { replace: true });
+      } else {
+        const res = unwrap(await api.POST("/api/auth/register", { body: { email: username.trim(), password } }));
+        setRegistered(res.message);
+        switchTo("signin");
+      }
     } catch (err) {
       setError(err);
     } finally {
       setBusy(false);
     }
   };
+
+  const registering = mode === "register";
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
@@ -54,44 +83,90 @@ export function LoginPage() {
             <div className="bg-brand mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl text-white shadow-[var(--shadow-glow)]">
               <MapIcon className="size-6" />
             </div>
-            <CardTitle className="text-xl">Auto OMOP Mapper</CardTitle>
-            <CardDescription>Sign in to map source terms to OMOP concepts</CardDescription>
+            <CardTitle className="text-xl">{registering ? "Create an account" : "Auto OMOP Mapper"}</CardTitle>
+            <CardDescription>
+              {registering
+                ? "An administrator approves new accounts before they can sign in"
+                : "Sign in to map source terms to OMOP concepts"}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {registered && !registering && (
+              <div
+                role="status"
+                className="border-success/40 bg-success/10 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+              >
+                <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
+                <span>{registered}</span>
+              </div>
+            )}
             <form onSubmit={submit} className="space-y-4">
               <div className="grid gap-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username">
+                  {registering ? "Email" : canRegister ? "Email or username" : "Username"}
+                </Label>
                 <Input
                   id="username"
+                  type={registering ? "email" : "text"}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  autoComplete="username"
+                  autoComplete={registering ? "email" : "username"}
+                  maxLength={registering ? 64 : 150}
                   autoFocus
                   required
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{registering ? "Password (min. 8 characters)" : "Password"}</Label>
                 <Input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
+                  autoComplete={registering ? "new-password" : "current-password"}
+                  minLength={registering ? 8 : undefined}
                   required
                 />
               </div>
-              <ErrorAlert error={error} title="Sign-in failed" />
+              {registering && (
+                <div className="grid gap-2">
+                  <Label htmlFor="password-repeat">Repeat the password</Label>
+                  <Input
+                    id="password-repeat"
+                    type="password"
+                    value={repeat}
+                    onChange={(e) => setRepeat(e.target.value)}
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                  />
+                </div>
+              )}
+              <ErrorAlert error={error} title={registering ? "Could not create the account" : "Sign-in failed"} />
               <Button type="submit" variant="cta" className="w-full" disabled={busy}>
                 {busy ? (
                   <>
-                    <Loader2 className="animate-spin" /> Signing in…
+                    <Loader2 className="animate-spin" /> {registering ? "Creating…" : "Signing in…"}
                   </>
+                ) : registering ? (
+                  "Create account"
                 ) : (
                   "Sign in"
                 )}
               </Button>
             </form>
+            {canRegister && (
+              <p className="text-muted-foreground text-center text-sm">
+                {registering ? "Already have an account? " : "No account yet? "}
+                <button
+                  type="button"
+                  className="text-primary cursor-pointer font-medium hover:underline"
+                  onClick={() => switchTo(registering ? "signin" : "register")}
+                >
+                  {registering ? "Sign in" : "Create one"}
+                </button>
+              </p>
+            )}
           </CardContent>
         </Card>
       </motion.div>

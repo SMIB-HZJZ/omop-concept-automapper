@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { KeyRound, Trash2, UserPlus, Users as UsersIcon } from "lucide-react";
+import { Check, KeyRound, Trash2, UserCheck, UserPlus, Users as UsersIcon, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -51,7 +51,13 @@ function useUserMutations() {
     onSuccess,
     onError,
   });
-  return { create, patch, remove };
+  const approve = useMutation({
+    mutationFn: async (id: number) =>
+      unwrap(await api.POST("/api/users/{user_id}/approve", { params: { path: { user_id: id } } })),
+    onSuccess,
+    onError,
+  });
+  return { create, patch, remove, approve };
 }
 
 function AddUserDialog({ create }: { create: ReturnType<typeof useUserMutations>["create"] }) {
@@ -230,10 +236,70 @@ function RolesExplained() {
   );
 }
 
+/** Accounts created on the sign-in page: they cannot sign in until an admin approves them. */
+function WaitingForApproval({
+  users,
+  approve,
+  remove,
+}: {
+  users: User[];
+  approve: ReturnType<typeof useUserMutations>["approve"];
+  remove: ReturnType<typeof useUserMutations>["remove"];
+}) {
+  if (users.length === 0) return null;
+  return (
+    <section
+      aria-label="Accounts waiting for approval"
+      className="border-warning/40 bg-warning/5 space-y-3 rounded-xl border p-4"
+    >
+      <div className="flex items-center gap-2">
+        <UserCheck className="text-warning size-4" />
+        <h2 className="text-sm font-semibold">Waiting for approval ({users.length})</h2>
+        <span className="text-muted-foreground text-xs">
+          Created on the sign-in page. Approve to let them sign in as a user; reject to delete the account.
+        </span>
+      </div>
+      <ul className="divide-y rounded-lg border bg-card">
+        {users.map((u) => (
+          <li key={u.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2">
+            <span className="min-w-0 flex-1 font-medium break-all">{u.username}</span>
+            <span className="text-muted-foreground text-xs">Registered {formatDate(u.created_at)}</span>
+            <span className="flex gap-2">
+              <Button
+                size="sm"
+                disabled={approve.isPending}
+                onClick={() =>
+                  approve.mutate(u.id, { onSuccess: () => toast.success(`${u.username} can sign in now`) })
+                }
+              >
+                <Check /> Approve
+              </Button>
+              <ConfirmDialog
+                trigger={
+                  <Button size="sm" variant="ghost" disabled={remove.isPending}>
+                    <X /> Reject
+                  </Button>
+                }
+                title={`Reject ${u.username}?`}
+                description="The account is deleted. The person can register again."
+                confirmLabel="Reject"
+                destructive
+                onConfirm={() => remove.mutate(u.id, { onSuccess: () => toast.success(`Rejected ${u.username}`) })}
+              />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function UsersPage() {
   const { user: me } = useAuth();
   const users = useUsers();
-  const { create, patch, remove } = useUserMutations();
+  const { create, patch, remove, approve } = useUserMutations();
+  const waiting = useMemo(() => (users.data ?? []).filter((u) => u.pending), [users.data]);
+  const accounts = useMemo(() => (users.data ?? []).filter((u) => !u.pending), [users.data]);
 
   const columns = useMemo<ColumnDef<User, unknown>[]>(
     () => [
@@ -320,11 +386,12 @@ export function UsersPage() {
         description="Manage who can sign in and what they can do."
         actions={<AddUserDialog create={create} />}
       />
-      <RolesExplained />
       <ErrorAlert error={users.error} title="Could not load users" />
+      <WaitingForApproval users={waiting} approve={approve} remove={remove} />
+      <RolesExplained />
       <DataTable
         columns={columns}
-        data={users.data ?? []}
+        data={accounts}
         getRowId={(u) => String(u.id)}
         isLoading={users.isLoading}
         emptyText="No users"

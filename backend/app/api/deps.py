@@ -32,7 +32,12 @@ def get_current_user(
         )
     # Resolved from the DB on every request so deactivation and role changes apply immediately
     user = session.get(AppUser, int(payload["sub"]))
-    if user is None or not user.is_active or payload.get("ver") != user.token_version:
+    if (
+        user is None
+        or not user.is_active
+        or user.pending
+        or payload.get("ver") != user.token_version
+    ):
         # A version mismatch means the password, role or status changed after the token was issued
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     return user

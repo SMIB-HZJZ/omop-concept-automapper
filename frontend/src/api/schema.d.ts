@@ -55,6 +55,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Options
+         * @description What the sign-in page offers (public).
+         */
+        get: operations["options_api_auth_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register
+         * @description Create an account that can sign in once an admin approves it on the Users page.
+         */
+        post: operations["register_api_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/logout": {
         parameters: {
             query?: never;
@@ -140,6 +180,26 @@ export interface paths {
         head?: never;
         /** Update User */
         patch: operations["update_user_api_users__user_id__patch"];
+        trace?: never;
+    };
+    "/api/users/{user_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve User
+         * @description Let a self-registered account sign in (reject it with DELETE).
+         */
+        post: operations["approve_user_api_users__user_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/config": {
@@ -1008,6 +1068,11 @@ export interface components {
             /** Max Confidence */
             max_confidence: number | null;
         };
+        /** AuthOptions */
+        AuthOptions: {
+            /** Self Registration */
+            self_registration: boolean;
+        };
         /** AutomapRequest */
         AutomapRequest: {
             /**
@@ -1574,6 +1639,13 @@ export interface components {
             /** Username */
             username: string;
         };
+        /** RegisterRequest */
+        RegisterRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+        };
         /** RelatedConcept */
         RelatedConcept: {
             /** Concept Id */
@@ -2072,6 +2144,13 @@ export interface components {
             role: "user" | "admin";
             /** Is Active */
             is_active: boolean;
+            /**
+             * Pending
+             * @default false
+             */
+            pending: boolean;
+            /** Approved At */
+            approved_at?: string | null;
             /** Created At */
             created_at?: string | null;
             /** Last Login At */
@@ -2497,6 +2576,59 @@ export interface operations {
             };
         };
     };
+    options_api_auth_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthOptions"];
+                };
+            };
+        };
+    };
+    register_api_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     logout_api_auth_logout_post: {
         parameters: {
             query?: never;
@@ -2668,6 +2800,37 @@ export interface operations {
                 "application/json": components["schemas"]["UserUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_user_api_users__user_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

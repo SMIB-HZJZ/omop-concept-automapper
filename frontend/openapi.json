@@ -95,6 +95,70 @@
         }
       }
     },
+    "/api/auth/options": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Options",
+        "description": "What the sign-in page offers (public).",
+        "operationId": "options_api_auth_options_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthOptions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register",
+        "description": "Create an account that can sign in once an admin approves it on the Users page.",
+        "operationId": "register_api_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/logout": {
       "post": {
         "tags": [
@@ -347,6 +411,54 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{user_id}/approve": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Approve User",
+        "description": "Let a self-registered account sign in (reject it with DELETE).",
+        "operationId": "approve_user_api_users__user_id__approve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
                 }
               }
             }
@@ -3129,6 +3241,19 @@
         ],
         "title": "AuditStat"
       },
+      "AuthOptions": {
+        "properties": {
+          "self_registration": {
+            "type": "boolean",
+            "title": "Self Registration"
+          }
+        },
+        "type": "object",
+        "required": [
+          "self_registration"
+        ],
+        "title": "AuthOptions"
+      },
       "AutomapRequest": {
         "properties": {
           "domains": {
@@ -4762,6 +4887,29 @@
         ],
         "title": "Presence"
       },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 6,
+            "pattern": "^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}$",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "RegisterRequest"
+      },
       "RelatedConcept": {
         "properties": {
           "concept_id": {
@@ -6354,6 +6502,23 @@
           "is_active": {
             "type": "boolean",
             "title": "Is Active"
+          },
+          "pending": {
+            "type": "boolean",
+            "title": "Pending",
+            "default": false
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
           },
           "created_at": {
             "anyOf": [
