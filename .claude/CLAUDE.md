@@ -14,4 +14,4 @@
 - API changes: `cd backend && APP_ENV=dev .venv/bin/python scripts/export_openapi.py`, then
   regenerate `frontend/src/api/schema.d.ts` (`npm run gen:api`) and commit both.
 - Frontend (no Node on the host; use the pinned image):
-  `docker run --rm --user $(id -u):$(id -g) -e HOME=/tmp -v "$PWD/frontend":/app -w /app node:22.23.3-alpine sh -c "npm run check:api && npm run lint && npm run typecheck && npx vitest run && npm run build"`
+  `docker run --rm --user $(id -u):$(id -g) -e HOME=/tmp -v "$PWD/frontend":/app -w /app node:22.23.3-alpine sh -c "npm run check:api && npm run lint && npm run format:check && npm run typecheck && npx vitest run && npm run build"`
