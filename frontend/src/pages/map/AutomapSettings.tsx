@@ -59,6 +59,10 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
     vocabularies.includes("RxNorm") &&
     !vocabularies.includes("RxNorm Extension");
 
+  // Nothing chosen: every mode searches everything, so the choice would do nothing. With "All" it
+  // stays usable: the domain and vocabulary fields are disabled then, and this is the way back
+  const modeIdle = domains.length === 0 && vocabularies.length === 0 && domainMode !== "all";
+
   const submit = async () => {
     const allDomains = domainMode === "all";
     const started = await run(
@@ -115,8 +119,14 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
               placeholder="Any domain"
               disabled={domainMode === "all"}
             />
-            {domainMode === "all" && (
+            {domainMode === "all" ? (
               <p className="text-muted-foreground text-xs">Not used: every domain and vocabulary is searched.</p>
+            ) : (
+              domains.length === 0 && (
+                <p className="text-muted-foreground text-xs">
+                  Every domain is searched. Choosing the domains of this list usually gives better picks.
+                </p>
+              )
             )}
           </div>
           <div className="grid gap-1.5">
@@ -142,6 +152,8 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
               aria-labelledby="domain-mode-label"
               value={domainMode}
               onValueChange={(v) => setDomainMode(v as DomainMode)}
+              disabled={modeIdle}
+              className={modeIdle ? "opacity-50" : undefined}
             >
               {DOMAIN_MODES.map((m) => (
                 <div key={m.value} className="flex items-start gap-2">
@@ -153,6 +165,9 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
                 </div>
               ))}
             </RadioGroup>
+            {modeIdle && (
+              <p className="text-muted-foreground text-xs">Applies once you choose domains or vocabularies.</p>
+            )}
           </div>
           <div className="grid gap-2">
             <Label>
