@@ -629,6 +629,8 @@ DomainMode = Literal["restrict", "prefer", "all"]
 class AutomapRequest(BaseModel):
     # Required unless domain_mode is "all", which searches every domain
     domains: list[str] = []
+    # Target OMOP vocabularies (optional; empty: any), under the same domain_mode
+    vocabularies: list[str] = Field(default=[], max_length=100)
     threshold: int = Field(default=DEFAULT_CONFIDENCE_THRESHOLD, ge=1, le=10)
     drug_specific: bool = False
     mode: Literal["review", "commit"] = "review"
@@ -640,6 +642,7 @@ class AutomapRequest(BaseModel):
     def _domains_unless_all(self):
         if self.domain_mode == "all":
             self.domains = []  # ignored by the search; stored suggestions show no target domains
+            self.vocabularies = []
         elif not self.domains:
             raise ValueError('Select at least one target domain, or use domain_mode "all"')
         return self
@@ -696,6 +699,7 @@ class DrugMatchResponse(BaseModel):
 class SuggestRequest(BaseModel):
     query: str | None = None
     domains: list[str] = []
+    vocabularies: list[str] = Field(default=[], max_length=100)
     drug_specific: bool | None = None
     atc7_codes: list[str] | None = None
     threshold: int = Field(default=DEFAULT_CONFIDENCE_THRESHOLD, ge=1, le=10)

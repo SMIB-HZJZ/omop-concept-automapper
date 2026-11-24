@@ -22,6 +22,10 @@ class AgentDeps:
     get_details: Callable[[int], dict | None]
     domains: list[str]
     drug_specific: bool
+    # Target OMOP vocabularies (empty: any)
+    vocabularies: list[str] = field(default_factory=list)
+    # domain_mode "restrict": searches never leave the target domains and vocabularies
+    restrict: bool = False
     atc7_codes: list[str] = field(default_factory=list)
     seen: dict[int, dict] = field(default_factory=dict)
     max_results: int = 20
@@ -61,8 +65,11 @@ mapping_agent = Agent(
 @mapping_agent.instructions
 def _instructions(ctx: RunContext[AgentDeps]) -> str:
     domains = ", ".join(ctx.deps.domains) or "any"
+    vocabularies = ", ".join(ctx.deps.vocabularies) or "any"
+    kind = "only these" if ctx.deps.restrict else "preferred"
     return (
-        f"{AGENT_INSTRUCTIONS}\n\nTarget domains: {domains}.\n\n"
+        f"{AGENT_INSTRUCTIONS}\n\nTarget domains ({kind}): {domains}. "
+        f"Target vocabularies ({kind}): {vocabularies}.\n\n"
         f"{agent_criteria(ctx.deps.drug_specific)}"
     )
 
@@ -72,6 +79,7 @@ async def search_concepts(
     ctx: RunContext[AgentDeps],
     query: str,
     domains: list[str] | None = None,
+    vocabularies: list[str] | None = None,
     use_atc7_filter: bool = False,
     k: int = 15,
 ) -> list[dict]:
@@ -80,12 +88,24 @@ async def search_concepts(
     Args:
         query: Search text, ideally in English OMOP-style wording.
         domains: OMOP domains to search (defaults to the target domains).
+        vocabularies: OMOP vocabularies to search, e.g. ["LOINC"] (defaults to the target
+            vocabularies).
         use_atc7_filter: Restrict to drugs with the source's ATC7 code(s), if any were found.
         k: Number of results (max 30).
     """
     ctx.deps.tell(f"Agent retry: searching '{query}'")
+    deps = ctx.deps
+    domains = domains or deps.domains
+    vocabularies = vocabularies or deps.vocabularies
+    if deps.restrict:
+        # Narrower searches are fine; leaving the chosen domains or vocabularies is not
+        if deps.domains:
+            domains = [d for d in domains if d in deps.domains] or deps.domains
+        if deps.vocabularies:
+            vocabularies = [v for v in vocabularies if v in deps.vocabularies] or deps.vocabularies
     filters = SearchFilters(
-        domains=domains or ctx.deps.domains,
+        domains=domains,
+        vocabularies=vocabularies,
         atc7_codes=ctx.deps.atc7_codes if use_atc7_filter else (),
     )
     results = await asyncio.to_thread(ctx.deps.searcher.search, query, min(k, 30), filters)

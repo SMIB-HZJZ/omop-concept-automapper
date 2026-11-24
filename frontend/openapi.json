@@ -3434,6 +3434,15 @@
             "title": "Domains",
             "default": []
           },
+          "vocabularies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Vocabularies",
+            "default": []
+          },
           "threshold": {
             "type": "integer",
             "maximum": 10.0,
@@ -5815,6 +5824,15 @@
             },
             "type": "array",
             "title": "Domains",
+            "default": []
+          },
+          "vocabularies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Vocabularies",
             "default": []
           },
           "drug_specific": {

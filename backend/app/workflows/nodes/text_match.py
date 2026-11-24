@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.workflows import scope
 from app.workflows.context import NodeContext
 from app.workflows.registry import router
 from app.workflows.state import AutomapState
@@ -20,18 +21,10 @@ class TextMatchParams(BaseModel):
     confidence: int = Field(default=10, ge=1, le=10)
 
 
-def _in_domains(state: AutomapState, concepts: list[dict]) -> list[dict]:
-    """With domain_mode 'restrict', drop concepts outside the chosen domains."""
-    domains = state.get("domains") or []
-    if (state.get("domain_mode") or "restrict") != "restrict" or not domains:
-        return concepts
-    return [c for c in concepts if c.get("domain_id") in domains]
-
-
 def _outcome(state: AutomapState, match, params: TextMatchParams, method: str, label: str):
-    concepts = _in_domains(state, match.concepts)
+    concepts = scope.in_scope(state, match.concepts)
     if not concepts:
-        reason = "outside the chosen domains" if match.concepts else "no match"
+        reason = f"outside the chosen {scope.describe(state)}" if match.concepts else "no match"
         return "next", {"_summary": f"{label}: {reason}"}
     names = " + ".join(repr(c["concept_name"]) for c in concepts)
     if match.ambiguous:
@@ -103,7 +96,7 @@ async def match_name(state: AutomapState, ctx: NodeContext, params: NameMatchPar
         return "next", {"_summary": "skipped (no database)"}
     if params.term != "english":
         match = await asyncio.to_thread(ctx.lexical.match_name, [state.get("source_name", "")])
-        if _in_domains(state, match.concepts) or params.term == "original":
+        if scope.in_scope(state, match.concepts) or params.term == "original":
             return _outcome(state, match, params, "auto_exact_name", "exact name/synonym")
     translated = state.get("translated_query")
     if not translated:
@@ -111,7 +104,7 @@ async def match_name(state: AutomapState, ctx: NodeContext, params: NameMatchPar
     # A machine translation can be wrong, so an exact hit on it is a strong candidate for the
     # reranker, not an accepted mapping
     hit = await asyncio.to_thread(ctx.lexical.match_name, [translated])
-    concepts = _in_domains(state, hit.concepts)
+    concepts = scope.in_scope(state, hit.concepts)
     if not concepts:
         return "next", {"_summary": "exact name/synonym of the English rendering: no match"}
     names = " + ".join(repr(c["concept_name"]) for c in concepts)

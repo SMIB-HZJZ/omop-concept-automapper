@@ -239,7 +239,12 @@ Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workfl
   Ambiguous deterministic hits (different targets) go to the reranker as the first candidates. Steps 9–14 run only for terms that do not pass the first gate, but they add several LLM calls each; the stronger model is called at most twice per term (the re-check in step 7 and the final decision). Picks from steps 9–14 (methods `auto_rewritten`, `auto_agentic`, `auto_final`) always go to Review, also in *Commit directly* mode: a confidence reached after several failed attempts is not yet known to be as reliable as a first pick's (Review's precision by method will show). Every suggestion keeps its decision path, e.g. *AI pick 6 → agent retry 7 → final decision 8*, shown in Review, the AI suggest result and the Map panel. Method codes and steps have readable names in the UI (e.g. `auto_agentic` *Agent retry*, `auto_final` *Final decision*).
 - **`automap_drug`** (default for drug vocabularies): the same, with the structured drug match (see [Drug mapping](#drug-mapping)) before translation.
 
-**Domains** (Auto map settings, also used by AI suggest): *only these domains*, *prefer these domains* (default: a few candidates from other domains are added and the reranker is told the preference) or *all domains*.
+**Domains and vocabularies** (Auto map settings; AI suggest uses the Map panel's domain and vocabulary filters): target domains, optional target OMOP vocabularies (e.g. LOINC for lab tests; the list shows the vocabularies with standard concepts in the chosen domains), and one setting for both:
+- *Only these*: every search (first, rewritten, the agent's) is filtered by both; deterministic matches (code, name, earlier mapping, drug structure) outside them are not accepted. Only RxNorm for a drug list leaves out RxNorm Extension, where many European drugs are; the popover warns.
+- *Preferred* (default): searches are filtered, up to 5 candidates from outside are added (`retrieve.other_domains`) and the reranker and agent are told the preference; deterministic matches are kept.
+- *All*: neither is used.
+
+Auto-map always runs the default pipeline of the vocabulary type (`AUTOMAP_PIPELINE` or `AUTOMAP_DRUG_PIPELINE`); AI suggest can still pick another one for a single term.
 
 **Embeddings** (Configuration page): the embedded text can be the name, the name with class and domain, the name with synonyms (default), or both; query/document task types are sent to Gemini, Voyage and Cohere (default on; ignored by other providers). Each combination is its own collection, so variants can be compared without losing the others.
 

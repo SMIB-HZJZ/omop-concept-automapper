@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.llm.agents.base import gateway_model
 from app.llm.agents.mapping_agent import AgentDeps, run_mapping_agent
+from app.workflows import scope
 from app.workflows.context import NodeContext
 from app.workflows.registry import node
 from app.workflows.state import AutomapState
@@ -26,7 +27,9 @@ async def agentic_refine(state: AutomapState, ctx: NodeContext, params: AgenticP
         searcher=ctx.searcher,
         get_concepts=ctx.get_concepts,
         get_details=ctx.get_details or (lambda concept_id: None),
-        domains=state.get("domains") or [],
+        domains=scope.targets(state)[0],
+        vocabularies=scope.targets(state)[1],
+        restrict=scope.restricted(state),
         drug_specific=bool(state.get("drug_specific")),
         atc7_codes=state.get("atc7_codes") or [],
         max_results=params.max_results,

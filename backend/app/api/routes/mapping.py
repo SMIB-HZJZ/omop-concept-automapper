@@ -149,6 +149,7 @@ async def suggest(
         source_name=source["source_concept_name"],
         query=body.query,
         domains=body.domains,
+        vocabularies=body.vocabularies if body.domain_mode != "all" else [],
         drug_specific=source["is_drug"] if body.drug_specific is None else body.drug_specific,
         threshold=body.threshold,
         atc7_codes=atc7 or None,

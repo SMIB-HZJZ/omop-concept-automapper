@@ -1122,6 +1122,11 @@ export interface components {
              */
             domains: string[];
             /**
+             * Vocabularies
+             * @default []
+             */
+            vocabularies: string[];
+            /**
              * Threshold
              * @default 8
              */
@@ -1945,6 +1950,11 @@ export interface components {
              * @default []
              */
             domains: string[];
+            /**
+             * Vocabularies
+             * @default []
+             */
+            vocabularies: string[];
             /** Drug Specific */
             drug_specific?: boolean | null;
             /** Atc7 Codes */

@@ -326,6 +326,7 @@ export function ConceptDetail({ concept, vocabularyId, isDrug, onMapped, onUndon
         sourceId: concept.source_id,
         query: name.trim() !== concept.source_concept_name ? name.trim() : null,
         domains,
+        vocabularies,
         domain_mode: domainMode,
         drug_specific: isDrug,
         atc7_codes: atc7Codes.length ? atc7Codes : null,

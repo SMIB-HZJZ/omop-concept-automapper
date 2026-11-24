@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.llm.schemas import DrugComponent, DrugStructure
 from app.services.drug_matching import DrugMatch
+from app.workflows import scope
 from app.workflows.context import NodeContext
 from app.workflows.registry import router
 from app.workflows.state import AutomapState
@@ -248,6 +249,15 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
         found = await asyncio.to_thread(ctx.get_concepts, match.concept_ids)
         order = {cid: i for i, cid in enumerate(match.concept_ids)}
         found = sorted(found, key=lambda c: order.get(c["concept_id"], 0))
+        kept = scope.in_scope(state, found)
+        if len(kept) < len(found):
+            # e.g. an RxNorm Extension drug when only RxNorm is allowed: not accepted
+            update["structured_candidates"] = kept
+            update["_summary"] = (
+                f"{described}: {len(found) - len(kept)} match(es) outside the chosen "
+                f"{scope.describe(state)} ({origin})"
+            )
+            return "fallback", update
         if found and (len(found) == 1 or match.combined):
             level = LEVEL_NAMES.get(match.level or "", match.level)
             names = " + ".join(repr(c["concept_name"]) for c in found)
@@ -269,8 +279,8 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
             return "matched", update
     if match.concept_ids:
         # Several equally good drugs, or an approximate match: the reranker chooses among them
-        update["structured_candidates"] = await asyncio.to_thread(
-            ctx.get_concepts, match.concept_ids[:30]
+        update["structured_candidates"] = scope.in_scope(
+            state, await asyncio.to_thread(ctx.get_concepts, match.concept_ids[:30])
         )
     approx = f"; approximate: {'; '.join(match.approximate)}" if match.approximate else ""
     update["_summary"] = f"{described}: {match.reason or 'no match'}{approx} ({origin})"

@@ -164,6 +164,7 @@ async def automap_concepts(
     code_vocabularies: list[str] | None = None,
     vocabulary_context: str | None = None,
     source_language: str | None = None,
+    vocabularies: list[str] | None = None,
 ) -> dict:
     compiled = compiled or get_pipeline(pipeline)
     counts = {
@@ -192,6 +193,7 @@ async def automap_concepts(
                 source_value=concept["source_value"],
                 source_name=concept["source_concept_name"],
                 domains=domains,
+                vocabularies=vocabularies,
                 drug_specific=drug_specific,
                 threshold=threshold,
                 drug_structure=concept.get("drug_structure"),
@@ -297,6 +299,7 @@ def run_automap(
     limit: int | None = None,
     user_id: int | None = None,
     domain_mode: str = "prefer",
+    vocabularies: list[str] | None = None,
 ) -> dict:
     pipeline = pipeline or default_pipeline(drug_specific)
     compiled = get_pipeline(pipeline)  # resolved once; also fails fast on an invalid pipeline
@@ -342,6 +345,7 @@ def run_automap(
                 code_vocabularies=code_vocabularies,
                 vocabulary_context=context,
                 source_language=source_language,
+                vocabularies=vocabularies,
             )
         finally:
             await aclose_async_client()

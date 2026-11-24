@@ -3,7 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { api, unwrap } from "@/api/client";
-import { useMeta } from "@/api/queries";
+import { useConceptFacets, useMeta } from "@/api/queries";
 import { taskVocabularyId } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 import { MultiSelect } from "@/components/MultiSelect";
@@ -20,9 +20,9 @@ import { DOMAIN_MODES, type DomainMode, useDomainMode } from "@/hooks/useDomainM
 import { usePersistentState } from "@/hooks/usePersistentState";
 import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 import { useStartTask } from "@/hooks/useStartTask";
+import { facetOptions } from "@/lib/conceptFacets";
 import { useLatestTask } from "@/hooks/useTasks";
 import { AutomapDoneLine, AutomapResult } from "./AutomapResult";
-import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 
 const RECENT_MS = 30 * 60_000;
 
@@ -36,12 +36,15 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
   const meta = useMeta();
   const { run, busy } = useStartTask();
   const [domains, setDomains] = usePersistentState<string[]>("automap-domains", []);
+  const [vocabularies, setVocabularies] = usePersistentState<string[]>("automap-vocabularies", []);
+  const facets = useConceptFacets().data ?? [];
+  // Vocabularies with standard concepts in the chosen domains (as the Search filters)
+  const vocabularyOptions = facetOptions(facets, "vocabularies", { domains, vocabularies, conceptClasses: [] });
   const [threshold, setThreshold] = useAutomapThreshold();
   const [domainMode, setDomainMode] = useDomainMode();
   // Drug mode comes from the vocabulary type (set on the vocabulary bar)
   const drugSpecific = isDrug;
   const [mode, setMode] = useState<"review" | "commit">("review");
-  const [pipeline, setPipeline] = useState(DEFAULT_PIPELINE);
   const [limit, setLimit] = useState("");
   const [open, setOpen] = useState(false);
   // A released vocabulary is locked until an admin starts the next release
@@ -51,10 +54,16 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
 
   const latest = useLatestTask("automap.run", (t: Task) => taskVocabularyId(t) === vocabularyId);
 
+  const rxnormOnly =
+    isDrug &&
+    domainMode === "restrict" &&
+    vocabularies.includes("RxNorm") &&
+    !vocabularies.includes("RxNorm Extension");
+
   const submit = async () => {
     const allDomains = domainMode === "all";
     if (!allDomains && domains.length === 0) {
-      toast.warning("Select at least one target domain, or choose “All domains”.");
+      toast.warning("Select at least one target domain, or choose “All”.");
       return;
     }
     const started = await run(
@@ -64,11 +73,13 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
             params: { path: { vocabulary_id: vocabularyId } },
             body: {
               domains: allDomains ? [] : domains,
+              vocabularies: allDomains ? [] : vocabularies,
               domain_mode: domainMode,
               threshold,
               drug_specific: drugSpecific,
               mode,
-              pipeline: pipeline === DEFAULT_PIPELINE ? null : pipeline,
+              // The default pipeline for the vocabulary type (drug or general)
+              pipeline: null,
               limit: limit ? Number(limit) : null,
             },
           }),
@@ -110,11 +121,28 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
               disabled={domainMode === "all"}
             />
             {domainMode === "all" && (
-              <p className="text-muted-foreground text-xs">Not used: every domain is searched.</p>
+              <p className="text-muted-foreground text-xs">Not used: every domain and vocabulary is searched.</p>
             )}
           </div>
           <div className="grid gap-1.5">
-            <Label id="domain-mode-label">Domains are</Label>
+            <Label htmlFor="automap-vocabularies">Target vocabularies</Label>
+            <MultiSelect
+              id="automap-vocabularies"
+              options={vocabularyOptions}
+              value={vocabularies}
+              onChange={setVocabularies}
+              placeholder="Any vocabulary"
+              disabled={domainMode === "all"}
+            />
+            {rxnormOnly && (
+              <p className="text-warning text-xs">
+                Only RxNorm leaves out RxNorm Extension, where many European drugs are; structure matches there are not
+                accepted.
+              </p>
+            )}
+          </div>
+          <div className="grid gap-1.5">
+            <Label id="domain-mode-label">Domains and vocabularies are</Label>
             <RadioGroup
               aria-labelledby="domain-mode-label"
               value={domainMode}
@@ -164,10 +192,6 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
                 <Label htmlFor="mode-commit">Commit directly</Label>
               </div>
             </RadioGroup>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="automap-pipeline">Pipeline</Label>
-            <PipelineSelect id="automap-pipeline" value={pipeline} onChange={setPipeline} />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="automap-limit">Limit (for a trial run)</Label>

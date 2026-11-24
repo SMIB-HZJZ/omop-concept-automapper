@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.services.drug_matching import BRANDED_CLASSES
 from app.vector.store import SearchFilters
+from app.workflows import scope
 from app.workflows.context import NodeContext
 from app.workflows.registry import node
 from app.workflows.state import AutomapState
@@ -26,7 +27,7 @@ class RetrieveParams(BaseModel):
     keyword: bool = False
     # Reciprocal rank fusion constant (larger = flatter weighting of ranks)
     rrf_k: int = Field(default=60, ge=1)
-    # domain_mode "prefer": how many candidates from other domains are added
+    # domain_mode "prefer": how many candidates from outside the domains and vocabularies are added
     other_domains: int = Field(default=5, ge=0, le=50)
     # Drugs: also search the structure written like an RxNorm name (set by match_drug)
     drug_search_text: bool = True
@@ -87,10 +88,10 @@ async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams
     drug = bool(state.get("drug_specific"))
     k = params.k
     atc7 = (state.get("atc7_codes") or []) if (drug and params.use_atc7) else []
-    domains = state.get("domains") or []
-    mode = state.get("domain_mode") or "restrict"
+    domains, vocabularies = scope.targets(state)
     filters = SearchFilters(
-        domains=domains if mode != "all" else [],
+        domains=domains,
+        vocabularies=vocabularies,
         vocabulary_id=state.get("vocabulary_id"),
         atc7_codes=atc7,
         exclude_concept_classes=excluded_drug_classes(state),
@@ -125,7 +126,7 @@ async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams
         note = "no ATC7 match, fell back to similarity"
     if filters.exclude_concept_classes:
         note += ", no branded drugs (the source names no brand)"
-    if mode == "prefer" and domains and params.other_domains:
+    if scope.preferred(state) and params.other_domains:
         others = await search(
             SearchFilters(
                 vocabulary_id=filters.vocabulary_id,
@@ -135,11 +136,9 @@ async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams
             k,
         )
         seen = {r["concept_id"] for r in results}
-        extra = [
-            r for r in others if r["concept_id"] not in seen and r.get("domain_id") not in domains
-        ]
+        extra = [r for r in others if r["concept_id"] not in seen and not scope.fits(state, r)]
         results = results + extra[: params.other_domains]
-        note += f", +{min(len(extra), params.other_domains)} from other domains"
+        note += f", +{min(len(extra), params.other_domains)} from outside the preferences"
     structured = state.get("structured_candidates") or []
     if structured:
         # Tied deterministic matches go first, the search results fill up to k
@@ -156,10 +155,11 @@ async def retrieve(state: AutomapState, ctx: NodeContext, params: RetrieveParams
         "method": "auto_drug" if drug else "auto_standard",
         "_summary": f"{len(results)} candidates for '{query}' (k={k}, {note})",
     }
-    if mode == "prefer" and domains:
+    if scope.preferred(state):
         update["notes"] = [
             *(state.get("notes") or []),
-            f"Preferred domains: {', '.join(domains)}. Choose another domain only if it fits clearly better.",
+            f"Preferred {scope.describe(state)}. Choose a concept outside them only if it fits "
+            "clearly better.",
         ]
     if not results:
         update["outcome"] = "no_candidates"

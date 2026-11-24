@@ -59,7 +59,7 @@ The UI runs on port 8501. Put it behind HTTPS and sign in as `ADMIN_USERNAME` / 
 
 4. **Map Concepts**. Work through the unmapped terms. Search, select one or more concepts and confirm.
    - **AI suggest** runs the mapping pipeline for one term and shows its pick, confidence and trace.
-   - **Auto map** runs the pipeline for the whole vocabulary in the background. In *review* mode (the default) its picks become suggestions.
+   - **Auto map** runs the pipeline for the whole vocabulary in the background. In *review* mode (the default) its picks become suggestions. Its settings choose target domains and, optionally, target vocabularies (e.g. LOINC), as *only these*, *preferred* or not used.
    - For drugs, the panel shows the structure (ingredients, strengths, dose form, brand, quantity) and its exact match. You can edit the structure and match again. Branded drugs are hidden unless the term names a brand.
 5. **Review**. Accept or reject suggestions one by one, as a selection, or all above a confidence level.
 6. **Check & Commit**. See and undo mappings, view statistics and download `vocabulary_<id>_mappings.csv`.

@@ -20,7 +20,10 @@ class AutomapState(TypedDict, total=False):
     # Extra context lines for the reranker (e.g. the parsed drug structure)
     notes: list[str]
     domains: list[str]
-    # restrict: only these domains; prefer: these first, others allowed; all: ignore domains
+    # Target OMOP vocabularies (e.g. LOINC); empty: any. domain_mode applies to them too
+    vocabularies: list[str]
+    # restrict: only these domains (and vocabularies); prefer: these first, others allowed;
+    # all: ignore domains and vocabularies
     domain_mode: str
     # Code systems of the source codes (e.g. ICD10), for the match_code step
     code_vocabularies: list[str]
