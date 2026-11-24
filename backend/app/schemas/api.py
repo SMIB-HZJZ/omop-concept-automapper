@@ -634,7 +634,7 @@ DomainMode = Literal["restrict", "prefer", "all"]
 
 
 class AutomapRequest(BaseModel):
-    # Required unless domain_mode is "all", which searches every domain
+    # Target domains (empty: any domain)
     domains: list[str] = []
     # Target OMOP vocabularies (optional; empty: any), under the same domain_mode
     vocabularies: list[str] = Field(default=[], max_length=100)
@@ -646,12 +646,10 @@ class AutomapRequest(BaseModel):
     domain_mode: DomainMode = "prefer"
 
     @model_validator(mode="after")
-    def _domains_unless_all(self):
+    def _ignored_with_all(self):
         if self.domain_mode == "all":
             self.domains = []  # ignored by the search; stored suggestions show no target domains
             self.vocabularies = []
-        elif not self.domains:
-            raise ValueError('Select at least one target domain, or use domain_mode "all"')
         return self
 
 

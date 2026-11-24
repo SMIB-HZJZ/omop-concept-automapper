@@ -6,7 +6,7 @@
   the preference; deterministic matches are kept.
 - all: neither is used.
 
-An empty list means no filter of that kind (domains are required unless the mode is "all").
+An empty list means no filter of that kind: any domain, or any vocabulary.
 """
 
 from app.workflows.state import AutomapState

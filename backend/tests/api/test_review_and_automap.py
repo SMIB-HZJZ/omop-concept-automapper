@@ -12,13 +12,14 @@ def _run(client, headers, vocabulary_id, **body):
 
 def test_automap_validation(client, admin_headers, user_headers, embedded):
     import_source_csv(client, admin_headers, 20)
-    assert (
-        client.post(
-            "/api/source-vocabularies/20/automap", json={"domains": []}, headers=admin_headers
-        ).status_code
-        == 422
+    # No target domain means any domain
+    any_domain = client.post(
+        "/api/source-vocabularies/20/automap",
+        json={"domains": [], "pipeline": "nope"},
+        headers=admin_headers,
     )
-    # "All domains" needs no domain list
+    assert any_domain.status_code == 400, any_domain.text  # past validation, stopped at pipeline
+    # "All" needs no domain list either
     all_domains = client.post(
         "/api/source-vocabularies/20/automap",
         json={"domains": [], "domain_mode": "all", "pipeline": "nope"},

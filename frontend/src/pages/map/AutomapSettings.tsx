@@ -1,6 +1,5 @@
 import { Bot, Settings2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { api, unwrap } from "@/api/client";
 import { useConceptFacets, useMeta } from "@/api/queries";
@@ -62,10 +61,6 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
 
   const submit = async () => {
     const allDomains = domainMode === "all";
-    if (!allDomains && domains.length === 0) {
-      toast.warning("Select at least one target domain, or choose “All”.");
-      return;
-    }
     const started = await run(
       async () =>
         unwrap(
@@ -117,7 +112,7 @@ export function useAutomapControls({ vocabularyId, isDrug }: { vocabularyId: num
               options={meta.data?.domains ?? []}
               value={domains}
               onChange={setDomains}
-              placeholder="Select domains…"
+              placeholder="Any domain"
               disabled={domainMode === "all"}
             />
             {domainMode === "all" && (
