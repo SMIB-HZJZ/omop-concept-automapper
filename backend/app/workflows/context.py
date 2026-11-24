@@ -32,6 +32,8 @@ class NodeContext:
     dose_form_picker: Any = None
     # (structure, fuzzy, form_choice) -> DrugMatch
     drug_matcher: Callable[..., Any] | None = None
+    # name -> an RxNorm brand name written in it, or None (see drug_matching.brand_in_name)
+    brand_finder: Callable[[str], str | None] | None = None
     # Text-based aids (app.services.lexical); None in tests without a database
     lexical: Any = None
     # Runs the Pydantic AI mapping agent: (term, deps, initial candidates) -> decision

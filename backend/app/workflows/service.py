@@ -53,6 +53,11 @@ def _agent_details(concept_id: int) -> dict | None:
         return concept_service.agent_details(session, concept_id)
 
 
+def _brand_in_name(name: str) -> str | None:
+    with Session(get_engine()) as session:
+        return drug_matching.brand_in_name(session, name)
+
+
 def _match_drug(structure, fuzzy: bool = False, form_choice: list[str] | None = None):
     with Session(get_engine()) as session:
         return drug_matching.match_structure(
@@ -142,6 +147,7 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
         dose_form_picker=_dose_form_picker(cfg.llm_model) if drug_parser is not None else None,
         # Both need drug_strength; without it the drug step falls back immediately
         drug_matcher=_match_drug if drug_parser is not None else None,
+        brand_finder=_brand_in_name if drug_parser is not None else None,
         lexical=lexical,
         get_concepts=_get_concepts,
         get_concept_context=_concept_context,

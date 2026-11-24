@@ -61,6 +61,8 @@ class SearchFilters:
     # Athena-style filters (any of): OMOP vocabulary_ids and concept_class_ids
     vocabularies: Sequence[str] = ()
     concept_classes: Sequence[str] = ()
+    # Concept classes left out (e.g. branded drugs when the source names no brand)
+    exclude_concept_classes: Sequence[str] = ()
 
     def vocabulary_ids(self) -> list[str]:
         """``vocabulary_id`` (one, used by workflows) and ``vocabularies`` (several) combined."""
@@ -79,6 +81,9 @@ class SearchFilters:
         if self.concept_classes:
             clauses.append("c.concept_class_id = ANY(:concept_classes)")
             params["concept_classes"] = list(self.concept_classes)
+        if self.exclude_concept_classes:
+            clauses.append("NOT (c.concept_class_id = ANY(:excluded_classes))")
+            params["excluded_classes"] = list(self.exclude_concept_classes)
         return clauses
 
 

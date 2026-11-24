@@ -84,6 +84,7 @@ This version starts from an empty database: import the vocabulary and embed conc
 4. **Search**. Semantic search with domain, vocabulary and ATC7 filters.
 5. **Map Concepts**. Work through unmapped source concepts:
    - Pick a concept, edit the search term and filters, select one or more results (or enter concept IDs), then confirm.
+   - In a drug vocabulary the panel shows the term's **drug structure** as auto-mapping reads it: from the CSV columns, or read from the name by the AI (one cached LLM call). It shows the ingredients and strengths, dose form, brand and quantity, how names were read (*paracetamol → acetaminophen*), and the deterministic match: *exact* (with **Use this drug**), *several matches*, *close match* or *no matching drug*. The matched drugs come first in the results. The search runs the way auto-mapping's does: the term and the structure written like an RxNorm name (*acetaminophen 500 MG Oral Tablet*), the ATC7 filter dropped when it finds nothing, and branded drugs left out when the term has no brand (a switch shows them). **Edit** changes the structure and matches it again; **Original** goes back.
    - **AI suggest** runs the mapping pipeline for the selected concept and shows its pick, confidence and step-by-step trace. While it runs, the step it is at is shown (translating, AI pick, re-check by a stronger model, rewriting the search, the agent's searches).
    - **Auto map** runs the pipeline over the whole vocabulary as a background task; its progress line shows how many terms are at each step.
      - In **review** mode (default), results above the confidence threshold become suggestions.
@@ -190,6 +191,7 @@ For drug vocabularies (the vocabulary's drug flag) the default pipeline is `auto
    - A deterministic match is accepted with confidence 10 (`auto_drug_structured`); the rationale names the level, whether the brand was used and how names were read.
    - **Approximate** matches are not accepted: an ingredient read by similarity, a drug found only in a related dose form (the smallest RxNorm Dose Form Group of the stated form, e.g. *Pill*), or an amount without a quantity compared with Quant drugs' total amount. They go to the reranker as its first candidates, with the reason in its notes.
 3. **Fallback.** No match, or several equally good ones: translation, similarity search (tied matches first) and the LLM reranker, which also sees the parsed structure.
+   - **Branded drugs** are left out of the similarity search when the term has no brand (`skip_branded_without_brand`, on by default). There are about 270,000 branded drugs (Branded Drug and Quant Branded Drug) in RxNorm Extension against about 80,000 clinical drugs, and a branded name is the clinical name plus *[Brand]*, so they would fill the candidate list. "No brand" means: the structure has none (empty `brand_name` column, or the parser found none) **and** no RxNorm Brand Name is written in the term (brand names that are also ingredient names, such as *Paracetamol*, do not count). Without a structure (parse failed) branded drugs stay in. Deterministic matches are not affected.
 
 CSV example:
 

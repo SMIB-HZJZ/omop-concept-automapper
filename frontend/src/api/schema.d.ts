@@ -550,6 +550,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source-concepts/{source_id}/drug-match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drug Match
+         * @description Run auto-mapping's deterministic drug step for one term: its structure (provided, edited
+         *     or parsed from the name by the LLM) matched on drug_strength, with the matching drugs.
+         */
+        post: operations["drug_match_api_source_concepts__source_id__drug_match_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/suggestions/calibration": {
         parameters: {
             query?: never;
@@ -1267,6 +1288,108 @@ export interface components {
             /** Count */
             count: number;
         };
+        /**
+         * DrugComponent
+         * @description One active ingredient with its strength, in the shape of OMOP ``drug_strength``.
+         *
+         *     Use ``amount_*`` for solid forms (500 mg per tablet) and ``numerator_*``/``denominator_*``
+         *     for concentrations (100 mg per 5 mL, 1 %).
+         */
+        DrugComponent: {
+            /**
+             * Ingredient
+             * @description Active ingredient as its English INN (e.g. paracetamol -> acetaminophen)
+             */
+            ingredient: string;
+            /** Amount Value */
+            amount_value?: number | null;
+            /** Amount Unit */
+            amount_unit?: string | null;
+            /** Numerator Value */
+            numerator_value?: number | null;
+            /** Numerator Unit */
+            numerator_unit?: string | null;
+            /** Denominator Value */
+            denominator_value?: number | null;
+            /** Denominator Unit */
+            denominator_unit?: string | null;
+        };
+        /** DrugMatchRequest */
+        DrugMatchRequest: {
+            structure?: components["schemas"]["DrugStructure"] | null;
+        };
+        /**
+         * DrugMatchResponse
+         * @description The deterministic drug step of auto-mapping, run for one term in the mapping panel.
+         */
+        DrugMatchResponse: {
+            /** Source Id */
+            source_id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "exact" | "tie" | "approximate" | "none" | "not_drug" | "parse_error" | "no_structure" | "unavailable";
+            /** Origin */
+            origin?: ("provided" | "parsed" | "edited") | null;
+            structure?: components["schemas"]["DrugStructure"] | null;
+            /** Level */
+            level?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /**
+             * Resolved
+             * @default []
+             */
+            resolved: string[];
+            /**
+             * Approximate
+             * @default []
+             */
+            approximate: string[];
+            /** Search Text */
+            search_text?: string | null;
+            /** Brand In Name */
+            brand_in_name?: string | null;
+            /**
+             * Exclude Classes
+             * @default []
+             */
+            exclude_classes: string[];
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: components["schemas"]["SearchResult"][];
+        };
+        /**
+         * DrugStructure
+         * @description A drug product broken into ingredients, strengths and dose form.
+         *
+         *     ``quantity_*`` is the total volume or mass of one unit of the product (a 2 mL ampoule, a
+         *     0.4 mL prefilled syringe), as in the ``denominator_value`` of an OMOP Quant drug. A component's
+         *     ``denominator_*`` only expresses its concentration (100 mg per 5 mL).
+         */
+        DrugStructure: {
+            /** Components */
+            components?: components["schemas"]["DrugComponent"][];
+            /**
+             * Dose Form
+             * @description RxNorm dose form name, e.g. 'Oral Tablet'
+             */
+            dose_form?: string | null;
+            /** Brand Name */
+            brand_name?: string | null;
+            /**
+             * Quantity Value
+             * @description Total volume or mass of one unit (ampoule 2 mL), not the pack size
+             */
+            quantity_value?: number | null;
+            /** Quantity Unit */
+            quantity_unit?: string | null;
+        };
         /** EmbedRequest */
         EmbedRequest: {
             /**
@@ -1508,6 +1631,21 @@ export interface components {
              * @default []
              */
             atc7_codes: string[];
+            /**
+             * Extra Queries
+             * @default []
+             */
+            extra_queries: string[];
+            /**
+             * Atc7 Fallback
+             * @default false
+             */
+            atc7_fallback: boolean;
+            /**
+             * Exclude Concept Classes
+             * @default []
+             */
+            exclude_concept_classes: string[];
         };
         /** SearchResponse */
         SearchResponse: {
@@ -1883,6 +2021,7 @@ export interface components {
             flagged_by?: string | null;
             /** Flagged At */
             flagged_at?: string | null;
+            drug_structure?: components["schemas"]["DrugStructure"] | null;
         };
         /** UnmappedPage */
         UnmappedPage: {
@@ -3327,6 +3466,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuggestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drug_match_api_source_concepts__source_id__drug_match_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DrugMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DrugMatchResponse"];
                 };
             };
             /** @description Validation Error */

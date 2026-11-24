@@ -117,6 +117,9 @@ export function SearchPage() {
       vocabularies: filters.vocabularies,
       concept_classes: filters.conceptClasses,
       atc7_codes: debouncedAtc7 ? [debouncedAtc7] : [],
+      extra_queries: [],
+      exclude_concept_classes: [],
+      atc7_fallback: false,
     };
   }, [debouncedQuery, debouncedK, filters, debouncedAtc7]);
 

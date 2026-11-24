@@ -26,10 +26,51 @@ LEVEL_NAMES = {
 class MatchDrugParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # The step reports what it found in ``meta``: drug_status is one of exact (accepted), tie
+    # (several equally good drugs), approximate, none (no drug with this structure), not_drug,
+    # parse_error or no_structure; drug_origin, drug_level and drug_search_text describe the match.
+
     # Parse free-text names with the LLM when no structure was provided
     parse_free_text: bool = True
     # Confidence given to a unique deterministic match
     confidence: int = 10
+
+
+def _rx_number(value: float) -> str:
+    return f"{value:.6g}"
+
+
+def _rx_unit(unit: str | None) -> str:
+    return (unit or "").strip().upper().replace("µ", "MC").replace("MICROGRAM", "MCG")
+
+
+def search_text(structure: DrugStructure) -> str:
+    """The structure written like an RxNorm name (``2 ML diazepam 5 MG/ML Injectable Solution
+    [Normabel]``), for a similarity search that ranks RxNorm drugs well: their names follow this
+    pattern, the source term often does not (other language, abbreviations)."""
+    parts = []
+    for c in structure.components:
+        strength = ""
+        if c.amount_value is not None:
+            strength = f" {_rx_number(c.amount_value)} {_rx_unit(c.amount_unit)}".rstrip()
+        elif c.numerator_value is not None:
+            # RxNorm writes concentrations per one unit (500 mg/5 mL -> 100 MG/ML)
+            per = c.denominator_value or 1
+            strength = (
+                f" {_rx_number(c.numerator_value / per)} {_rx_unit(c.numerator_unit)}"
+                + (f"/{_rx_unit(c.denominator_unit)}" if c.denominator_unit else "")
+            ).rstrip()
+        parts.append(f"{c.ingredient}{strength}")
+    text_ = " / ".join(parts)
+    if structure.quantity_value is not None:
+        text_ = (
+            f"{_rx_number(structure.quantity_value)} {_rx_unit(structure.quantity_unit)} {text_}"
+        )
+    if structure.dose_form:
+        text_ += f" {structure.dose_form}"
+    if structure.brand_name:
+        text_ += f" [{structure.brand_name}]"
+    return text_.strip()
 
 
 def describe(structure: DrugStructure) -> str:
@@ -152,18 +193,29 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
             parsed = await ctx.drug_parser.parse(state.get("source_name", ""), hint)
         except Exception as exc:
             ctx.logger.warning("Drug parsing failed for %r: %s", state.get("source_name"), exc)
-            return "fallback", {"_summary": f"parse error ({type(exc).__name__})"}
+            return "fallback", {
+                "_summary": f"parse error ({type(exc).__name__})",
+                "meta": {"drug_status": "parse_error"},
+            }
         if not parsed.is_drug:
-            return "fallback", {"_summary": "not a drug product according to the parser"}
+            return "fallback", {
+                "_summary": "not a drug product according to the parser",
+                "meta": {"drug_status": "not_drug"},
+            }
         structure = DrugStructure.model_validate(parsed.model_dump(exclude={"is_drug"}))
         origin = "parsed"
         # The parser already writes English INNs; its form is checked like a provided one
         match = await _match(ctx, structure, state.get("source_name"), translate=False)
 
     if structure is None:
-        return "fallback", {"_summary": "no structure"}
+        return "fallback", {"_summary": "no structure", "meta": {"drug_status": "no_structure"}}
     described = describe(structure)
     notes = [f"Parsed drug structure ({origin}): {described}"]
+    brand_in_name = None
+    if not structure.brand_name and ctx.brand_finder is not None:
+        # The structure names no brand: is one written in the term anyway? Then the search keeps
+        # branded drugs (see retrieve.skip_branded_without_brand)
+        brand_in_name = await asyncio.to_thread(ctx.brand_finder, state.get("source_name", ""))
     if match.resolved:
         notes.append("Names read as: " + "; ".join(match.resolved))
     if match.approximate:
@@ -172,6 +224,13 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
         "notes": notes,
         "meta": {
             "drug_structure": structure.model_dump(exclude_none=True),
+            "drug_origin": origin,
+            "drug_level": match.level,
+            "drug_search_text": search_text(match.rxnorm or structure),
+            **({"drug_brand_in_name": brand_in_name} if brand_in_name else {}),
+            "drug_status": "approximate"
+            if match.approximate
+            else ("tie" if match.concept_ids else "none"),
             "drug_match": match.reason,
             **({"drug_match_resolved": match.resolved} if match.resolved else {}),
             **({"drug_match_approximate": match.approximate} if match.approximate else {}),
@@ -196,6 +255,7 @@ async def match_drug(state: AutomapState, ctx: NodeContext, params: MatchDrugPar
                 ),
                 method="auto_drug_structured",
                 outcome="selected",
+                meta={**update["meta"], "drug_status": "exact"},
                 _summary=f"{level} {names} for {described}",
             )
             return "matched", update

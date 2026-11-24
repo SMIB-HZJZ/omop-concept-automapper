@@ -75,10 +75,24 @@ class DrugMatch:
     unresolved_units: list[str] = field(default_factory=list)
     # The structure as finally matched (ingredients translated), set by the workflow step
     structure: DrugStructure | None = None
+    # The structure in RxNorm names (standard ingredients, the chosen RxNorm dose form), once
+    # every name was resolved; used to write a search query like an RxNorm drug name
+    rxnorm: DrugStructure | None = None
 
     @property
     def unique(self) -> bool:
         return len(self.concept_ids) == 1 or (self.combined and bool(self.concept_ids))
+
+
+# Drug classes that name a brand; left out of a search when the source names none, since they
+# outnumber clinical drugs and score almost the same (their name is the clinical name + [Brand])
+BRANDED_CLASSES = (
+    "Branded Drug",
+    "Branded Drug Comp",
+    "Branded Drug Form",
+    "Quant Branded Drug",
+    "Branded Pack",
+)
 
 
 @dataclass(frozen=True)
@@ -259,6 +273,15 @@ def _fuzzy_ingredient(session: Session, name: str) -> Resolved | None:
         return None
     lowered, (cid, score) = ranked[0]
     return Resolved(cid, "fuzzy", lowered, round(score, 2))
+
+
+def _form_name(session: Session, forms: list[int]) -> str | None:
+    """The vocabulary's spelling of the first dose form (the source may write 'oral tablet')."""
+    if not forms:
+        return None
+    return session.execute(
+        text("SELECT concept_name FROM concept WHERE concept_id = :id"), {"id": forms[0]}
+    ).scalar()
 
 
 def resolve_dose_form(session: Session, names: list[str]) -> list[int]:
@@ -513,6 +536,45 @@ def resolve_brand(session: Session, name: str | None) -> int | None:
     ).scalar()
 
 
+def brand_in_name(session: Session, name: str | None, max_words: int = 4) -> str | None:
+    """An RxNorm brand name written in the source term (``Lekadol 500 mg tablete``), or None.
+
+    Used when the structure names no brand, before leaving branded drugs out of a search: a CSV
+    may leave the brand column empty and the parser may miss a brand. Brand names that are also
+    an ingredient name (``Paracetamol``) do not count; the longest brand found wins."""
+    if not name or not name.strip():
+        return None
+    normalised = session.execute(text("SELECT norm_text(:n)"), {"n": name}).scalar() or ""
+    words = normalised.split()
+    grams = {
+        " ".join(words[i : i + n])
+        for n in range(1, max_words + 1)
+        for i in range(len(words) - n + 1)
+    }
+    # Numbers and very short words are strengths and units, not brands
+    grams = {g for g in grams if len(g) >= 3 and not g.replace(" ", "").isdigit()}
+    if not grams:
+        return None
+    return session.execute(
+        text(
+            """
+            SELECT b.concept_name FROM concept b
+            WHERE b.concept_class_id = 'Brand Name' AND b.vocabulary_id = ANY(:vocabs)
+              AND b.invalid_reason IS NULL
+              AND norm_text(b.concept_name) = ANY(CAST(:grams AS text[]))
+              AND NOT EXISTS (
+                  SELECT 1 FROM concept i
+                  WHERE i.concept_class_id IN ('Ingredient', 'Precise Ingredient')
+                    AND i.vocabulary_id = ANY(:vocabs)
+                    AND norm_text(i.concept_name) = norm_text(b.concept_name))
+            ORDER BY length(b.concept_name) DESC, b.vocabulary_id = 'RxNorm' DESC
+            LIMIT 1
+            """
+        ),
+        {"grams": sorted(grams), "vocabs": list(DRUG_VOCABULARIES)},
+    ).scalar()
+
+
 def brand_ingredient_sets(session: Session, brand_id: int) -> list[list[int]]:
     """Distinct ingredient sets of the brand's products (one set = the brand is unambiguous)."""
     rows = session.execute(
@@ -747,9 +809,18 @@ def match_structure(
         for n, r in zip(names, readings, strict=True)
         if r.via == "fuzzy"
     ]
+    rxnorm = structure.model_copy(
+        update={
+            "components": [
+                c.model_copy(update={"ingredient": r.found})
+                for c, r in zip(structure.components, readings, strict=True)
+            ],
+            "dose_form": form_choice[0] if form_choice else _form_name(session, forms),
+        }
+    )
     ingredient_ids = [r.concept_id for r in readings]
     if len(set(ingredient_ids)) != len(ingredient_ids):
-        return DrugMatch(reason="duplicate ingredient", resolved=resolved_notes)
+        return DrugMatch(reason="duplicate ingredient", resolved=resolved_notes, rxnorm=rxnorm)
     with_strength = all(c.has_strength for c in structure.components)
 
     found = _match_levels(session, structure, ingredient_ids, forms, brand_id)
@@ -775,6 +846,7 @@ def match_structure(
     if found is not None:
         found.approximate = approximate + found.approximate
         found.resolved = resolved_notes
+        found.rxnorm = rxnorm
         return found
     what = (
         "strengths and form"
@@ -784,4 +856,5 @@ def match_structure(
     return DrugMatch(
         reason=f"no drug with these ingredients and {what}" + (f"; {notes[0]}" if notes else ""),
         resolved=resolved_notes,
+        rxnorm=rxnorm,
     )

@@ -112,15 +112,35 @@ def search(body: SearchRequest, _: CurrentUser, session: SessionDep):
         vocabulary_id=body.vocabulary_id or None,
         vocabularies=body.vocabularies,
         concept_classes=body.concept_classes,
+        exclude_concept_classes=body.exclude_concept_classes,
         atc7_codes=body.atc7_codes,
     )
+    queries = list(dict.fromkeys(q.strip() for q in [body.query, *body.extra_queries] if q.strip()))
+
+    def run(f: SearchFilters) -> list[dict]:
+        # Several queries: the best score per concept, as auto-mapping merges its searches
+        best: dict[int, dict] = {}
+        for q in queries:
+            for r in vector_store.search(q, body.k, f):
+                seen = best.get(r["concept_id"])
+                if seen is None or r["score"] > seen["score"]:
+                    best[r["concept_id"]] = r
+        merged = sorted(best.values(), key=lambda r: r["score"], reverse=True)[: body.k]
+        return [{**r, "rank": i + 1} for i, r in enumerate(merged)]
+
     try:
-        results = vector_store.search(body.query.strip(), body.k, filters)
+        results = run(filters)
+        method = (
+            f"ATC7 filtered ({', '.join(body.atc7_codes)})"
+            if body.atc7_codes
+            else "Standard similarity"
+        )
+        if not results and body.atc7_codes and body.atc7_fallback:
+            filters.atc7_codes = ()
+            results = run(filters)
+            method = "No ATC7 match, standard similarity"
     except CollectionMissing as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    method = (
-        f"ATC7 filtered ({', '.join(body.atc7_codes)})"
-        if body.atc7_codes
-        else "Standard similarity"
-    )
+    if len(queries) > 1:
+        method += f" · {len(queries)} queries"
     return SearchResponse(results=results, method=method, collection=cfg.collection_name)

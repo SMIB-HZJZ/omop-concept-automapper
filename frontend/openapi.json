@@ -1688,6 +1688,64 @@
         }
       }
     },
+    "/api/source-concepts/{source_id}/drug-match": {
+      "post": {
+        "tags": [
+          "mapping"
+        ],
+        "summary": "Drug Match",
+        "description": "Run auto-mapping's deterministic drug step for one term: its structure (provided, edited\nor parsed from the name by the LLM) matched on drug_strength, with the matching drugs.",
+        "operationId": "drug_match_api_source_concepts__source_id__drug_match_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DrugMatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DrugMatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/suggestions/calibration": {
       "get": {
         "tags": [
@@ -3887,6 +3945,318 @@
         ],
         "title": "DomainCount"
       },
+      "DrugComponent": {
+        "properties": {
+          "ingredient": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Ingredient",
+            "description": "Active ingredient as its English INN (e.g. paracetamol -> acetaminophen)"
+          },
+          "amount_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Value"
+          },
+          "amount_unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Unit"
+          },
+          "numerator_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numerator Value"
+          },
+          "numerator_unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numerator Unit"
+          },
+          "denominator_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Denominator Value"
+          },
+          "denominator_unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Denominator Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ingredient"
+        ],
+        "title": "DrugComponent",
+        "description": "One active ingredient with its strength, in the shape of OMOP ``drug_strength``.\n\nUse ``amount_*`` for solid forms (500 mg per tablet) and ``numerator_*``/``denominator_*``\nfor concentrations (100 mg per 5 mL, 1 %)."
+      },
+      "DrugMatchRequest": {
+        "properties": {
+          "structure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DrugStructure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "DrugMatchRequest"
+      },
+      "DrugMatchResponse": {
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "tie",
+              "approximate",
+              "none",
+              "not_drug",
+              "parse_error",
+              "no_structure",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "provided",
+                  "parsed",
+                  "edited"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "structure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DrugStructure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "resolved": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Resolved",
+            "default": []
+          },
+          "approximate": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Approximate",
+            "default": []
+          },
+          "search_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Text"
+          },
+          "brand_in_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand In Name"
+          },
+          "exclude_classes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Exclude Classes",
+            "default": []
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "status"
+        ],
+        "title": "DrugMatchResponse",
+        "description": "The deterministic drug step of auto-mapping, run for one term in the mapping panel."
+      },
+      "DrugStructure": {
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/DrugComponent"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Components"
+          },
+          "dose_form": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dose Form",
+            "description": "RxNorm dose form name, e.g. 'Oral Tablet'"
+          },
+          "brand_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Name"
+          },
+          "quantity_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Value",
+            "description": "Total volume or mass of one unit (ampoule 2 mL), not the pack size"
+          },
+          "quantity_unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Unit"
+          }
+        },
+        "type": "object",
+        "title": "DrugStructure",
+        "description": "A drug product broken into ingredients, strengths and dose form.\n\n``quantity_*`` is the total volume or mass of one unit of the product (a 2 mL ampoule, a\n0.4 mL prefilled syringe), as in the ``denominator_value`` of an OMOP Quant drug. A component's\n``denominator_*`` only expresses its concentration (100 mg per 5 mL)."
+      },
       "EmbedRequest": {
         "properties": {
           "domains": {
@@ -4527,6 +4897,29 @@
             },
             "type": "array",
             "title": "Atc7 Codes",
+            "default": []
+          },
+          "extra_queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Extra Queries",
+            "default": []
+          },
+          "atc7_fallback": {
+            "type": "boolean",
+            "title": "Atc7 Fallback",
+            "default": false
+          },
+          "exclude_concept_classes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Exclude Concept Classes",
             "default": []
           }
         },
@@ -5838,6 +6231,16 @@
               }
             ],
             "title": "Flagged At"
+          },
+          "drug_structure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DrugStructure"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

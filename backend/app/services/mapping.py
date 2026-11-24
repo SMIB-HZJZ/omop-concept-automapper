@@ -173,7 +173,8 @@ def get_unmapped(
                    low.concept_id AS low_concept_id, lc.concept_name AS low_concept_name,
                    low.confidence AS low_confidence,
                    cardinality(low.extra_concept_ids) AS low_extra_count,
-                   sc.flag, sc.flag_note, sc.flagged_at, u.username AS flagged_by
+                   sc.flag, sc.flag_note, sc.flagged_at, u.username AS flagged_by,
+                   sc.drug_structure
             {joins}{low_join}
             LEFT JOIN app_user u ON u.id = sc.flagged_by
             WHERE {where}

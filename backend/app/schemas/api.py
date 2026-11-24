@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.llm.schemas import DrugStructure
 from app.services.atc7 import is_valid_atc7
 from app.workflows.state import DEFAULT_CONFIDENCE_THRESHOLD
 
@@ -264,6 +265,8 @@ class UnmappedItem(BaseModel):
     flag_note: str | None = None
     flagged_by: str | None = None
     flagged_at: datetime | None = None
+    # Drug structure from the import's CSV columns (None: free text, parsed when mapping)
+    drug_structure: DrugStructure | None = None
 
 
 class Presence(BaseModel):
@@ -437,6 +440,13 @@ class SearchRequest(BaseModel):
     concept_classes: list[str] = []
     vocabulary_id: str | None = Field(default=None, description="Deprecated: use vocabularies")
     atc7_codes: list[str] = []
+    # Further queries searched as well (results merged, best score per concept), e.g. a drug's
+    # structure written like an RxNorm name next to the source term, as auto-mapping does
+    extra_queries: list[str] = Field(default=[], max_length=3)
+    # When the ATC7-filtered search finds nothing, search again without the filter
+    atc7_fallback: bool = False
+    # Concept classes left out, e.g. branded drugs for a source without a brand
+    exclude_concept_classes: list[str] = Field(default=[], max_length=50)
 
     @field_validator("atc7_codes")
     @classmethod
@@ -617,6 +627,49 @@ class AutomapRequest(BaseModel):
 class SuggestProgress(BaseModel):
     # The current step's label, or None before the first step / after the run
     step: str | None = None
+
+
+class DrugMatchRequest(BaseModel):
+    # A structure edited in the mapping panel; without it the term's provided structure is used,
+    # or the name is parsed by the LLM (as auto-mapping does)
+    structure: DrugStructure | None = None
+
+
+class DrugMatchResponse(BaseModel):
+    """The deterministic drug step of auto-mapping, run for one term in the mapping panel."""
+
+    source_id: int
+    # exact: one drug matches (auto-mapping accepts it); tie: several equally good drugs;
+    # approximate: close drugs (similar names, related forms); none: no drug with this
+    # structure; not_drug / parse_error / no_structure / unavailable: nothing to match
+    status: Literal[
+        "exact",
+        "tie",
+        "approximate",
+        "none",
+        "not_drug",
+        "parse_error",
+        "no_structure",
+        "unavailable",
+    ]
+    # provided: CSV columns; parsed: read from the name by the LLM; edited: sent in the request
+    origin: Literal["provided", "parsed", "edited"] | None = None
+    structure: DrugStructure | None = None
+    level: str | None = None
+    reason: str | None = None
+    summary: str | None = None
+    # How names were read (synonym, translation, dose form chosen by the LLM)
+    resolved: list[str] = []
+    # Why a match is only approximate
+    approximate: list[str] = []
+    # The structure written like an RxNorm name, used as an extra search query
+    search_text: str | None = None
+    # An RxNorm brand name found in the term although the structure names none
+    brand_in_name: str | None = None
+    # Concept classes the search should leave out: branded drugs when the term has no brand
+    # (no brand in the structure and none written in the name)
+    exclude_classes: list[str] = []
+    candidates: list[SearchResult] = []
 
 
 class SuggestRequest(BaseModel):

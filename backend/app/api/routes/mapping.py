@@ -12,6 +12,8 @@ from app.schemas.api import (
     AutomapRequest,
     Calibration,
     CountResult,
+    DrugMatchRequest,
+    DrugMatchResponse,
     MapRequest,
     Message,
     SourceFlag,
@@ -25,10 +27,13 @@ from app.schemas.api import (
 )
 from app.services import mapping, suggestions
 from app.services.atc7 import is_valid_atc7
+from app.services.drug_matching import BRANDED_CLASSES
 from app.services.settings_store import EffectiveConfig, get_effective_config
 from app.vector.store import CollectionMissing
 from app.worker.tasks.automap import run_automap
 from app.workflows.builder import PipelineError, get_pipeline
+from app.workflows.nodes.drug import MatchDrugParams, match_drug
+from app.workflows.nodes.retrieve import unbranded_drug
 from app.workflows.service import build_context, default_pipeline, initial_state, run_pipeline
 from app.workflows.steps import decision_path, step_label
 
@@ -185,6 +190,52 @@ async def suggest(
         decision_path=decision_path(result),
         candidates=result.get("candidates") or [],
         trace=result.get("trace") or [],
+    )
+
+
+@router.post("/source-concepts/{source_id}/drug-match", response_model=DrugMatchResponse)
+async def drug_match(source_id: int, body: DrugMatchRequest, _: CurrentUser):
+    """Run auto-mapping's deterministic drug step for one term: its structure (provided, edited
+    or parsed from the name by the LLM) matched on drug_strength, with the matching drugs."""
+    source, cfg = await asyncio.to_thread(_load_for_suggest, source_id)
+    if source is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Source concept {source_id} not found")
+    edited = body.structure is not None
+    state = initial_state(
+        source_id=source_id,
+        source_value=source["source_value"],
+        source_name=source["source_concept_name"],
+        domains=["Drug"],
+        drug_specific=True,
+        threshold=10,
+        drug_structure=(
+            body.structure.model_dump(exclude_none=True) if edited else source.get("drug_structure")
+        ),
+    )
+    ctx = build_context(cfg)
+    if ctx.drug_matcher is None:
+        return DrugMatchResponse(source_id=source_id, status="unavailable")
+    # An edited structure is matched as it is, not replaced by a parse of the name
+    _route, update = await match_drug(state, ctx, MatchDrugParams(parse_free_text=not edited))
+    meta = update.get("meta") or {}
+    concepts = update.get("selected_concepts") or (
+        [update["selected"]] if update.get("selected") else update.get("structured_candidates")
+    )
+    origin = meta.get("drug_origin")
+    return DrugMatchResponse(
+        source_id=source_id,
+        status=meta.get("drug_status", "none"),
+        origin="edited" if edited and origin == "provided" else origin,
+        structure=meta.get("drug_structure"),
+        level=meta.get("drug_level"),
+        reason=meta.get("drug_match"),
+        summary=update.get("_summary"),
+        resolved=meta.get("drug_match_resolved") or [],
+        approximate=meta.get("drug_match_approximate") or [],
+        search_text=meta.get("drug_search_text"),
+        brand_in_name=meta.get("drug_brand_in_name"),
+        exclude_classes=list(BRANDED_CLASSES) if unbranded_drug({**state, "meta": meta}) else [],
+        candidates=[{"rank": i + 1, "score": 1.0, **c} for i, c in enumerate(concepts or [])],
     )
 
 
