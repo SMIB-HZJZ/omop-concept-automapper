@@ -65,6 +65,7 @@ The UI runs on port 8501. Put it behind HTTPS and sign in as `ADMIN_USERNAME` / 
 6. **Check & Commit**. See and undo mappings with their match type, view statistics and download `vocabulary_<id>_mappings.csv`. Every user can review the mapped set here and flag a mapping with a question (**Flagged only** lists them); the release panel warns about open questions before publishing.
    - **Publish release** (admin) makes the current mappings the official version and locks the vocabulary: no mapping, unmapping, auto-mapping or accepting suggestions until an admin clicks **Start release N+1**.
    - Each release has its OMOP `source_to_concept_map`. Mappings of an earlier release that were later changed or removed stay in it, with a `valid_end_date` of the day before the release that changed them and `invalid_reason` `U` (remapped) or `D` (removed).
+   - **Tools → Export mappings** puts the published releases of several vocabularies in one `source_to_concept_map`, each with its own `source_vocabulary_id`.
    - An OMOP vocabulary update that has to replace or remove mappings of a released vocabulary starts its next release automatically, with a note.
 7. **Search**. Semantic search with domain, vocabulary and ATC7 filters.
 8. **Configuration** (admin). LLM and embedding models, mapping pipelines, and **Users**.

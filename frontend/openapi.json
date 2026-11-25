@@ -3135,6 +3135,52 @@
         }
       }
     },
+    "/api/source_to_concept_map.csv": {
+      "get": {
+        "tags": [
+          "collaboration"
+        ],
+        "summary": "Combined Source To Concept Map",
+        "description": "The OMOP SOURCE_TO_CONCEPT_MAP of several published vocabularies in one file.",
+        "operationId": "combined_source_to_concept_map_api_source_to_concept_map_csv_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vocabulary",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "One per source vocabulary: 'id', 'id:release' or 'id:release:LABEL' ('id::LABEL' for the latest release). LABEL is the SOURCE_VOCABULARY_ID written (default: from the name). Only published releases are exported.",
+              "title": "Vocabulary"
+            },
+            "description": "One per source vocabulary: 'id', 'id:release' or 'id:release:LABEL' ('id::LABEL' for the latest release). LABEL is the SOURCE_VOCABULARY_ID written (default: from the name). Only published releases are exported."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/source-vocabularies/{vocabulary_id}/releases": {
       "get": {
         "tags": [

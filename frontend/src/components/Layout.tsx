@@ -6,6 +6,7 @@ import {
   Moon,
   Sun,
   ClipboardCheck,
+  FileDown,
   KeyRound,
   ListChecks,
   LogOut,
@@ -90,7 +91,13 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       },
     ],
   },
-  { title: "Tools", items: [{ to: "/search", label: "Search concepts", icon: Search }] },
+  {
+    title: "Tools",
+    items: [
+      { to: "/search", label: "Search concepts", icon: Search },
+      { to: "/export", label: "Export mappings", icon: FileDown },
+    ],
+  },
   {
     title: "Administration",
     items: [

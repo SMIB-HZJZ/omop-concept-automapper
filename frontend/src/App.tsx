@@ -16,6 +16,7 @@ import { LoginPage } from "@/pages/Login";
 // Pages are code-split; each loads on first visit
 const ImportPage = lazy(() => import("@/pages/Import").then((m) => ({ default: m.ImportPage })));
 const SearchPage = lazy(() => import("@/pages/Search").then((m) => ({ default: m.SearchPage })));
+const ExportPage = lazy(() => import("@/pages/Export").then((m) => ({ default: m.ExportPage })));
 const MapPage = lazy(() => import("@/pages/Map").then((m) => ({ default: m.MapPage })));
 const ReviewPage = lazy(() => import("@/pages/Review").then((m) => ({ default: m.ReviewPage })));
 const CommitPage = lazy(() => import("@/pages/Commit").then((m) => ({ default: m.CommitPage })));
@@ -48,6 +49,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/map" replace /> },
       { path: "import", element: <RequireAdmin>{page(<ImportPage />)}</RequireAdmin> },
       { path: "search", element: page(<SearchPage />) },
+      { path: "export", element: page(<ExportPage />) },
       { path: "map", element: page(<MapPage />) },
       { path: "review", element: page(<ReviewPage />) },
       { path: "commit", element: page(<CommitPage />) },

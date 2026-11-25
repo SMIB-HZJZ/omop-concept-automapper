@@ -73,14 +73,65 @@ def source_to_concept_map(
     if isinstance(which, int) and not releases.release_exists(session, vocabulary_id, which):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Release {which} not found")
     # OMOP vocabulary_id is at most 20 characters; derive one from the name when not given
-    label = source_vocabulary_id or re.sub(r"[^A-Za-z0-9_-]+", "_", vocab.name).strip("_")[:20]
+    label = source_vocabulary_id or releases.default_label(vocab.name, vocabulary_id)
     return StreamingResponse(
-        releases.iter_source_to_concept_map(
-            vocabulary_id, label or f"SOURCE_{vocabulary_id}", which
-        ),
+        releases.iter_source_to_concept_map(vocabulary_id, label, which),
         media_type="text/csv",
         headers={
             "Content-Disposition": "attachment; "
             f'filename="source_to_concept_map_{vocabulary_id}{"_" + release if release else ""}.csv"'
         },
+    )
+
+
+_PART = re.compile(r"^([1-9][0-9]{0,8})(?::([1-9][0-9]{0,5})?)?(?::([A-Za-z0-9_-]{1,20}))?$")
+
+
+@router.get("/source_to_concept_map.csv", response_class=StreamingResponse)
+def combined_source_to_concept_map(
+    _: CurrentUser,
+    session: SessionDep,
+    vocabulary: list[str] = Query(
+        ...,
+        description="One per source vocabulary: 'id', 'id:release' or 'id:release:LABEL' "
+        "('id::LABEL' for the latest release). LABEL is the SOURCE_VOCABULARY_ID written "
+        "(default: from the name). Only published releases are exported.",
+    ),
+):
+    """The OMOP SOURCE_TO_CONCEPT_MAP of several published vocabularies in one file."""
+    parts: list[tuple[int, str, int]] = []
+    for item in vocabulary:
+        match = _PART.match(item.strip())
+        if match is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Invalid vocabulary item {item!r}")
+        vocabulary_id = int(match[1])
+        vocab = _vocabulary(session, vocabulary_id)
+        latest = releases.latest_release(session, vocabulary_id)
+        if latest is None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, f"{vocab.name} has no published release to export"
+            )
+        number = int(match[2]) if match[2] else latest
+        if number != latest and not releases.release_exists(session, vocabulary_id, number):
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, f"Release {number} of {vocab.name} not found"
+            )
+        parts.append(
+            (vocabulary_id, match[3] or releases.default_label(vocab.name, vocabulary_id), number)
+        )
+    ids = [p[0] for p in parts]
+    if len(set(ids)) != len(ids):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "A vocabulary is listed twice")
+    labels = [p[1] for p in parts]
+    if len(set(labels)) != len(labels):
+        # Codes of two vocabularies would be indistinguishable in one table
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Each vocabulary needs its own SOURCE_VOCABULARY_ID: "
+            + ", ".join(sorted({x for x in labels if labels.count(x) > 1})),
+        )
+    return StreamingResponse(
+        releases.iter_combined_source_to_concept_map(parts),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="source_to_concept_map.csv"'},
     )

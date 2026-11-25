@@ -13,6 +13,7 @@ remapped) or 'D' (its mapping was removed), as in the OMOP vocabulary tables.
 
 import csv
 import io
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -266,6 +267,13 @@ class _Snapshot:
     rows: dict[tuple[str, int], tuple]
 
 
+def latest_release(session: Session, vocabulary_id: int) -> int | None:
+    return session.execute(
+        text("SELECT max(number) FROM mapping_release WHERE vocabulary_id = :v"),
+        {"v": vocabulary_id},
+    ).scalar_one()
+
+
 def release_exists(session: Session, vocabulary_id: int, number: int) -> bool:
     return session.execute(
         text(
@@ -381,32 +389,48 @@ def stcm_rows(session: Session, vocabulary_id: int, release: int | str | None) -
     return out
 
 
+def default_label(name: str, vocabulary_id: int) -> str:
+    """A SOURCE_VOCABULARY_ID derived from the vocabulary's name (OMOP allows 20 characters)."""
+    return re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_")[:20] or f"SOURCE_{vocabulary_id}"
+
+
 def iter_source_to_concept_map(
     vocabulary_id: int, source_vocabulary_id: str, release: int | str | None = None
 ) -> Iterator[str]:
     """The SOURCE_TO_CONCEPT_MAP of a release (default: the latest; ``"draft"``: the current
     mappings as the next release) as CSV. A vocabulary without releases exports its mappings."""
-    with session_scope() as session:
-        rows = stcm_rows(session, vocabulary_id, release)
+    return iter_combined_source_to_concept_map([(vocabulary_id, source_vocabulary_id, release)])
+
+
+def iter_combined_source_to_concept_map(
+    parts: list[tuple[int, str, int | str | None]],
+) -> Iterator[str]:
+    """One SOURCE_TO_CONCEPT_MAP CSV for several vocabularies: (vocabulary id,
+    SOURCE_VOCABULARY_ID, release) each, in the given order."""
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(STCM_COLUMNS)
-    for i, r in enumerate(rows, 1):
-        writer.writerow(
-            [
-                r["source_code"],
-                0,
-                source_vocabulary_id,
-                r["source_code_description"],
-                r["target_concept_id"],
-                r["target_vocabulary_id"],
-                r["valid_start_date"].strftime("%Y%m%d"),
-                r["valid_end_date"].strftime("%Y%m%d"),
-                r["invalid_reason"],
-            ]
-        )
-        if i % 5000 == 0:
-            yield buffer.getvalue()
-            buffer.seek(0)
-            buffer.truncate(0)
+    written = 0
+    for vocabulary_id, source_vocabulary_id, release in parts:
+        with session_scope() as session:
+            rows = stcm_rows(session, vocabulary_id, release)
+        for r in rows:
+            writer.writerow(
+                [
+                    r["source_code"],
+                    0,
+                    source_vocabulary_id,
+                    r["source_code_description"],
+                    r["target_concept_id"],
+                    r["target_vocabulary_id"],
+                    r["valid_start_date"].strftime("%Y%m%d"),
+                    r["valid_end_date"].strftime("%Y%m%d"),
+                    r["invalid_reason"],
+                ]
+            )
+            written += 1
+            if written % 5000 == 0:
+                yield buffer.getvalue()
+                buffer.seek(0)
+                buffer.truncate(0)
     yield buffer.getvalue()

@@ -1041,6 +1041,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source_to_concept_map.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Combined Source To Concept Map
+         * @description The OMOP SOURCE_TO_CONCEPT_MAP of several published vocabularies in one file.
+         */
+        get: operations["combined_source_to_concept_map_api_source_to_concept_map_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/source-vocabularies/{vocabulary_id}/releases": {
         parameters: {
             query?: never;
@@ -4593,6 +4613,36 @@ export interface operations {
             path: {
                 vocabulary_id: number;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    combined_source_to_concept_map_api_source_to_concept_map_csv_get: {
+        parameters: {
+            query: {
+                /** @description One per source vocabulary: 'id', 'id:release' or 'id:release:LABEL' ('id::LABEL' for the latest release). LABEL is the SOURCE_VOCABULARY_ID written (default: from the name). Only published releases are exported. */
+                vocabulary: string[];
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
