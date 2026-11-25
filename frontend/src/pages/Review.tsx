@@ -23,7 +23,6 @@ import { SuggestionDetail, type DetailPosition } from "./review/SuggestionDetail
 import { ConceptLink } from "@/components/ConceptLink";
 import { Rationale } from "@/components/Rationale";
 import { methodLabel } from "@/lib/methods";
-import { MappingGuide } from "@/components/MappingGuide";
 
 type Status = SuggestionFilters["status"];
 
@@ -299,7 +298,6 @@ export function ReviewPage() {
         step={3}
         title="Review AI suggestions"
         description="Check what the AI proposed. Accepted suggestions become mappings; rejected ones go back to the terms still to map."
-        actions={<MappingGuide />}
       />
       <VocabularySelector selection={selection} />
       <CalibrationPanel vocabularyId={vocabularyId} />

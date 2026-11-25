@@ -1,5 +1,6 @@
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
+  BookOpen,
   Check,
   CheckSquare,
   Monitor,
@@ -96,6 +97,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: "/search", label: "Search concepts", icon: Search },
       { to: "/export", label: "Export mappings", icon: FileDown },
+      { to: "/guide", label: "Mapping guide", icon: BookOpen },
     ],
   },
   {

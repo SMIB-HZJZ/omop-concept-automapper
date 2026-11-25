@@ -27,7 +27,6 @@ import { ConceptLink } from "@/components/ConceptLink";
 import { MappingFlag } from "./commit/MappingFlag";
 import { ReleasePanel } from "./commit/ReleasePanel";
 import { Switch } from "@/components/ui/switch";
-import { MappingGuide } from "@/components/MappingGuide";
 
 const chartConfig = { count: { label: "Mappings", color: "var(--chart-1)" } } satisfies ChartConfig;
 
@@ -249,7 +248,6 @@ export function CommitPage() {
         step={4}
         title="Check & commit"
         description="Look over the final mappings, flag doubtful ones for review, publish them as a release and download them as CSV."
-        actions={<MappingGuide />}
       />
       <VocabularySelector selection={selection} releaseNotice={false} />
       <ErrorAlert error={stats.error} title="Could not load mapping statistics" />
