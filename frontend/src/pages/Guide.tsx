@@ -1,17 +1,25 @@
 import { BookOpen } from "lucide-react";
 import type { ReactNode } from "react";
+import { Link } from "react-router";
 
 import { PageHeader } from "@/components/common";
 import { Card, CardContent } from "@/components/ui/card";
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, where, children }: { title: string; where?: ReactNode; children: ReactNode }) {
   return (
     <section className="space-y-1.5">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <div className="text-muted-foreground space-y-1.5 text-sm [&_b]:text-foreground [&_li]:ml-4 [&_li]:list-disc">
-        {children}
-      </div>
+      <h2 className="text-sm font-semibold">{title}</h2>
+      <div className="space-y-1.5 text-sm [&_li]:ml-4 [&_li]:list-disc">{children}</div>
+      {where && <p className="text-muted-foreground text-xs">Where: {where}</p>}
     </section>
+  );
+}
+
+function To({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className="text-primary hover:underline">
+      {children}
+    </Link>
   );
 }
 
@@ -27,7 +35,16 @@ export function GuidePage() {
       <Card className="max-w-3xl">
         <CardContent className="py-2">
           <div className="space-y-5">
-            <Section title="1. Pick the concept that means the same">
+            <Section
+              title="1. Pick the concept that means the same"
+              where={
+                <>
+                  <To to="/map">Map concepts</To>: pick a term, tick a concept and confirm (<b>1</b>–<b>9</b>,{" "}
+                  <b>Enter</b>
+                  ).
+                </>
+              }
+            >
               <ul>
                 <li>Map to a standard concept that says what the source term says: no less, no more.</li>
                 <li>
@@ -40,7 +57,14 @@ export function GuidePage() {
                 </li>
               </ul>
             </Section>
-            <Section title="2. Say how close it is (match type)">
+            <Section
+              title="2. Say how close it is (match type)"
+              where={
+                <>
+                  the match type selector next to the ticked concepts on <To to="/map">Map concepts</To>.
+                </>
+              }
+            >
               <ul>
                 <li>
                   <b>Exact</b>: same meaning. The default.
@@ -71,7 +95,15 @@ export function GuidePage() {
                 </li>
               </ul>
             </Section>
-            <Section title="4. Don't guess: flag">
+            <Section
+              title="4. Don't guess: flag"
+              where={
+                <>
+                  the <b>Flag</b> button on <To to="/map">Map concepts</To> (flagged terms are under its <b>Flagged</b>{" "}
+                  list); the flag icon on a row of <To to="/commit">Check &amp; commit</To>.
+                </>
+              }
+            >
               <ul>
                 <li>
                   <b>Ask a colleague</b> when the term is ambiguous or you are unsure; add a note saying why.
@@ -83,7 +115,15 @@ export function GuidePage() {
                 <li>On Check &amp; commit, any mapping can get a question; settle all questions before a release.</li>
               </ul>
             </Section>
-            <Section title="5. AI suggestions">
+            <Section
+              title="5. AI suggestions"
+              where={
+                <>
+                  <To to="/review">Review</To> (<b>A</b> accept, <b>R</b> reject), or the suggestion shown on{" "}
+                  <To to="/map">Map concepts</To>.
+                </>
+              }
+            >
               <ul>
                 <li>Confidence is a guide, not a guarantee: check the meaning and the domain as you would by hand.</li>
                 <li>
