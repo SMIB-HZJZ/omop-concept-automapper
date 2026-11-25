@@ -97,17 +97,17 @@ export function ExportPage() {
             </p>
           )}
           <div className="flex flex-wrap items-center gap-3">
-            <Button asChild={selected.length > 0 && !problems.any} disabled={selected.length === 0 || problems.any}>
-              {selected.length > 0 && !problems.any ? (
+            {selected.length > 0 && !problems.any ? (
+              <Button asChild>
                 <a href={combinedExportUrl(selected)} download="source_to_concept_map.csv">
                   <Download /> Download source_to_concept_map
                 </a>
-              ) : (
-                <span>
-                  <Download /> Download source_to_concept_map
-                </span>
-              )}
-            </Button>
+              </Button>
+            ) : (
+              <Button disabled>
+                <Download /> Download source_to_concept_map
+              </Button>
+            )}
             <span className="text-muted-foreground text-sm" aria-live="polite">
               {problems.invalid.size > 0
                 ? "Use 1–20 letters, digits, _ or - for each SOURCE_VOCABULARY_ID."
