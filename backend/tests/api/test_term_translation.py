@@ -130,7 +130,9 @@ def test_panel_calls_the_translator_like_the_translate_step(
             vocabulary_context=context,
             source_language=language,
         )
+        before = len(translator.calls)
         asyncio.run(translate(state, make_context(None, translator=translator), TranslateParams()))
+        assert len(translator.calls) == before + 1  # the step itself called the translator
         assert translator.calls[-1] == from_panel
 
 
