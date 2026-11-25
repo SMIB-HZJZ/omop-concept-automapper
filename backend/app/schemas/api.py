@@ -674,6 +674,17 @@ class SuggestProgress(BaseModel):
     step: str | None = None
 
 
+class TermTranslation(BaseModel):
+    """A source term in English, as auto-mapping's translate step renders it (cached)."""
+
+    source_id: int
+    # None: nothing to add (already English, an English vocabulary, or the translation failed)
+    english: str | None = None
+    language: str | None = None
+    cached: bool = False
+    failed: bool = False
+
+
 class DrugMatchRequest(BaseModel):
     # A structure edited in the mapping panel; without it the term's provided structure is used,
     # or the name is parsed by the LLM (as auto-mapping does)

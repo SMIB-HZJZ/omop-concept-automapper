@@ -18,11 +18,14 @@ export type SearchInput = {
   drugMatch?: DrugMatch;
   /** The "Show branded drugs" switch */
   showBranded: boolean;
+  /** The source term in English (not for drugs, which search their structure instead) */
+  english?: string | null;
 };
 
 /** The panel's search request. As auto-mapping: for a drug, also search the structure written
  * like an RxNorm name, leave branded drugs out when the term names no brand, and drop a fruitless
- * ATC7 filter. Text the user typed is searched as typed (it may be a brand name). */
+ * ATC7 filter. Other terms also search their English rendering. Text the user typed is searched as
+ * typed (it may be a brand name). */
 export function buildSearchRequest(p: SearchInput): SearchRequest {
   const dm = p.isDrug && !p.edited ? p.drugMatch : undefined;
   return {
@@ -32,7 +35,9 @@ export function buildSearchRequest(p: SearchInput): SearchRequest {
     vocabularies: p.vocabularies,
     concept_classes: p.conceptClasses,
     atc7_codes: p.atc7Codes,
-    extra_queries: dm?.search_text ? [dm.search_text] : [],
+    extra_queries: p.edited
+      ? []
+      : [...(dm?.search_text ? [dm.search_text] : []), ...(!p.isDrug && p.english ? [p.english] : [])],
     exclude_concept_classes: dm && !p.showBranded ? (dm.exclude_classes ?? []) : [],
     atc7_fallback: p.isDrug,
   };
@@ -46,6 +51,7 @@ export function defaultSearchRequest(
   isDrug: boolean,
   domains: string[],
   drugMatch?: DrugMatch,
+  english?: string | null,
 ): SearchRequest {
   const detected = concept.atc7_codes?.[0] ?? null;
   return buildSearchRequest({
@@ -59,5 +65,6 @@ export function defaultSearchRequest(
     isDrug,
     drugMatch,
     showBranded: false,
+    english,
   });
 }

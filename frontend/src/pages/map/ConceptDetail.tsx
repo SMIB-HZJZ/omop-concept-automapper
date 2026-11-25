@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Filter, Hash, Loader2, RotateCcw, Search as SearchIcon, Sparkles } from "lucide-react";
+import { Filter, Hash, Languages, Loader2, RotateCcw, Search as SearchIcon, Sparkles } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import {
   useSuggest,
   useSuggestProgress,
   useSuggestions,
+  useTermTranslation,
   useUnmap,
 } from "@/api/queries";
 import {
@@ -234,6 +235,10 @@ export function ConceptDetail({
   const dm = isDrug ? drugMatch.data : undefined;
   // No reset effect: the parent keys this component by source_id, so state starts fresh per concept
 
+  // Not drugs: the term in English, searched next to it once known (the first results don't wait)
+  const translation = useTermTranslation(concept.source_id, !isDrug);
+  const english = isDrug ? null : (translation.data?.english ?? null);
+
   const manualValid = manualAtc7 === "" || isValidAtc7(manualAtc7);
   const atc7Codes = useMemo(() => {
     if (!isDrug || !useAtc7) return [];
@@ -260,6 +265,7 @@ export function ConceptDetail({
           isDrug,
           drugMatch: dm,
           showBranded,
+          english,
         })
       : null;
   const search = useSearch(request);
@@ -536,6 +542,10 @@ export function ConceptDetail({
   const filterCount = domains.length + vocabularies.length + conceptClasses.length + (atc7Codes.length ? 1 : 0);
   const typing = name.trim() !== debouncedName;
   const busy = typing || search.isFetching;
+  // The English search is still coming: the list may reorder, so say so
+  const searchedEnglish = !!english && !!search.data?.request.extra_queries?.includes(english);
+  const addingEnglish =
+    !isDrug && !edited && (translation.isFetching || (!!english && !searchedEnglish && !search.isError));
 
   return (
     <Card className="h-full min-h-[36rem] gap-0 py-0">
@@ -716,6 +726,28 @@ export function ConceptDetail({
               ? "Searching for your text instead of the source term; AI suggest uses it too."
               : "Starts with the source term. No good match? Edit it: fix a typo, write it in English, or try other words. Results update as you type."}
           </p>
+          {!isDrug && !edited && (addingEnglish || english) && (
+            <div aria-live="polite" className="flex min-w-0 items-center gap-1.5 text-xs">
+              {addingEnglish ? (
+                <span className="text-primary flex items-center gap-1.5">
+                  <Loader2 className="size-3 shrink-0 animate-spin" /> Adding English matches…
+                </span>
+              ) : (
+                <>
+                  <Languages className="text-muted-foreground size-3 shrink-0" />
+                  <span className="text-muted-foreground shrink-0">Also searched in English:</span>
+                  <button
+                    type="button"
+                    className="text-primary cursor-pointer truncate hover:underline"
+                    title="Search only this text (edit it in the box)"
+                    onClick={() => setName(english!)}
+                  >
+                    {english}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {suggest.isPending && (
             <div aria-live="polite" className="text-primary flex min-w-0 items-center gap-2 text-sm">
               <Loader2 className="size-4 shrink-0 animate-spin" />

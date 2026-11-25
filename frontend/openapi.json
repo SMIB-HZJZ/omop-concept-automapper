@@ -1813,6 +1813,54 @@
         }
       }
     },
+    "/api/source-concepts/{source_id}/translation": {
+      "get": {
+        "tags": [
+          "mapping"
+        ],
+        "summary": "Translation",
+        "description": "The term in English, for the mapping panel's extra search. Uses the same translator and\nvocabulary context as auto-mapping, so a term it has seen comes from the cache.",
+        "operationId": "translation_api_source_concepts__source_id__translation_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermTranslation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/source-concepts/{source_id}/drug-match": {
       "post": {
         "tags": [
@@ -6657,6 +6705,52 @@
           "flags_open"
         ],
         "title": "TeamActivity"
+      },
+      "TermTranslation": {
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "title": "Source Id"
+          },
+          "english": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "English"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "cached": {
+            "type": "boolean",
+            "title": "Cached",
+            "default": false
+          },
+          "failed": {
+            "type": "boolean",
+            "title": "Failed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id"
+        ],
+        "title": "TermTranslation",
+        "description": "A source term in English, as auto-mapping's translate step renders it (cached)."
       },
       "TraceStep": {
         "properties": {

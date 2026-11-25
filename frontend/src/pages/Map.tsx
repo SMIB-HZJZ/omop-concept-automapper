@@ -18,6 +18,7 @@ import {
   drugMatchQuery,
   leaveVocabulary,
   searchQuery,
+  translationQuery,
   useAuditRecent,
   useAuditStats,
   useMappingStats,
@@ -336,6 +337,14 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
       return;
     }
     void qc.prefetchQuery(searchQuery(defaultSearchRequest(next, isDrug, mapDomains)));
+    if (isDrug) return;
+    // And its English search, which the panel adds once the translation is known
+    qc.fetchQuery(translationQuery(next.source_id))
+      .then((t) => {
+        if (t.english)
+          void qc.prefetchQuery(searchQuery(defaultSearchRequest(next, isDrug, mapDomains, undefined, t.english)));
+      })
+      .catch(() => {});
   }, [items, selectedSource, isDrug, mapDomains, qc]);
 
   const allMapped = stats.data && stats.data.unmapped === 0;

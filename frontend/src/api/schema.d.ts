@@ -613,6 +613,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source-concepts/{source_id}/translation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Translation
+         * @description The term in English, for the mapping panel's extra search. Uses the same translator and
+         *     vocabulary context as auto-mapping, so a term it has seen comes from the cache.
+         */
+        get: operations["translation_api_source_concepts__source_id__translation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/source-concepts/{source_id}/drug-match": {
         parameters: {
             query?: never;
@@ -2192,6 +2213,28 @@ export interface components {
             reviewed_total: number;
             /** Flags Open */
             flags_open: number;
+        };
+        /**
+         * TermTranslation
+         * @description A source term in English, as auto-mapping's translate step renders it (cached).
+         */
+        TermTranslation: {
+            /** Source Id */
+            source_id: number;
+            /** English */
+            english?: string | null;
+            /** Language */
+            language?: string | null;
+            /**
+             * Cached
+             * @default false
+             */
+            cached: boolean;
+            /**
+             * Failed
+             * @default false
+             */
+            failed: boolean;
         };
         /** TraceStep */
         TraceStep: {
@@ -3788,6 +3831,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuggestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    translation_api_source_concepts__source_id__translation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermTranslation"];
                 };
             };
             /** @description Validation Error */

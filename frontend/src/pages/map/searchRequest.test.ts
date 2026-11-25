@@ -47,6 +47,17 @@ describe("buildSearchRequest", () => {
     expect(plain.atc7_fallback).toBe(false);
   });
 
+  it("adds the English rendering for other terms, not for drugs or typed text", () => {
+    const plain = { ...input, isDrug: false, drugMatch: undefined, query: "glukoza u krvi", english: "blood glucose" };
+    expect(buildSearchRequest(plain).extra_queries).toEqual(["blood glucose"]);
+    expect(buildSearchRequest({ ...plain, edited: true }).extra_queries).toEqual([]);
+    expect(buildSearchRequest({ ...input, english: "paracetamol tablets" }).extra_queries).toEqual([
+      "acetaminophen 500 MG Oral Tablet",
+    ]);
+    const term = { source_concept_name: "glukoza u krvi", atc7_codes: [] } as unknown as UnmappedItem;
+    expect(defaultSearchRequest(term, false, [], undefined, "blood glucose")).toEqual(buildSearchRequest(plain));
+  });
+
   it("is the panel's first request for the next term (the preload hits the same cache entry)", () => {
     const term = { source_concept_name: " Paracetamol 500 mg tablete ", atc7_codes: [] } as unknown as UnmappedItem;
     expect(defaultSearchRequest(term, true, [], match)).toEqual(buildSearchRequest(input));

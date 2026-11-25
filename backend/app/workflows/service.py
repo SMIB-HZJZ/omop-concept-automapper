@@ -140,7 +140,7 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
             Embedder(cfg.embedding_model, cfg.embedding_dims, cfg.embedding_task_types),
         ),
         reranker=build_reranker(cfg.llm_model),
-        translator=Translator(cfg.llm_model, effort=get_settings().llm_reasoning_effort),
+        translator=build_translator(cfg),
         **_drug_parts(cfg.llm_model),
         lexical=lexical,
         get_concepts=_get_concepts,
@@ -149,6 +149,12 @@ def build_context(cfg: EffectiveConfig) -> NodeContext:
         settings=get_settings(),
         llm_model=cfg.llm_model,
     )
+
+
+def build_translator(cfg: EffectiveConfig) -> Translator:
+    """The translator auto-mapping's translate step uses: same model and effort, so the
+    translations it cached in Redis are found again."""
+    return Translator(cfg.llm_model, effort=get_settings().llm_reasoning_effort)
 
 
 def build_drug_context(cfg: EffectiveConfig) -> NodeContext:
@@ -160,7 +166,7 @@ def build_drug_context(cfg: EffectiveConfig) -> NodeContext:
         get_concepts=_get_concepts,
         settings=get_settings(),
         llm_model=cfg.llm_model,
-        translator=Translator(cfg.llm_model, effort=get_settings().llm_reasoning_effort),
+        translator=build_translator(cfg),
         **_drug_parts(cfg.llm_model),
     )
 

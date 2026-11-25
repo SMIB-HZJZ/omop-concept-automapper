@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
 from sqlalchemy import text
@@ -25,6 +26,7 @@ from app.schemas.api import (
     SuggestRequest,
     SuggestResponse,
     TaskRef,
+    TermTranslation,
     UnmapRequest,
 )
 from app.services import mapping, suggestions
@@ -39,11 +41,14 @@ from app.workflows.nodes.retrieve import excluded_drug_classes
 from app.workflows.service import (
     build_context,
     build_drug_context,
+    build_translator,
     default_pipeline,
     initial_state,
     run_pipeline,
 )
 from app.workflows.steps import decision_path, step_label
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["mapping"])
 
@@ -251,6 +256,40 @@ def _drug_step_params() -> MatchDrugParams:
         if ref.uses == "match_drug":
             return MatchDrugParams.model_validate(ref.params)
     return MatchDrugParams()
+
+
+@router.get("/source-concepts/{source_id}/translation", response_model=TermTranslation)
+async def translation(source_id: int, _: CurrentUser):
+    """The term in English, for the mapping panel's extra search. Uses the same translator and
+    vocabulary context as auto-mapping, so a term it has seen comes from the cache."""
+    source, cfg = await asyncio.to_thread(_load_for_suggest, source_id)
+    if source is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Source concept {source_id} not found")
+    language = source.get("source_language")
+    if language == "en":
+        return TermTranslation(source_id=source_id, language="en")
+    term = source["source_concept_name"] or ""
+    if not term.strip():
+        return TermTranslation(source_id=source_id)
+    context = vocabulary_context(
+        source.get("vocabulary_name"), source.get("vocabulary_description")
+    )
+    # Called as the translate step calls it: the cache key depends on the arguments
+    args = (term, context) if context else (term,)
+    kwargs = {"language": language} if language else {}
+    try:
+        result = await build_translator(cfg).translate(*args, **kwargs)
+    except Exception as exc:
+        logger.warning("Translating source concept %s failed: %s", source_id, exc)
+        return TermTranslation(source_id=source_id, failed=True)
+    english = (result.english or "").strip()
+    same = english.lower() == term.strip().lower()
+    return TermTranslation(
+        source_id=source_id,
+        english=None if same or not english else english,
+        language=(result.language or "").lower() or language,
+        cached=result.cached,
+    )
 
 
 @router.post("/source-concepts/{source_id}/drug-match", response_model=DrugMatchResponse)

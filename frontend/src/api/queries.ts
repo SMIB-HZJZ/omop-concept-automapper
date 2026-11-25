@@ -37,6 +37,7 @@ export const keys = {
   users: ["users"] as const,
   search: (body: object) => ["search", body] as const,
   drugMatch: (sourceId: number, structure: object | null) => ["drug-match", sourceId, structure] as const,
+  translation: (sourceId: number) => ["translation", sourceId] as const,
   concepts: (ids: string) => ["concepts", ids] as const,
   conceptDetails: (id: number) => ["concept-details", id] as const,
   presence: (vocabularyId: number) => ["presence", vocabularyId] as const,
@@ -398,6 +399,24 @@ export const drugMatchQuery = (sourceId: number, structure: DrugStructure | null
     staleTime: 10 * 60_000,
     retry: false,
   });
+
+/** The term in English, as auto-mapping's translate step renders it (cached on the server, so a
+ * term auto-mapping has seen costs no AI call). Searched next to the source term. */
+export const translationQuery = (sourceId: number) =>
+  queryOptions({
+    queryKey: keys.translation(sourceId),
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/source-concepts/{source_id}/translation", {
+          params: { path: { source_id: sourceId } },
+        }),
+      ),
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+
+export const useTermTranslation = (sourceId: number, enabled: boolean) =>
+  useQuery({ ...translationQuery(sourceId), enabled });
 
 export const useDrugMatch = (sourceId: number, structure: DrugStructure | null, enabled: boolean) =>
   useQuery({ ...drugMatchQuery(sourceId, structure), enabled });

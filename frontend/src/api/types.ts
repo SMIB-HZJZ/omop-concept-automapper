@@ -27,6 +27,7 @@ export type SearchRequest = S["SearchRequest"];
 export type DrugStructure = S["DrugStructure"];
 export type DrugComponent = S["DrugComponent"];
 export type DrugMatch = S["DrugMatchResponse"];
+export type TermTranslation = S["TermTranslation"];
 export type ConceptFacet = S["ConceptFacet"];
 export type SearchResult = S["SearchResult"];
 export type SearchResponse = S["SearchResponse"];
