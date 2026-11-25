@@ -159,7 +159,7 @@ function VocabularyRow({
               variant="outline"
               title={`Unlocked for the next release; changes made since release ${latest} are not exported until it is published`}
             >
-              draft open
+              unlocked
             </Badge>
           )}
         </div>

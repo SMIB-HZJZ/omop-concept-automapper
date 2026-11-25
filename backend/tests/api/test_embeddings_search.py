@@ -42,7 +42,7 @@ def test_search_filters(client, user_headers, embedded):
     resp = client.post(
         "/api/search", json={"query": "metformin 500 mg oral tablet", "k": 5}, headers=user_headers
     ).json()
-    assert resp["method"] == "Standard similarity"
+    assert resp["method"] == "Similarity search"
     assert resp["results"][0]["concept_name"] == "metformin 500 MG Oral Tablet"
     assert [r["rank"] for r in resp["results"]] == [1, 2, 3, 4, 5]
     assert resp["results"][0]["atc7_codes"] == ["A10BA02"]
@@ -60,7 +60,7 @@ def test_search_filters(client, user_headers, embedded):
         json={"query": "tablet", "atc7_codes": ["M01AE01"], "k": 50},
         headers=user_headers,
     ).json()
-    assert atc["method"] == "ATC7 filtered (M01AE01)"
+    assert atc["method"] == "Similarity search, ATC7 M01AE01 only"
     assert {r["concept_id"] for r in atc["results"]} == {4, 9}
 
     vocab = client.post(

@@ -48,6 +48,7 @@ import { TeamStatus } from "./map/Team";
 import { UserAvatar } from "@/components/UserAvatar";
 import { defaultSearchRequest } from "./map/searchRequest";
 import { methodLabel } from "@/lib/methods";
+import { MappingGuide } from "@/components/MappingGuide";
 
 /** Columns of the term list; ``othersOn`` maps a source term to colleagues who have it open. */
 const unmappedColumns = (othersOn: Map<number, string[]>): ColumnDef<UnmappedItem, unknown>[] => [
@@ -481,6 +482,7 @@ export function MapPage() {
             </>
           )
         }
+        actions={<MappingGuide />}
       />
       <VocabularySelector selection={selection} />
       {vocabularyId !== null && (

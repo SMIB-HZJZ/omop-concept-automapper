@@ -64,7 +64,8 @@ def test_reimport_upserts_concepts(client, admin_headers, loaded_vocabulary):
     resp = upload_vocabulary(client, admin_headers)
     task = client.get(f"/api/tasks/{resp.json()['task_id']}", headers=admin_headers).json()
     assert task["status"] == "SUCCESS"
-    assert task["result"]["tables"]["concept"]["records_imported"] == 0  # net new rows
+    concept = task["result"]["tables"]["concept"]
+    assert concept["records_imported"] == 0 and concept["records_updated"] == 0  # nothing changed
 
 
 def test_concept_lookup(client, user_headers, loaded_vocabulary):

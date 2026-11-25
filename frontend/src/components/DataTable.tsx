@@ -30,6 +30,8 @@ type Props<T> = {
   className?: string;
   /** Click-to-sort headers. Turn off for server-paginated data: sorting one page would mislead. */
   sortable?: boolean;
+  /** What a row's checkbox is announced as (default "Select row") */
+  rowLabel?: (row: T) => string;
 };
 
 export function DataTable<T>({
@@ -45,6 +47,7 @@ export function DataTable<T>({
   isLoading,
   className,
   sortable = true,
+  rowLabel,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const rowSelection = useMemo<RowSelectionState>(
@@ -67,7 +70,7 @@ export function DataTable<T>({
         ),
         cell: ({ row }) => (
           <Checkbox
-            aria-label="Select row"
+            aria-label={rowLabel ? rowLabel(row.original) : "Select row"}
             checked={row.getIsSelected()}
             onCheckedChange={(v) => row.toggleSelected(!!v)}
             onClick={(e) => e.stopPropagation()}
@@ -77,7 +80,7 @@ export function DataTable<T>({
       },
       ...columns,
     ];
-  }, [columns, selection]);
+  }, [columns, selection, rowLabel]);
 
   // TanStack Table returns non-memoizable functions; the React Compiler skips this component (expected)
   // eslint-disable-next-line react-hooks/incompatible-library

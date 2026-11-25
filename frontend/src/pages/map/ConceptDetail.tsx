@@ -186,6 +186,8 @@ type Props = {
 
 type MapBody = { source_id: number; concept_ids: number[]; match_type: MatchType; replace: boolean };
 
+const conceptRowLabel = (c: ConceptLike) => `Tick ${c.concept_name} (${c.concept_id})`;
+
 function isTyping(target: EventTarget | null) {
   const el = target as HTMLElement | null;
   return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
@@ -868,6 +870,7 @@ export function ConceptDetail({
               columns={RESULT_COLUMNS}
               data={results}
               getRowId={(r) => String(r.concept_id)}
+              rowLabel={conceptRowLabel}
               selection="multi"
               selected={selectedIds}
               onSelectedChange={onTableSelection}

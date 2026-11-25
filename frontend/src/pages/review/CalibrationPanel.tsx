@@ -39,7 +39,10 @@ export function CalibrationPanel({ vocabularyId }: { vocabularyId: number | null
               of cases.
             </>
           ) : (
-            <>no confidence level reaches {percent(data.target_precision)} precision yet.</>
+            <>
+              no confidence level was right in {percent(data.target_precision)} of cases yet, so there is no
+              recommendation.
+            </>
           )}{" "}
           Current auto-map threshold: <b>{threshold}</b>.
           {recommended && recommended !== threshold && (

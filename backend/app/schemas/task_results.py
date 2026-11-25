@@ -21,7 +21,9 @@ class _Result(BaseModel):
 
 class TableImportResult(_Result):
     status: str
+    # CONCEPT is upserted: new rows here, changed rows in records_updated (unchanged: neither)
     records_imported: int
+    records_updated: int | None = None
     error: str | None = None
 
 

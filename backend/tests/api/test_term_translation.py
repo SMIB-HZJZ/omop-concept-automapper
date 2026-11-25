@@ -102,3 +102,17 @@ def test_cache_key_matches_the_translate_step():
     t = Translator("test/model")
     assert t._key("x", "ctx", "hr") == t._key("x", "ctx", language="hr")
     assert t._key("x", None, None) == t._key("x")
+
+
+def test_free_text_translation(client, user_headers, translator):
+    resp = client.post("/api/translate", json={"text": " glukoza u krvi "}, headers=user_headers)
+    assert resp.json()["english"] == "blood glucose" and resp.json()["source_id"] is None
+    assert translator.calls[-1] == ("glukoza u krvi", None, None)
+    assert (
+        client.post("/api/translate", json={"text": "  "}, headers=user_headers).json()["english"]
+        is None
+    )
+    assert (
+        client.post("/api/translate", json={"text": "x" * 501}, headers=user_headers).status_code
+        == 422
+    )

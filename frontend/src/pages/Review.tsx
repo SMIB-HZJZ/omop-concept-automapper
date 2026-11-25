@@ -23,6 +23,7 @@ import { SuggestionDetail, type DetailPosition } from "./review/SuggestionDetail
 import { ConceptLink } from "@/components/ConceptLink";
 import { Rationale } from "@/components/Rationale";
 import { methodLabel } from "@/lib/methods";
+import { MappingGuide } from "@/components/MappingGuide";
 
 type Status = SuggestionFilters["status"];
 
@@ -298,6 +299,7 @@ export function ReviewPage() {
         step={3}
         title="Review AI suggestions"
         description="Check what the AI proposed. Accepted suggestions become mappings; rejected ones go back to the terms still to map."
+        actions={<MappingGuide />}
       />
       <VocabularySelector selection={selection} />
       <CalibrationPanel vocabularyId={vocabularyId} />
@@ -313,12 +315,12 @@ export function ReviewPage() {
               </TabsList>
             </Tabs>
             <div className="grid gap-1.5">
-              <Label>Min. confidence</Label>
+              <Label htmlFor="review-min-confidence">Min. confidence</Label>
               <Select
                 value={minConfidence === undefined ? "any" : String(minConfidence)}
                 onValueChange={(v) => setMinConfidence(v === "any" ? undefined : Number(v))}
               >
-                <SelectTrigger className="w-28">
+                <SelectTrigger id="review-min-confidence" className="w-28">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -332,9 +334,9 @@ export function ReviewPage() {
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label>Sort</Label>
+              <Label htmlFor="review-sort">Sort</Label>
               <Select value={sort} onValueChange={setSort}>
-                <SelectTrigger className="w-44">
+                <SelectTrigger id="review-sort" className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -347,9 +349,9 @@ export function ReviewPage() {
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label>Per page</Label>
+              <Label htmlFor="review-per-page">Per page</Label>
               <Select value={String(perPage)} onValueChange={(v) => setPerPage(Number(v))}>
-                <SelectTrigger className="w-24">
+                <SelectTrigger id="review-per-page" className="w-24">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

@@ -95,8 +95,8 @@ def _log_import(
 
 def import_concept_upsert(
     conn: psycopg.Connection, info: dict, tracker: ByteProgress, task_id: str | None
-) -> int:
-    """Upsert CONCEPT.csv. Indexes stay in place so searches keep working during the import;
+) -> tuple[int, int]:
+    """Upsert CONCEPT.csv; returns (inserted, updated). Indexes stay in place so searches keep working during the import;
     only rows that actually changed are written, which keeps a release-to-release update cheap."""
     with conn.transaction(), conn.cursor() as cur:
         cur.execute(
@@ -129,7 +129,7 @@ def import_concept_upsert(
         records = sum(1 for (inserted,) in written if inserted)
         logger.info("concept: %d inserted, %d updated", records, len(written) - records)
         _log_import(cur, "concept", info["path"], records, "completed", None, task_id)
-    return records
+    return records, len(written) - records
 
 
 def import_truncate_copy(
@@ -194,11 +194,15 @@ def import_all(
             }
             continue
         try:
+            updated = None
             if table == "concept":
-                records = import_concept_upsert(conn, info, tracker, task_id)
+                # Only new and changed rows are written: unchanged concepts count as neither
+                records, updated = import_concept_upsert(conn, info, tracker, task_id)
             else:
                 records = import_truncate_copy(conn, table, info, tracker, task_id)
             results[table] = {"status": "success", "records_imported": records, "error": None}
+            if updated is not None:
+                results[table]["records_updated"] = updated
         except TaskCancelled:
             raise
         except Exception as exc:

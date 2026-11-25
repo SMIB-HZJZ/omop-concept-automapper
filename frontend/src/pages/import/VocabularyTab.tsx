@@ -42,7 +42,10 @@ function VocabularyImportResult({ task }: { task: Task }) {
         {Object.entries(r.tables).map(([name, t]) => (
           <li key={name}>
             {name}: {t.status}
-            {t.status === "success" && ` (${formatNumber(t.records_imported)} records)`}
+            {t.status === "success" &&
+              (t.records_updated != null
+                ? ` (${formatNumber(t.records_imported)} new, ${formatNumber(t.records_updated)} changed; unchanged concepts are left as they are)`
+                : ` (${formatNumber(t.records_imported)} records)`)}
             {t.error && <span className="text-destructive"> — {t.error}</span>}
           </li>
         ))}

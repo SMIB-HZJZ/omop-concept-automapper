@@ -1,9 +1,9 @@
-import { Info, Loader2, PanelRightOpen, Search as SearchIcon, SlidersHorizontal } from "lucide-react";
+import { Info, Languages, Loader2, PanelRightOpen, Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
 import { ApiError } from "@/api/client";
-import { useSearch } from "@/api/queries";
+import { useSearch, useTextTranslation } from "@/api/queries";
 import type { SearchRequest, SearchResult } from "@/api/types";
 import { ErrorAlert, PageHeader } from "@/components/common";
 import { ConceptFilterFields } from "@/components/ConceptFilterFields";
@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { usePersistentState } from "@/hooks/usePersistentState";
 import { useConceptModal } from "@/hooks/useConceptModal";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Skeleton } from "@/components/motion";
@@ -108,6 +110,11 @@ export function SearchPage() {
   const debouncedK = useDebounce(k, 400);
   const debouncedAtc7 = useDebounce(atc7Code && !atc7Invalid ? atc7Code : "", 400);
 
+  // The text in English, searched next to it (the embeddings match other languages poorly)
+  const [withEnglish, setWithEnglish] = usePersistentState("search-english", true);
+  const translation = useTextTranslation(debouncedQuery, withEnglish);
+  const english = withEnglish ? (translation.data?.english ?? null) : null;
+
   const request = useMemo<SearchRequest | null>(() => {
     if (!debouncedQuery) return null;
     return {
@@ -117,16 +124,19 @@ export function SearchPage() {
       vocabularies: filters.vocabularies,
       concept_classes: filters.conceptClasses,
       atc7_codes: debouncedAtc7 ? [debouncedAtc7] : [],
-      extra_queries: [],
+      extra_queries: english ? [english] : [],
       exclude_concept_classes: [],
       atc7_fallback: false,
     };
-  }, [debouncedQuery, debouncedK, filters, debouncedAtc7]);
+  }, [debouncedQuery, debouncedK, filters, debouncedAtc7, english]);
 
   const search = useSearch(request);
   // Typing ahead of the debounce counts as busy too, so the spinner shows right away
   const typing = query.trim() !== debouncedQuery;
   const busy = typing || search.isFetching;
+  const searchedEnglish = !!english && !!search.data?.request.extra_queries?.includes(english);
+  const addingEnglish =
+    withEnglish && !!debouncedQuery && (translation.isFetching || (!!english && !searchedEnglish && !search.isError));
   const results = search.data?.results ?? [];
   const advancedCount = filters.vocabularies.length + filters.conceptClasses.length + (atc7Code ? 1 : 0);
 
@@ -207,6 +217,34 @@ export function SearchPage() {
             </div>
           </PopoverContent>
         </Popover>
+      </div>
+      <div className="-mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <div className="flex items-center gap-2">
+          <Switch id="search-english" checked={withEnglish} onCheckedChange={setWithEnglish} />
+          <Label htmlFor="search-english" className="text-xs font-normal">
+            Also search in English (AI translation)
+          </Label>
+        </div>
+        {addingEnglish ? (
+          <span aria-live="polite" className="text-primary flex items-center gap-1.5">
+            <Loader2 className="size-3 animate-spin" /> Adding English matches…
+          </span>
+        ) : (
+          english && (
+            <span aria-live="polite" className="flex min-w-0 items-center gap-1.5">
+              <Languages className="text-muted-foreground size-3 shrink-0" />
+              <span className="text-muted-foreground">Also searched:</span>
+              <button
+                type="button"
+                className="text-primary cursor-pointer truncate hover:underline"
+                title="Search only this text"
+                onClick={() => setQuery(english)}
+              >
+                {english}
+              </button>
+            </span>
+          )
+        )}
       </div>
 
       {!request ? (

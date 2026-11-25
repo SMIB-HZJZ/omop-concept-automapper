@@ -131,16 +131,16 @@ def search(body: SearchRequest, _: CurrentUser, session: SessionDep):
     try:
         results = run(filters)
         method = (
-            f"ATC7 filtered ({', '.join(body.atc7_codes)})"
+            f"Similarity search, ATC7 {', '.join(body.atc7_codes)} only"
             if body.atc7_codes
-            else "Standard similarity"
+            else "Similarity search"
         )
         if not results and body.atc7_codes and body.atc7_fallback:
             filters.atc7_codes = ()
             results = run(filters)
-            method = "No ATC7 match, standard similarity"
+            method = "No ATC7 match, similarity search"
     except CollectionMissing as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     if len(queries) > 1:
-        method += f" · {len(queries)} queries"
+        method += f" · {len(queries)} search texts"
     return SearchResponse(results=results, method=method, collection=cfg.collection_name)

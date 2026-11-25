@@ -121,7 +121,7 @@ def test_search_with_extra_queries_and_atc7_fallback(client, user_headers, embed
         json={"query": "metformin", "extra_queries": ["metformin", "hypertension"], "k": 5},
         headers=user_headers,
     ).json()
-    assert two["method"].endswith("2 queries")  # duplicates are searched once
+    assert two["method"].endswith("2 search texts")  # duplicates are searched once
     # Best score per concept across the queries, ranked again
     scores = [r["score"] for r in two["results"]]
     assert scores == sorted(scores, reverse=True) and scores[0] >= one["results"][0]["score"]

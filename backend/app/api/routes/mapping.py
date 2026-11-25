@@ -27,6 +27,7 @@ from app.schemas.api import (
     SuggestResponse,
     TaskRef,
     TermTranslation,
+    TranslateRequest,
     UnmapRequest,
 )
 from app.services import mapping, suggestions
@@ -274,13 +275,23 @@ async def translation(source_id: int, _: CurrentUser):
     context = vocabulary_context(
         source.get("vocabulary_name"), source.get("vocabulary_description")
     )
+    return await _translate(cfg, term, context, language, source_id)
+
+
+async def _translate(
+    cfg: EffectiveConfig,
+    term: str,
+    context: str | None,
+    language: str | None,
+    source_id: int | None = None,
+) -> TermTranslation:
     # Called as the translate step calls it: the cache key depends on the arguments
     args = (term, context) if context else (term,)
     kwargs = {"language": language} if language else {}
     try:
         result = await build_translator(cfg).translate(*args, **kwargs)
     except Exception as exc:
-        logger.warning("Translating source concept %s failed: %s", source_id, exc)
+        logger.warning("Translating %r failed: %s", term, exc)
         return TermTranslation(source_id=source_id, failed=True)
     english = (result.english or "").strip()
     same = english.lower() == term.strip().lower()
@@ -290,6 +301,21 @@ async def translation(source_id: int, _: CurrentUser):
         language=(result.language or "").lower() or language,
         cached=result.cached,
     )
+
+
+@router.post("/translate", response_model=TermTranslation)
+async def translate_text(body: TranslateRequest, _: CurrentUser):
+    """Free text (the Search page) in English, with the translator auto-mapping uses (cached)."""
+    text_ = body.text.strip()
+    if not text_:
+        return TermTranslation()
+    cfg = await asyncio.to_thread(_load_config)
+    return await _translate(cfg, text_, None, None)
+
+
+def _load_config() -> EffectiveConfig:
+    with session_scope() as session:
+        return get_effective_config(session)
 
 
 @router.post("/source-concepts/{source_id}/drug-match", response_model=DrugMatchResponse)

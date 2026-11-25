@@ -38,8 +38,8 @@ function OpenQuestions({ count }: { count: number }) {
       <MessageCircleQuestion className="text-warning" />
       <AlertDescription>
         <span>
-          {count === 1 ? "1 mapping has" : `${count} mappings have`} an open question. Use <b>Flagged only</b> below to
-          see {count === 1 ? "it" : "them"}; clear a flag once it is settled.
+          {count === 1 ? "1 mapping has" : `${count} mappings have`} an open question. Use{" "}
+          <b>Mappings with a question</b> below to see {count === 1 ? "it" : "them"}; clear a flag once it is settled.
         </span>
       </AlertDescription>
     </Alert>

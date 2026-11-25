@@ -322,7 +322,7 @@ export function DrugPanel({
               onClick={onUse}
               disabled={used}
             >
-              <Check className="size-3.5" /> {used ? "Selected" : "Use this drug"}
+              <Check className="size-3.5" /> {used ? "Ticked" : "Tick this drug"}
             </Button>
           )}
           {edited && !editing && (

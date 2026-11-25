@@ -674,10 +674,15 @@ class SuggestProgress(BaseModel):
     step: str | None = None
 
 
+class TranslateRequest(BaseModel):
+    text: str = Field(max_length=500)
+
+
 class TermTranslation(BaseModel):
     """A source term in English, as auto-mapping's translate step renders it (cached)."""
 
-    source_id: int
+    # None for free text (the Search page)
+    source_id: int | None = None
     # None: nothing to add (already English, an English vocabulary, or the translation failed)
     english: str | None = None
     language: str | None = None

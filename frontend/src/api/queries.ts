@@ -418,6 +418,16 @@ export const translationQuery = (sourceId: number) =>
 export const useTermTranslation = (sourceId: number, enabled: boolean) =>
   useQuery({ ...translationQuery(sourceId), enabled });
 
+/** Free text in English (the Search page), with auto-mapping's translator; cached on the server. */
+export const useTextTranslation = (text: string, enabled: boolean) =>
+  useQuery({
+    queryKey: ["translate-text", text],
+    queryFn: async () => unwrap(await api.POST("/api/translate", { body: { text } })),
+    enabled: enabled && text.trim().length > 0,
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+
 export const useDrugMatch = (sourceId: number, structure: DrugStructure | null, enabled: boolean) =>
   useQuery({ ...drugMatchQuery(sourceId, structure), enabled });
 

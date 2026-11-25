@@ -634,6 +634,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/translate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Translate Text
+         * @description Free text (the Search page) in English, with the translator auto-mapping uses (cached).
+         */
+        post: operations["translate_text_api_translate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/source-concepts/{source_id}/drug-match": {
         parameters: {
             query?: never;
@@ -2240,7 +2260,7 @@ export interface components {
          */
         TermTranslation: {
             /** Source Id */
-            source_id: number;
+            source_id?: number | null;
             /** English */
             english?: string | null;
             /** Language */
@@ -2264,6 +2284,11 @@ export interface components {
             ms: number;
             /** Summary */
             summary: string;
+        };
+        /** TranslateRequest */
+        TranslateRequest: {
+            /** Text */
+            text: string;
         };
         /** UnmapRequest */
         UnmapRequest: {
@@ -2647,6 +2672,11 @@ export interface components {
             status: string;
             /** Records Imported */
             records_imported: number;
+            /**
+             * Records Updated
+             * @default null
+             */
+            records_updated: number | null;
             /**
              * Error
              * @default null
@@ -3874,6 +3904,39 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermTranslation"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    translate_text_api_translate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranslateRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

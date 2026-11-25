@@ -27,6 +27,7 @@ import { ConceptLink } from "@/components/ConceptLink";
 import { MappingFlag } from "./commit/MappingFlag";
 import { ReleasePanel } from "./commit/ReleasePanel";
 import { Switch } from "@/components/ui/switch";
+import { MappingGuide } from "@/components/MappingGuide";
 
 const chartConfig = { count: { label: "Mappings", color: "var(--chart-1)" } } satisfies ChartConfig;
 
@@ -130,7 +131,7 @@ function MappedTable({
             }}
           />
           <Label htmlFor="mapped-flagged" className="font-normal">
-            Flagged only
+            Mappings with a question
           </Label>
         </div>
         <PageControls
@@ -163,7 +164,7 @@ function MappedTable({
         isLoading={mapped.isLoading}
         emptyText={
           flaggedOnly
-            ? "No flagged mappings."
+            ? "No mapped term has an open question. Unmapped terms someone flagged are under Map concepts → Flagged."
             : q
               ? "No mappings match your search."
               : "No mapped concepts found for this vocabulary."
@@ -248,6 +249,7 @@ export function CommitPage() {
         step={4}
         title="Check & commit"
         description="Look over the final mappings, flag doubtful ones for review, publish them as a release and download them as CSV."
+        actions={<MappingGuide />}
       />
       <VocabularySelector selection={selection} releaseNotice={false} />
       <ErrorAlert error={stats.error} title="Could not load mapping statistics" />
@@ -292,7 +294,6 @@ export function CommitPage() {
                   <Download /> OMOP source_to_concept_map
                   {vocabulary?.latest_release ? ` (release ${vocabulary.latest_release})` : ""}
                 </a>
-                <div className="ml-auto">{deleteButton}</div>
               </div>
             )}
           />
@@ -350,6 +351,17 @@ export function CommitPage() {
               </CardContent>
             </Card>
           </div>
+          {deleteButton && (
+            <div className="border-destructive/30 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed p-4">
+              <div className="text-sm">
+                <div className="font-medium">Remove this source vocabulary</div>
+                <div className="text-muted-foreground">
+                  Deletes its terms, mappings, suggestions, audit trail and releases. Asks you to type its name.
+                </div>
+              </div>
+              {deleteButton}
+            </div>
+          )}
         </>
       )}
     </div>
