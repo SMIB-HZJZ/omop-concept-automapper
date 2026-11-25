@@ -94,14 +94,44 @@ def test_failed_translation_is_reported_not_raised(
     )
 
 
-def test_cache_key_matches_the_translate_step():
-    """The panel and the translate step must call the translator the same way, or the panel
-    would miss auto-mapping's cached translations."""
-    from app.llm.structured import Translator
+def test_panel_calls_the_translator_like_the_translate_step(
+    client, admin_headers, user_headers, translator
+):
+    """Same arguments as auto-mapping's translate step for the same term, so the panel finds the
+    translations auto-mapping cached (the cache key is built from them)."""
+    import asyncio
 
-    t = Translator("test/model")
-    assert t._key("x", "ctx", "hr") == t._key("x", "ctx", language="hr")
-    assert t._key("x", None, None) == t._key("x")
+    from app.core.db import session_scope
+    from app.llm import prompts
+    from app.models import SourceVocabulary
+    from app.workflows.nodes.translate import TranslateParams, translate
+    from app.workflows.service import initial_state
+    from tests.workflows.helpers import make_context
+
+    for vid, form in ((174, {"source_language": "hr"}), (175, {})):
+        import_source_csv(
+            client, admin_headers, vid, CSV, name=f"Lab {vid}", description="Hospital lab", **form
+        )
+        ids = _ids(client, user_headers, vid)
+        client.get(f"/api/source-concepts/{ids['G1']}/translation", headers=user_headers)
+        from_panel = translator.calls[-1]
+        # The state as the auto-map task builds it (worker/tasks/automap.py)
+        with session_scope() as session:
+            vocabulary = session.get(SourceVocabulary, vid)
+            context = prompts.vocabulary_context(vocabulary.name, vocabulary.description)
+            language = vocabulary.source_language
+        state = initial_state(
+            source_id=ids["G1"],
+            source_value="G1",
+            source_name="glukoza u krvi",
+            domains=[],
+            drug_specific=False,
+            threshold=8,
+            vocabulary_context=context,
+            source_language=language,
+        )
+        asyncio.run(translate(state, make_context(None, translator=translator), TranslateParams()))
+        assert translator.calls[-1] == from_panel
 
 
 def test_free_text_translation(client, user_headers, translator):

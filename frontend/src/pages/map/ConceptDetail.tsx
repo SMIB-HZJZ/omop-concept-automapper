@@ -547,7 +547,7 @@ export function ConceptDetail({
   // The English search is still coming: the list may reorder, so say so
   const searchedEnglish = !!english && !!search.data?.request.extra_queries?.includes(english);
   const addingEnglish =
-    !isDrug && !edited && (translation.isFetching || (!!english && !searchedEnglish && !search.isError));
+    !isDrug && !edited && (translation.isLoading || (!!english && !searchedEnglish && !search.isError));
 
   return (
     <Card className="h-full min-h-[36rem] gap-0 py-0">

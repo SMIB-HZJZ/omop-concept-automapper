@@ -411,7 +411,8 @@ export const translationQuery = (sourceId: number) =>
           params: { path: { source_id: sourceId } },
         }),
       ),
-    staleTime: 30 * 60_000,
+    // A failed translation (an LLM outage) is retried on the next visit, not kept for 30 minutes
+    staleTime: (q) => (q.state.data?.failed ? 0 : 30 * 60_000),
     retry: false,
   });
 
@@ -424,7 +425,8 @@ export const useTextTranslation = (text: string, enabled: boolean) =>
     queryKey: ["translate-text", text],
     queryFn: async () => unwrap(await api.POST("/api/translate", { body: { text } })),
     enabled: enabled && text.trim().length > 0,
-    staleTime: 30 * 60_000,
+    // A failed translation (an LLM outage) is retried on the next visit, not kept for 30 minutes
+    staleTime: (q) => (q.state.data?.failed ? 0 : 30 * 60_000),
     retry: false,
   });
 

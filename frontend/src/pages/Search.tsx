@@ -3,6 +3,8 @@ import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 
 import { ApiError } from "@/api/client";
+import { useQueryClient } from "@tanstack/react-query";
+
 import { useSearch, useTextTranslation } from "@/api/queries";
 import type { SearchRequest, SearchResult } from "@/api/types";
 import { ErrorAlert, PageHeader } from "@/components/common";
@@ -112,8 +114,13 @@ export function SearchPage() {
 
   // The text in English, searched next to it (the embeddings match other languages poorly)
   const [withEnglish, setWithEnglish] = usePersistentState("search-english", true);
-  const translation = useTextTranslation(debouncedQuery, withEnglish);
-  const english = withEnglish ? (translation.data?.english ?? null) : null;
+  const qc = useQueryClient();
+  // Translated only once typing has paused longer: no AI call per half-typed word
+  const translationQuery = useDebounce(query.trim(), 1200);
+  const translationCurrent = translationQuery === debouncedQuery;
+  const translation = useTextTranslation(translationQuery, withEnglish && translationCurrent);
+  // Only the translation of the text being searched (the slower debounce may still hold older text)
+  const english = withEnglish && translationCurrent ? (translation.data?.english ?? null) : null;
 
   const request = useMemo<SearchRequest | null>(() => {
     if (!debouncedQuery) return null;
@@ -136,7 +143,9 @@ export function SearchPage() {
   const busy = typing || search.isFetching;
   const searchedEnglish = !!english && !!search.data?.request.extra_queries?.includes(english);
   const addingEnglish =
-    withEnglish && !!debouncedQuery && (translation.isFetching || (!!english && !searchedEnglish && !search.isError));
+    withEnglish &&
+    !!debouncedQuery &&
+    (!translationCurrent || translation.isLoading || (!!english && !searchedEnglish && !search.isError));
   const results = search.data?.results ?? [];
   const advancedCount = filters.vocabularies.length + filters.conceptClasses.length + (atc7Code ? 1 : 0);
 
@@ -238,7 +247,11 @@ export function SearchPage() {
                 type="button"
                 className="text-primary cursor-pointer truncate hover:underline"
                 title="Search only this text"
-                onClick={() => setQuery(english)}
+                onClick={() => {
+                  // Already English: no need to translate it again
+                  qc.setQueryData(["translate-text", english], { english: null, cached: true, failed: false });
+                  setQuery(english);
+                }}
               >
                 {english}
               </button>
