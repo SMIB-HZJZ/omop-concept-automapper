@@ -130,7 +130,11 @@ services:
       context: ./frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_BIND:-0.0.0.0}:${FRONTEND_PORT:-8501}:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      # fullchain.pem and privkey.pem (see docs/reference.md, Production deployment)
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
       backend:
         condition: service_healthy

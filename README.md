@@ -41,7 +41,7 @@ cp .env.litellm.example .env.litellm  # provider keys (default models: ANTHROPIC
 docker compose up -d --build
 ```
 
-The UI runs on port 8501. Put it behind HTTPS and sign in as `ADMIN_USERNAME` / `ADMIN_PASSWORD`. For a quick local look over plain HTTP, set `COOKIE_SECURE=false`.
+Before starting, put the TLS certificate and key in `certs/` as `fullchain.pem` and `privkey.pem` (see [Production deployment](docs/reference.md#production-deployment)). The UI is served over HTTPS on port 443 (port 80 redirects); sign in as `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
 
 ## User guide
 

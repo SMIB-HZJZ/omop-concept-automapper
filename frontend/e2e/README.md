@@ -7,6 +7,6 @@ The stack needs data (vocabulary, embeddings, at least two unmapped source conce
 ```bash
 cd frontend/e2e
 echo '{ "type": "module", "dependencies": { "playwright": "1.63.0" } }' > package.json
-docker run --rm --network host --ipc=host -e ADMIN_PASSWORD=... -e BASE=http://localhost:8501 \
+docker run --rm --network host --ipc=host -e ADMIN_PASSWORD=... -e BASE=https://localhost \
   -v $PWD:/work -w /work mcr.microsoft.com/playwright:v1.63.0-noble sh -c "npm i --silent && node smoke.mjs"
 ```

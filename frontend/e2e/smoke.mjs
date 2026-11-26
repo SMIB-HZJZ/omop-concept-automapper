@@ -1,14 +1,14 @@
 import { chromium } from "playwright";
 import fs from "node:fs";
 
-const BASE = process.env.BASE ?? "http://localhost:8501";
+const BASE = process.env.BASE ?? "https://localhost";
 const PW = process.env.ADMIN_PASSWORD;
 const out = "/work/shots";
 fs.mkdirSync(out, { recursive: true });
 const report = { consoleErrors: [], pageErrors: [], badResponses: [], steps: [] };
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, ignoreHTTPSErrors: true });
 page.on("console", (m) => m.type() === "error" && report.consoleErrors.push(`${page.url()} :: ${m.text()}`));
 page.on("pageerror", (e) => report.pageErrors.push(`${page.url()} :: ${e.message}`));
 page.on("response", (r) => r.status() >= 500 && report.badResponses.push(`${r.status()} ${r.url()}`));

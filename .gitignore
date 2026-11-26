@@ -82,3 +82,6 @@ docs/_build/
 node_modules/
 frontend/dist/
 frontend/coverage/
+
+# TLS certificate and key (mounted by docker-compose.yaml)
+certs/

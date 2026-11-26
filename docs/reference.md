@@ -23,7 +23,7 @@ browser ──► frontend (nginx, React SPA) ──/api──► backend (FastA
 
 | Service | What it does |
 |---|---|
-| `frontend` | React + TypeScript (Vite), Tailwind + shadcn/ui, TanStack Query. Served by nginx on port **8501**, which also proxies `/api` to the backend. |
+| `frontend` | React + TypeScript (Vite), Tailwind + shadcn/ui, TanStack Query. Served by nginx over HTTPS (port 443, port 80 redirects), which also proxies `/api` to the backend. |
 | `backend` | FastAPI: REST API, authentication, Alembic migrations on start-up. |
 | `worker` | Celery: vocabulary import (with ATC7 codes), CSV import, embedding, metadata sync, auto-mapping. |
 | `postgres-db` | `timescale/timescaledb-ha:pg18` (PostgreSQL 18 with pgvector 0.8 and pgvectorscale 0.9). Holds the OMOP vocabulary, mappings and vectors (StreamingDiskANN index). |
@@ -53,18 +53,23 @@ cp .env.litellm.example .env.litellm  # provider API keys: read only by the Lite
 docker compose up -d --build
 ```
 
-Then put the UI behind HTTPS (see [Production deployment](#production-deployment)), open it and sign in as `ADMIN_USERNAME` / `ADMIN_PASSWORD`. That admin is created on the first start.
+Before `docker compose up`, put a certificate in `certs/` (see [Production deployment](#production-deployment)). Then open `https://<server>/` and sign in as `ADMIN_USERNAME` / `ADMIN_PASSWORD`. That admin is created on the first start.
 
-For a quick local look over plain `http://localhost:8501`, set `COOKIE_SECURE=false` in `.env` (in production the session cookie is HTTPS-only, so login would not stick over HTTP).
+For a local test, a self-signed certificate is enough (the browser will warn about it):
+
+```bash
+mkdir -p certs && openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj /CN=localhost \
+  -keyout certs/privkey.pem -out certs/fullchain.pem
+```
 
 This version starts from an empty database: import the vocabulary and embed concepts as described below. It does not migrate data from the Streamlit version.
 
 ## Production deployment
 
-- **TLS.** The stack serves plain HTTP on `FRONTEND_PORT` (8501). Terminate TLS in front of it (the institute's reverse proxy, Caddy, Traefik or an nginx with a certificate) and keep `COOKIE_SECURE` unset or `true`. Bind the UI to localhost (`FRONTEND_BIND=127.0.0.1`) when the proxy runs on the same host, so the HTTP port is not reachable from the network.
+- **TLS.** The bundled nginx serves the app over HTTPS on port 443 and redirects port 80 to it. Put the certificate and key in the `certs/` folder next to `docker-compose.yaml`, named `fullchain.pem` (the server certificate followed by the intermediate certificates) and `privkey.pem` (readable by root only is enough: `chmod 600`). The folder is mounted read-only and kept out of git. Point the domain's DNS record at the server. After replacing the certificate, reload nginx: `docker compose exec frontend nginx -s reload`. Keep `COOKIE_SECURE` unset or `true`.
 - **Client addresses.** nginx passes the address it sees as `X-Forwarded-For`, and the backend trusts that header only from the compose network (`APP_SUBNET`, default `172.29.250.0/24`, passed as `FORWARDED_ALLOW_IPS`). The login lockout counts failures per username and address and per username. Behind another reverse proxy, every request comes from the proxy's address, so the per-user limit (`LOGIN_MAX_FAILURES_PER_USER`) is the one that applies unless you configure nginx's `real_ip` module for your proxy.
 - **Secrets.** `.env` is read by the backend and worker only, `.env.litellm` by the LiteLLM proxy only, and PostgreSQL receives just its `POSTGRES_*` values. Keep both files out of version control (they are in `.gitignore`).
-- **Headers.** nginx sends a Content-Security-Policy, `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy`, and hides its version. Add `Strict-Transport-Security` on the TLS proxy.
+- **Headers.** nginx sends a Content-Security-Policy, `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy`, `Strict-Transport-Security`, and hides its version.
 - **API processes.** `API_WORKERS` (default 2) sets the number of uvicorn processes. Each opens up to 30 database connections, so keep `API_WORKERS` × 30 plus the Celery worker's connections below `PG_MAX_CONNECTIONS` (200).
 - **Health.** Every service has a healthcheck (the worker answers a Celery ping); `docker compose ps` shows their state.
 
