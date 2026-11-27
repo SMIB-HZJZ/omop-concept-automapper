@@ -19,6 +19,8 @@ VOCABULARY_FILES = {
     "drug_strength": "DRUG_STRENGTH.csv",
     # Optional: synonyms for exact name matching, keyword search and embedding text
     "concept_synonym": "CONCEPT_SYNONYM.csv",
+    # Optional: vocabulary names and versions; its 'None' row is the release version
+    "vocabulary": "VOCABULARY.csv",
 }
 
 
@@ -62,6 +64,14 @@ def open_vocabulary_file(info: dict) -> Iterator[IO[bytes]]:
     """A binary stream of one table's file, decompressed while it is read."""
     with zipfile.ZipFile(info["archive_path"]) as zf, zf.open(info["member"]) as fh:
         yield fh
+
+
+def get_vocabulary_version(session: Session) -> str | None:
+    """Version of the imported vocabulary release (e.g. "v5.0 27-AUG-25"), or None when no
+    VOCABULARY.csv has been imported."""
+    return session.execute(
+        text("SELECT vocabulary_version FROM vocabulary WHERE vocabulary_id = 'None'")
+    ).scalar()
 
 
 @cached("vocab")

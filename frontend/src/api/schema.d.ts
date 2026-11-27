@@ -2422,6 +2422,8 @@ export interface components {
         VocabularyStatus: {
             /** Tables */
             tables: components["schemas"]["TableStatus"][];
+            /** Vocabulary Version */
+            vocabulary_version?: string | null;
             /** Max Upload Bytes */
             max_upload_bytes: number;
         };

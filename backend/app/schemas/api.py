@@ -153,6 +153,8 @@ class TableStatus(BaseModel):
 
 class VocabularyStatus(BaseModel):
     tables: list[TableStatus]
+    # Release version from VOCABULARY.csv (its 'None' row); None until a zip with it is imported
+    vocabulary_version: str | None = None
     # Largest zip the upload accepts, in bytes
     max_upload_bytes: int
 

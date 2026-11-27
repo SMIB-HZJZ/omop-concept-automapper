@@ -10,7 +10,12 @@ from app.api.routes._tasks import start_task
 from app.core.config import get_settings
 from app.schemas.api import Atc7Stats, TaskRef, VocabularyStatus
 from app.services.atc7 import get_atc7_statistics
-from app.services.vocabulary_status import ArchiveError, archive_files, get_table_status
+from app.services.vocabulary_status import (
+    ArchiveError,
+    archive_files,
+    get_table_status,
+    get_vocabulary_version,
+)
 from app.worker.tasks.vocabulary import import_vocabulary
 
 router = APIRouter(tags=["vocabulary"])
@@ -20,6 +25,7 @@ router = APIRouter(tags=["vocabulary"])
 def vocabulary_status(_: CurrentUser, session: SessionDep):
     return VocabularyStatus(
         tables=get_table_status(session),
+        vocabulary_version=get_vocabulary_version(session),
         max_upload_bytes=get_settings().vocabulary_upload_max_mb * 1024 * 1024,
     )
 

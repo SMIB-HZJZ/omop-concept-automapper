@@ -7337,6 +7337,17 @@
             "type": "array",
             "title": "Tables"
           },
+          "vocabulary_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vocabulary Version"
+          },
           "max_upload_bytes": {
             "type": "integer",
             "title": "Max Upload Bytes"

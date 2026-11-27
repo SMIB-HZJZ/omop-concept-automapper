@@ -76,7 +76,7 @@ This version starts from an empty database: import the vocabulary and embed conc
 ## Using the app
 
 1. **Import → OMOP Vocabulary Tables** (admin).
-   - Upload the Athena download zip as it is (no unpacking). It must contain `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv` and `CONCEPT_ANCESTOR.csv`, and may contain `DRUG_STRENGTH.csv` (deterministic drug mapping) and `CONCEPT_SYNONYM.csv` (synonyms). Tables missing from the zip are skipped. The upload limit is `VOCABULARY_UPLOAD_MAX_MB` (default 20 GB); the zip is deleted after the import.
+   - Upload the Athena download zip as it is (no unpacking). It must contain `CONCEPT.csv`, `CONCEPT_RELATIONSHIP.csv` and `CONCEPT_ANCESTOR.csv`, and may contain `DRUG_STRENGTH.csv` (deterministic drug mapping), `CONCEPT_SYNONYM.csv` (synonyms) and `VOCABULARY.csv` (vocabulary names and versions; the release version is shown on the Import page). Tables missing from the zip are skipped. The upload limit is `VOCABULARY_UPLOAD_MAX_MB` (default 20 GB); the zip is deleted after the import.
    - The import runs in the background with a progress bar, and you can leave the page once the upload has finished.
    - Importing a new release updates everything derived from the vocabulary:
      - mappings to concepts that are no longer standard are replaced by their `Maps to` successor, or removed (audit: `auto_vocab_update`, `vocab_removed`);

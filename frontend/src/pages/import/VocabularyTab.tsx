@@ -114,9 +114,10 @@ export function VocabularyTab() {
             </a>{" "}
             as it is, a <code>.zip</code> (no need to unpack it). It should contain <code>CONCEPT.csv</code>,{" "}
             <code>CONCEPT_RELATIONSHIP.csv</code> and <code>CONCEPT_ANCESTOR.csv</code>, optionally{" "}
-            <code>DRUG_STRENGTH.csv</code> and <code>CONCEPT_SYNONYM.csv</code>. Concepts are upserted; the other tables
-            are replaced, and the ATC7 codes of drugs are computed. Mappings to concepts that are no longer standard are
-            replaced by their successor or removed. Search and mapping keep working during the import.
+            <code>DRUG_STRENGTH.csv</code>, <code>CONCEPT_SYNONYM.csv</code> and <code>VOCABULARY.csv</code> (the
+            release version). Concepts are upserted; the other tables are replaced, and the ATC7 codes of drugs are
+            computed. Mappings to concepts that are no longer standard are replaced by their successor or removed.
+            Search and mapping keep working during the import.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -124,6 +125,18 @@ export function VocabularyTab() {
       <section className="space-y-3">
         <h3 className="font-medium">Current tables</h3>
         <ErrorAlert error={status.error} />
+        {status.data && (
+          <p className="text-sm">
+            <span className="text-muted-foreground">Vocabulary release: </span>
+            {status.data.vocabulary_version ? (
+              <span className="font-medium">{status.data.vocabulary_version}</span>
+            ) : (
+              <span className="text-muted-foreground">
+                unknown (import a zip that contains <code>VOCABULARY.csv</code>)
+              </span>
+            )}
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
           {status.data?.tables.map((t) => (
             <StatCard

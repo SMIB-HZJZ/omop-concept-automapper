@@ -42,14 +42,17 @@ def test_vocabulary_import_and_atc7(client, admin_headers, loaded_vocabulary):
         "concept_ancestor": 12,
         "drug_strength": 0,  # optional file, absent in the fixtures
         "concept_synonym": 4,
+        "vocabulary": 4,
     }
     assert all(t["last_import"] for t in status["tables"] if t["table_name"] != "drug_strength")
+    # The release version is the 'None' row of VOCABULARY.csv
+    assert status["vocabulary_version"] == "v5.0 27-AUG-25"
 
     tasks = client.get(
         "/api/tasks", params={"kind": "vocabulary.import"}, headers=admin_headers
     ).json()
     result = tasks[0]["result"]
-    assert result["tables_imported"] == 4
+    assert result["tables_imported"] == 5
     assert tasks[0]["percentage"] == 100.0
 
     stats = client.get("/api/atc7/stats", headers=admin_headers).json()
