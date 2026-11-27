@@ -258,7 +258,7 @@ Auto-map always runs the default pipeline of the vocabulary type (`AUTOMAP_PIPEL
 
 **Embeddings** (Configuration page): the embedded text can be the name, the name with class and domain, the name with synonyms, or both (default: the name alone, `EMBEDDING_TEXT=name`); query/document task types are sent to Gemini, Voyage and Cohere (default on; ignored by other providers). Each combination is its own collection, so variants can be compared without losing the others.
 
-**Review queue**: sort by *Priority* (frequency × uncertainty) to review what affects most records first. After 20 or more decisions, the Review page shows how often suggestions were accepted per confidence level and recommends the threshold that keeps at least 95 % of auto-accepted mappings correct.
+**Review queue**: sort by *Priority* (frequency × uncertainty) to review what affects most records first. After 20 or more decisions, the Review page shows how often suggestions were accepted per confidence level and recommends the threshold that keeps at least 95 % of auto-accepted mappings correct. Terms mapped by hand in Map count too: an AI pick for the term (a suggestion waiting in Review, or a pick under the threshold shown as a hint) counts as accepted when the term is mapped to exactly its concepts and as rejected otherwise, so the calibration also covers confidence levels under the threshold and can recommend lowering it. Mapping the term again re-decides the pick; removing the mapping (Undo) puts the pick back and takes it out of the calibration.
 
 **Cost**: identical reranker prompts reuse the cached answer (`LLM_CACHE_TTL`), translations are cached per term, and auto-map decides each distinct source term once per run.
 

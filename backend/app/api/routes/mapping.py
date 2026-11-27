@@ -98,6 +98,7 @@ def map_concepts(body: MapRequest, user: CurrentUser, session: SessionDep):
         method="manual",
         user_id=user.id,
         match_type=body.match_type,
+        decide_suggestions=True,
     )
     mapping.invalidate_vocabulary(source["source_vocabulary_id"])
     return MapResult(count=len(set(body.concept_ids)))

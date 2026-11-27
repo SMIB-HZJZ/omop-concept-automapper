@@ -76,3 +76,117 @@ def test_priority_sort_puts_frequent_uncertain_terms_first(
         "pri one",
         "pri two",
     ]
+
+
+def _status(name):
+    with get_engine().connect() as conn:
+        return conn.execute(
+            text(
+                """
+                SELECT ms.status, ms.prior_status FROM mapping_suggestion ms
+                JOIN source_concepts sc USING (source_id)
+                WHERE sc.source_concept_name = :n AND sc.source_vocabulary_id = 72
+                """
+            ),
+            {"n": name},
+        ).all()
+
+
+def test_manual_mapping_decides_ai_picks(client, admin_headers, user_headers, loaded_vocabulary):
+    """Terms mapped by hand count in calibration, including picks under the threshold; Undo
+    (unmap) puts the picks back."""
+    import_source_csv(client, admin_headers, 72, CSV.replace(b"cal", b"man"))
+    _suggest_in = [
+        ("man one", 6, "below_threshold"),  # mapped to the AI's concept -> accepted
+        ("man two", 5, "below_threshold"),  # mapped to another concept -> rejected
+        ("man three", 9, "pending"),  # overridden in Map -> rejected
+    ]
+    with get_engine().begin() as conn:
+        for name, confidence, status in _suggest_in:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO mapping_suggestion (source_id, concept_id, confidence, method, status)
+                    SELECT source_id, 203, :c, 'auto_standard', :s FROM source_concepts
+                    WHERE source_concept_name = :n AND source_vocabulary_id = 72
+                    """
+                ),
+                {"n": name, "c": confidence, "s": status},
+            )
+        ids = dict(
+            conn.execute(
+                text(
+                    "SELECT source_concept_name, source_id FROM source_concepts"
+                    " WHERE source_vocabulary_id = 72"
+                )
+            ).all()
+        )
+
+    def map_to(name, concept_id, replace=False):
+        resp = client.post(
+            "/api/mappings",
+            json={"source_id": ids[name], "concept_ids": [concept_id], "replace": replace},
+            headers=user_headers,
+        )
+        assert resp.status_code == 200, resp.text
+
+    def calibration():
+        return client.get(
+            "/api/suggestions/calibration", params={"vocabulary_id": 72}, headers=user_headers
+        ).json()
+
+    map_to("man one", 203)
+    map_to("man two", 201)
+    map_to("man three", 201)
+    assert _status("man one") == [("accepted", "below_threshold")]
+    assert _status("man two") == [("rejected", "below_threshold")]
+    assert _status("man three") == [("rejected", "pending")]
+    cal = calibration()
+    assert cal["decided"] == 3
+    assert {lv["confidence"]: lv["accepted"] for lv in cal["levels"]} == {9: 0, 6: 1, 5: 0}
+
+    # Mapped again to other concepts: the pick is decided again against the new mapping
+    map_to("man one", 201, replace=True)
+    assert _status("man one") == [("rejected", "below_threshold")]
+
+    # Undo: the picks wait again and leave the calibration
+    resp = client.post(
+        "/api/mappings/unmap",
+        json={"source_ids": [ids["man two"], ids["man three"]]},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert _status("man two") == [("below_threshold", None)]
+    assert _status("man three") == [("pending", None)]
+    assert calibration()["decided"] == 1
+
+    # Two pending picks decided by hand (an auto-map ran again in between): Undo brings back only
+    # the newest, as there is one pending suggestion per term
+    def add_pending(confidence):
+        with get_engine().begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO mapping_suggestion (source_id, concept_id, confidence, method)"
+                    " VALUES (:s, 203, :c, 'auto_standard')"
+                ),
+                {"s": ids["man four"], "c": confidence},
+            )
+
+    add_pending(7)
+    map_to("man four", 203)
+    add_pending(8)
+    map_to("man four", 201, replace=True)
+    assert sorted(_status("man four")) == [("rejected", "pending"), ("rejected", "pending")]
+    resp = client.post(
+        "/api/mappings/unmap", json={"source_ids": [ids["man four"]]}, headers=user_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert _status("man four") == [("pending", None)]
+    with get_engine().connect() as conn:
+        assert (
+            conn.execute(
+                text("SELECT confidence FROM mapping_suggestion WHERE source_id = :s"),
+                {"s": ids["man four"]},
+            ).scalar_one()
+            == 8
+        )

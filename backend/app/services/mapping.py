@@ -558,11 +558,15 @@ def map_concepts(
     commit: bool = True,
     only_if_unmapped: bool = False,
     match_type: str | None = None,
+    decide_suggestions: bool = False,
 ) -> bool:
     """Replace the mappings of one source concept and write one audit row per concept.
 
     With ``only_if_unmapped`` (auto-map in commit mode) nothing is written when the concept was
     mapped in the meantime, e.g. by hand while a long run was going. Returns whether it wrote.
+
+    With ``decide_suggestions`` (a mapping made by hand) the AI picks for the term are kept as
+    decisions for threshold calibration instead of being dropped: see ``_decide_suggestions``.
     """
     concept_ids = list(dict.fromkeys(concept_ids))
     # Serialise writers of the same source concept (manual mapping vs. a running auto-map); a
@@ -577,14 +581,17 @@ def map_concepts(
     ):
         return False
     session.execute(text("DELETE FROM source_standard_map WHERE source_id = :s"), {"s": source_id})
-    # A manual/accepted mapping supersedes a pending suggestion
-    session.execute(
-        text(
-            "DELETE FROM mapping_suggestion "
-            "WHERE source_id = :s AND status IN ('pending', 'below_threshold')"
-        ),
-        {"s": source_id},
-    )
+    if decide_suggestions:
+        _decide_suggestions(session, source_id, concept_ids, user_id)
+    else:
+        # An accepted or auto-committed mapping supersedes a pending suggestion
+        session.execute(
+            text(
+                "DELETE FROM mapping_suggestion "
+                "WHERE source_id = :s AND status IN ('pending', 'below_threshold')"
+            ),
+            {"s": source_id},
+        )
     for concept_id in concept_ids:
         params = {"s": source_id, "c": concept_id, "u": user_id}
         session.execute(
@@ -652,10 +659,73 @@ def all_mapped_by(session: Session, source_ids: Sequence[int], user_id: int | No
     ).scalar_one()
 
 
+def _decide_suggestions(
+    session: Session, source_id: int, concept_ids: list[int], user_id: int | None
+) -> None:
+    """Record what a mapping made by hand says about the AI picks for the term.
+
+    A pending or below-threshold pick becomes accepted when the term was mapped to exactly its
+    concepts and rejected otherwise, so calibration also sees confidence levels under the
+    threshold (those picks never reach Review). Picks decided by an earlier manual mapping are
+    decided again against the new one. ``prior_status`` keeps the pick's original status for
+    ``unmap``."""
+    rows = session.execute(
+        text(
+            "SELECT id, concept_id, extra_concept_ids FROM mapping_suggestion WHERE source_id = :s"
+            " AND (status IN ('pending', 'below_threshold') OR prior_status IS NOT NULL)"
+        ),
+        {"s": source_id},
+    ).mappings()
+    mapped = set(concept_ids)
+    for row in rows.all():
+        picked = {row["concept_id"], *(row["extra_concept_ids"] or [])}
+        session.execute(
+            text(
+                "UPDATE mapping_suggestion SET prior_status = COALESCE(prior_status, status),"
+                " status = :status, decided_by = :u, decided_at = now() WHERE id = :id"
+            ),
+            {
+                "id": row["id"],
+                "status": "accepted" if picked == mapped else "rejected",
+                "u": user_id,
+            },
+        )
+
+
+def _restore_suggestions(session: Session, source_ids: list[int]) -> None:
+    """Undo ``_decide_suggestions`` for unmapped terms: their picks wait again (pending in Review,
+    below threshold as a hint in Map) and no longer count in calibration. Only the newest pick of
+    each kind comes back (one pending and one below-threshold pick per term): when a later
+    auto-map run left one of the same kind, or a newer decided one exists, the older one goes."""
+    session.execute(
+        text(
+            """
+            DELETE FROM mapping_suggestion d
+            WHERE d.source_id = ANY(:ids) AND d.prior_status IS NOT NULL AND EXISTS (
+                SELECT 1 FROM mapping_suggestion o
+                WHERE o.source_id = d.source_id AND o.id <> d.id
+                  AND (o.status = d.prior_status
+                       OR (o.prior_status = d.prior_status AND o.id > d.id))
+            )
+            """
+        ),
+        {"ids": source_ids},
+    )
+    session.execute(
+        text(
+            "UPDATE mapping_suggestion SET status = prior_status, prior_status = NULL,"
+            " decided_by = NULL, decided_at = NULL"
+            " WHERE source_id = ANY(:ids) AND prior_status IS NOT NULL"
+        ),
+        {"ids": source_ids},
+    )
+
+
 def unmap(session: Session, source_ids: Sequence[int]) -> int:
     if not source_ids:
         return 0
     lock_terms(session, source_ids)
+    _restore_suggestions(session, list(source_ids))
     deleted = session.execute(
         text("DELETE FROM source_standard_map WHERE source_id = ANY(:ids)"),
         {"ids": list(source_ids)},

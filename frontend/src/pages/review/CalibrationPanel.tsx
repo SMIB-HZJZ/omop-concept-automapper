@@ -10,7 +10,8 @@ import { methodLabel } from "@/lib/methods";
 
 const percent = (x: number | null | undefined) => (x == null ? "—" : `${Math.round(x * 100)}%`);
 
-/** How often reviewers accepted suggestions per confidence level, and the threshold that keeps
+/** How often AI picks were right per confidence level (accepted in Review, or confirmed / overridden by a
+ * mapping made by hand in Map, also under the threshold), and the threshold that keeps
  * at least 95% of auto-accepted mappings correct. */
 export function CalibrationPanel({ vocabularyId }: { vocabularyId: number | null }) {
   const [threshold, setThreshold] = useAutomapThreshold();
@@ -32,7 +33,7 @@ export function CalibrationPanel({ vocabularyId }: { vocabularyId: number | null
       <Gauge />
       <AlertDescription className="space-y-1">
         <div>
-          From {data.decided.toLocaleString()} review decisions:{" "}
+          From {data.decided.toLocaleString()} decisions (Review, and terms mapped by hand in Map):{" "}
           {recommended ? (
             <>
               suggestions with confidence ≥ <b>{recommended}</b> were right in at least {percent(data.target_precision)}{" "}
