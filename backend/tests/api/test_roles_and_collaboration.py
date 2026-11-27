@@ -32,7 +32,7 @@ def test_admin_only_endpoints(client, user_headers, admin_headers, loaded_vocabu
     ):
         resp = getattr(client, method)(url, headers=user_headers, **kwargs)
         assert resp.status_code == 403, (method, url, resp.status_code)
-    # Check & commit is open to users for review: the mapped set and its exports
+    # Verify & publish is open to users for review: the mapped set and its exports
     for url in (
         "/api/source-vocabularies/93/mapped",
         "/api/source-vocabularies/93/mapped.csv",

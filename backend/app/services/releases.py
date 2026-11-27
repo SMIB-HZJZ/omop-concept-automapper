@@ -40,10 +40,10 @@ _RELEASED = (
 )
 
 
-# Same wording as the lock trigger's error (migration 0016)
+# Same wording as the lock trigger's error (migration 0022)
 LOCKED_MESSAGE = (
     'Source vocabulary "{name}" is released and locked. An admin can start the next release on '
-    "Check & commit to change it."
+    "Verify & publish to change it."
 )
 
 

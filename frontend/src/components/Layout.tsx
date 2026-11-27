@@ -85,10 +85,10 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { to: "/review", label: "Review", icon: ListChecks, step: 3, hint: "Accept or reject AI suggestions" },
       {
         to: "/commit",
-        label: "Check & commit",
+        label: "Verify & publish",
         icon: ClipboardCheck,
         step: 4,
-        hint: "Verify and export mappings",
+        hint: "Verify mappings and publish a release",
       },
     ],
   },

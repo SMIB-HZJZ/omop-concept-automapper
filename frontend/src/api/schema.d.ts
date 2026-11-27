@@ -429,7 +429,7 @@ export interface paths {
         };
         /**
          * Mapped
-         * @description Every user can review the mapped set (Check & commit); changing it follows the usual rules.
+         * @description Every user can review the mapped set (Verify & publish); changing it follows the usual rules.
          */
         get: operations["mapped_api_source_vocabularies__vocabulary_id__mapped_get"];
         put?: never;

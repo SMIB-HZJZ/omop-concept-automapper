@@ -246,7 +246,7 @@ export function CommitPage() {
       <PageHeader
         icon={ClipboardCheck}
         step={4}
-        title="Check & commit"
+        title="Verify & publish"
         description="Look over the final mappings, flag doubtful ones for review, publish them as a release and download them as CSV."
       />
       <VocabularySelector selection={selection} releaseNotice={false} />

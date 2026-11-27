@@ -100,7 +100,7 @@ export function GuidePage() {
               where={
                 <>
                   the <b>Flag</b> button on <To to="/map">Map concepts</To> (flagged terms are under its <b>Flagged</b>{" "}
-                  list); the flag icon on a row of <To to="/commit">Check &amp; commit</To>.
+                  list); the flag icon on a row of <To to="/commit">Verify &amp; publish</To>.
                 </>
               }
             >
@@ -112,7 +112,7 @@ export function GuidePage() {
                   <b>Can&apos;t be mapped</b> when no concept fits, or the term has no clinical meaning (e.g. “other”, a
                   free-text remark).
                 </li>
-                <li>On Check &amp; commit, any mapping can get a question; settle all questions before a release.</li>
+                <li>On Verify &amp; publish, any mapping can get a question; settle all questions before a release.</li>
               </ul>
             </Section>
             <Section

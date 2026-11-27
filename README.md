@@ -20,8 +20,8 @@ The full reference (deployment, every setting, providers and costs, drug mapping
 **Search:** semantic search in any language.
 ![Search concepts](docs/screenshots/search.png)
 
-**Check & commit:** final mappings, ready for export.
-![Check and commit](docs/screenshots/commit.png)
+**Verify & publish:** final mappings, ready to publish as a release and export.
+![Verify and publish](docs/screenshots/commit.png)
 
 **Import:** OMOP vocabulary tables, source terms and embeddings.
 ![Import data](docs/screenshots/import.png)

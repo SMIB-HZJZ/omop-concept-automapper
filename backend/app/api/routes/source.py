@@ -285,7 +285,7 @@ def mapped(
     q: str | None = Query(None, max_length=200),
     flagged: bool = Query(False, description="Only terms flagged with a question or a note"),
 ):
-    """Every user can review the mapped set (Check & commit); changing it follows the usual rules."""
+    """Every user can review the mapped set (Verify & publish); changing it follows the usual rules."""
     _get_vocab(session, vocabulary_id)
     return mapping.get_mapped_page(session, vocabulary_id, page, per_page, q, flagged)
 

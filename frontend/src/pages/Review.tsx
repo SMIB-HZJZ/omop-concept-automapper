@@ -70,7 +70,7 @@ export function ReviewPage() {
     body: { ids?: number[]; vocabulary_id?: number; min_confidence?: number },
   ) => {
     if (kind === "accept" && locked) {
-      toast.error("This vocabulary is released and locked. Start the next release on Check & commit first.");
+      toast.error("This vocabulary is released and locked. Start the next release on Verify & publish first.");
       return;
     }
     const mutation = kind === "accept" ? accept : reject;

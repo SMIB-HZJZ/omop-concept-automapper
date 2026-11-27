@@ -178,7 +178,7 @@ const VIEWS: { value: UnmappedView; label: string; hint: string }[] = [
   { value: "todo", label: "To do", hint: "Terms nobody is handling yet: no flag, nothing waiting in Review" },
   { value: "suggested", label: "In review", hint: "AI suggestions waiting in Review" },
   { value: "flagged", label: "Flagged", hint: "Ask a colleague or can't be mapped" },
-  { value: "all", label: "All unmapped", hint: "Every term without a mapping; mapped terms are in Check & commit" },
+  { value: "all", label: "All unmapped", hint: "Every term without a mapping; mapped terms are in Verify & publish" },
 ];
 
 function ListTabs({

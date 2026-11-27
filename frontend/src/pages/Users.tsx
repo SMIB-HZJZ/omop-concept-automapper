@@ -205,7 +205,7 @@ const ROLE_ROWS: [string, boolean, boolean][] = [
   ["Run auto-mapping on a whole vocabulary", false, true],
   ["Import vocabularies and source terms, embed concepts", false, true],
   ["Change a vocabulary's type and code systems", false, true],
-  ["Check & commit: remove anyone's mappings, export, delete a vocabulary", false, true],
+  ["Verify & publish: remove anyone's mappings, export, delete a vocabulary", false, true],
   ["Configuration and user accounts", false, true],
 ];
 

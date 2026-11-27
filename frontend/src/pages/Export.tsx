@@ -58,7 +58,7 @@ export function ExportPage() {
             <Skeleton className="h-32 w-full" />
           ) : published.length === 0 ? (
             <p className="text-muted-foreground text-sm">
-              No source vocabulary is published yet. Publish a release in Check &amp; commit first.
+              No source vocabulary is published yet. Publish a release in Verify &amp; publish first.
             </p>
           ) : (
             <div className="overflow-x-auto">

@@ -91,7 +91,7 @@ export function VocabularySelector({
               Release {vocabulary.latest_release} of this vocabulary is published, so its mappings are locked. An admin
               can start the next release on{" "}
               <Link to="/commit" className="underline">
-                Check & commit
+                Verify & publish
               </Link>
               .
             </span>
