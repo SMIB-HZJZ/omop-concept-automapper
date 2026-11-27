@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { api, errorMessage, unwrap } from "@/api/client";
-import { keys, useUsers } from "@/api/queries";
+import { keys, useAuthOptions, useUsers } from "@/api/queries";
 import type { Role, User } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
 import { ErrorAlert, PageHeader } from "@/components/common";
@@ -241,10 +241,12 @@ function WaitingForApproval({
   users,
   approve,
   remove,
+  oidc,
 }: {
   users: User[];
   approve: ReturnType<typeof useUserMutations>["approve"];
   remove: ReturnType<typeof useUserMutations>["remove"];
+  oidc: boolean;
 }) {
   if (users.length === 0) return null;
   return (
@@ -256,7 +258,8 @@ function WaitingForApproval({
         <UserCheck className="text-warning size-4" />
         <h2 className="text-sm font-semibold">Waiting for approval ({users.length})</h2>
         <span className="text-muted-foreground text-xs">
-          Created on the sign-in page. Approve to let them sign in as a user; reject to delete the account.
+          {oidc ? "Signed in with the organisation account for the first time." : "Created on the sign-in page."}{" "}
+          Approve to let them sign in as a user; reject to delete the account.
         </span>
       </div>
       <ul className="divide-y rounded-lg border bg-card">
@@ -298,6 +301,8 @@ export function UsersPage() {
   const { user: me } = useAuth();
   const users = useUsers();
   const { create, patch, remove, approve } = useUserMutations();
+  // With an organisation sign-in (OIDC) accounts appear on their first sign-in and have no password
+  const oidc = useAuthOptions().data?.auth_mode === "oidc";
   const waiting = useMemo(() => (users.data ?? []).filter((u) => u.pending), [users.data]);
   const accounts = useMemo(() => (users.data ?? []).filter((u) => !u.pending), [users.data]);
 
@@ -356,7 +361,7 @@ export function UsersPage() {
         enableSorting: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-2">
-            <ResetPasswordDialog user={row.original} patch={patch} />
+            {!oidc && <ResetPasswordDialog user={row.original} patch={patch} />}
             <ConfirmDialog
               trigger={
                 <Button variant="ghost" size="sm" disabled={row.original.id === me?.id || remove.isPending}>
@@ -375,7 +380,7 @@ export function UsersPage() {
         ),
       },
     ],
-    [me?.id, patch, remove],
+    [me?.id, patch, remove, oidc],
   );
 
   return (
@@ -384,10 +389,10 @@ export function UsersPage() {
         icon={UsersIcon}
         title="Users"
         description="Manage who can sign in and what they can do."
-        actions={<AddUserDialog create={create} />}
+        actions={oidc ? undefined : <AddUserDialog create={create} />}
       />
       <ErrorAlert error={users.error} title="Could not load users" />
-      <WaitingForApproval users={waiting} approve={approve} remove={remove} />
+      <WaitingForApproval users={waiting} approve={approve} remove={remove} oidc={oidc} />
       <RolesExplained />
       <DataTable
         columns={columns}

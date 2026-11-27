@@ -1,7 +1,7 @@
-import { CheckCircle2, Loader2, Map as MapIcon } from "lucide-react";
+import { CheckCircle2, Loader2, LogIn, Map as MapIcon } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { api, unwrap } from "@/api/client";
 import { useAuthOptions } from "@/api/queries";
@@ -14,6 +14,54 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Mode = "signin" | "register";
+
+/** Why the organisation sign-in (OIDC) sent the person back here (/login?error=...). */
+const OIDC_MESSAGES: Record<string, { text: string; ok?: boolean }> = {
+  pending: {
+    text: "Your account is created and waits for an administrator's approval. Sign in again once it is approved.",
+    ok: true,
+  },
+  disabled: { text: "Your account is deactivated. Ask an administrator to activate it." },
+  cancelled: { text: "Sign-in was cancelled." },
+  expired: { text: "The sign-in took too long or was started in another window. Please try again." },
+  conflict: {
+    text: "An account with your email already exists but is not linked to your organisation account. Ask an administrator.",
+  },
+  provider: {
+    text: "Sign-in with the organisation account failed. Try again; if it keeps failing, tell an administrator.",
+  },
+};
+
+function OidcSignIn() {
+  const [params] = useSearchParams();
+  const message = OIDC_MESSAGES[params.get("error") ?? ""];
+  return (
+    <div className="space-y-4">
+      {message && (
+        <div
+          role={message.ok ? "status" : "alert"}
+          className={
+            message.ok
+              ? "border-success/40 bg-success/10 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+              : "border-destructive/40 bg-destructive/10 text-destructive rounded-lg border px-3 py-2 text-sm"
+          }
+        >
+          {message.ok && <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />}
+          <span>{message.text}</span>
+        </div>
+      )}
+      {/* A full page load: the backend redirects to the organisation's sign-in page */}
+      <Button asChild variant="cta" className="w-full">
+        <a href="/api/auth/oidc/login">
+          <LogIn /> Sign in with your organisation account
+        </a>
+      </Button>
+      <p className="text-muted-foreground text-center text-xs">
+        New accounts can be used once an administrator approves them.
+      </p>
+    </div>
+  );
+}
 
 export function LoginPage() {
   const { user, login } = useAuth();
@@ -30,6 +78,7 @@ export function LoginPage() {
   const [registered, setRegistered] = useState<string | null>(null);
   const from = (location.state as { from?: string } | null)?.from ?? "/map";
   const canRegister = options.data?.self_registration ?? false;
+  const oidc = options.data?.auth_mode === "oidc";
 
   if (user) return <Navigate to={from} replace />;
 
@@ -92,81 +141,91 @@ export function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {registered && !registering && (
-              <div
-                role="status"
-                className="border-success/40 bg-success/10 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
-              >
-                <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
-                <span>{registered}</span>
+            {options.isPending ? (
+              <div className="flex justify-center py-6" aria-label="Loading">
+                <Loader2 className="text-muted-foreground size-5 animate-spin" />
               </div>
-            )}
-            <form onSubmit={submit} className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="username">
-                  {registering ? "Email" : canRegister ? "Email or username" : "Username"}
-                </Label>
-                <Input
-                  id="username"
-                  type={registering ? "email" : "text"}
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  autoComplete={registering ? "email" : "username"}
-                  maxLength={registering ? 64 : 150}
-                  autoFocus
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="password">{registering ? "Password (min. 8 characters)" : "Password"}</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={registering ? "new-password" : "current-password"}
-                  minLength={registering ? 8 : undefined}
-                  required
-                />
-              </div>
-              {registering && (
-                <div className="grid gap-2">
-                  <Label htmlFor="password-repeat">Repeat the password</Label>
-                  <Input
-                    id="password-repeat"
-                    type="password"
-                    value={repeat}
-                    onChange={(e) => setRepeat(e.target.value)}
-                    autoComplete="new-password"
-                    minLength={8}
-                    required
-                  />
-                </div>
-              )}
-              <ErrorAlert error={error} title={registering ? "Could not create the account" : "Sign-in failed"} />
-              <Button type="submit" variant="cta" className="w-full" disabled={busy}>
-                {busy ? (
-                  <>
-                    <Loader2 className="animate-spin" /> {registering ? "Creating…" : "Signing in…"}
-                  </>
-                ) : registering ? (
-                  "Create account"
-                ) : (
-                  "Sign in"
+            ) : oidc ? (
+              <OidcSignIn />
+            ) : (
+              <>
+                {registered && !registering && (
+                  <div
+                    role="status"
+                    className="border-success/40 bg-success/10 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+                  >
+                    <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />
+                    <span>{registered}</span>
+                  </div>
                 )}
-              </Button>
-            </form>
-            {canRegister && (
-              <p className="text-muted-foreground text-center text-sm">
-                {registering ? "Already have an account? " : "No account yet? "}
-                <button
-                  type="button"
-                  className="text-primary cursor-pointer font-medium hover:underline"
-                  onClick={() => switchTo(registering ? "signin" : "register")}
-                >
-                  {registering ? "Sign in" : "Create one"}
-                </button>
-              </p>
+                <form onSubmit={submit} className="space-y-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="username">
+                      {registering ? "Email" : canRegister ? "Email or username" : "Username"}
+                    </Label>
+                    <Input
+                      id="username"
+                      type={registering ? "email" : "text"}
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      autoComplete={registering ? "email" : "username"}
+                      maxLength={registering ? 64 : 150}
+                      autoFocus
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="password">{registering ? "Password (min. 8 characters)" : "Password"}</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete={registering ? "new-password" : "current-password"}
+                      minLength={registering ? 8 : undefined}
+                      required
+                    />
+                  </div>
+                  {registering && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="password-repeat">Repeat the password</Label>
+                      <Input
+                        id="password-repeat"
+                        type="password"
+                        value={repeat}
+                        onChange={(e) => setRepeat(e.target.value)}
+                        autoComplete="new-password"
+                        minLength={8}
+                        required
+                      />
+                    </div>
+                  )}
+                  <ErrorAlert error={error} title={registering ? "Could not create the account" : "Sign-in failed"} />
+                  <Button type="submit" variant="cta" className="w-full" disabled={busy}>
+                    {busy ? (
+                      <>
+                        <Loader2 className="animate-spin" /> {registering ? "Creating…" : "Signing in…"}
+                      </>
+                    ) : registering ? (
+                      "Create account"
+                    ) : (
+                      "Sign in"
+                    )}
+                  </Button>
+                </form>
+                {canRegister && (
+                  <p className="text-muted-foreground text-center text-sm">
+                    {registering ? "Already have an account? " : "No account yet? "}
+                    <button
+                      type="button"
+                      className="text-primary cursor-pointer font-medium hover:underline"
+                      onClick={() => switchTo(registering ? "signin" : "register")}
+                    >
+                      {registering ? "Sign in" : "Create one"}
+                    </button>
+                  </p>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

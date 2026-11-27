@@ -24,7 +24,7 @@ import { NavLink, useLocation, useOutlet } from "react-router";
 import { toast } from "sonner";
 
 import { api, unwrap } from "@/api/client";
-import { keys, useEmbeddingStatus, useMappingStats, useUsers } from "@/api/queries";
+import { keys, useAuthOptions, useEmbeddingStatus, useMappingStats, useUsers } from "@/api/queries";
 import { taskResult } from "@/api/taskResults";
 import type { Task } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
@@ -223,8 +223,11 @@ function TaskTray() {
 
 function UserMenu() {
   const { user, logout } = useAuth();
+  const options = useAuthOptions();
   const [passwordOpen, setPasswordOpen] = useState(false);
   if (!user) return null;
+  // With an organisation sign-in (OIDC) there are no passwords in the app
+  const passwords = options.data?.auth_mode !== "oidc";
   return (
     <>
       <DropdownMenu>
@@ -240,15 +243,17 @@ function UserMenu() {
             <Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role}</Badge>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
-            <KeyRound /> Change password
-          </DropdownMenuItem>
+          {passwords && (
+            <DropdownMenuItem onSelect={() => setPasswordOpen(true)}>
+              <KeyRound /> Change password
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={() => void logout()}>
             <LogOut /> Log out
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
+      {passwords && <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />}
     </>
   );
 }
