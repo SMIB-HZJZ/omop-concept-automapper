@@ -72,16 +72,17 @@ export function SuggestionAlert({
           </span>
         </div>
         <Rationale text={suggestion.rationale} className="mt-1 text-sm" />
-        {suggestion.decision_path && (
-          <div className="text-muted-foreground mt-0.5 text-xs" title="How the pipeline reached this pick">
-            Path: {suggestion.decision_path}
-          </div>
-        )}
+        {/* Step detail behind one toggle; the pick, confidence and reason above stay visible */}
         <Collapsible className="mt-1">
           <CollapsibleTrigger className="text-muted-foreground flex items-center gap-1 text-xs hover:underline">
-            <ChevronDown className="size-3" /> Trace ({suggestion.trace.length} steps)
+            <ChevronDown className="size-3" /> Steps ({suggestion.trace.length})
           </CollapsibleTrigger>
           <CollapsibleContent>
+            {suggestion.decision_path && (
+              <div className="text-muted-foreground mt-1 text-xs" title="How the pipeline reached this pick">
+                Path: {suggestion.decision_path}
+              </div>
+            )}
             <ol className="mt-1 space-y-0.5 text-xs">
               {suggestion.trace.map((t, i) => (
                 <li key={i}>

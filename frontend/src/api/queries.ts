@@ -27,8 +27,6 @@ export const keys = {
     ["vocab", id, "mapped", page, perPage, q, flagged] as const,
   stats: (id: number) => ["vocab", id, "stats"] as const,
   releases: (id: number) => ["vocab", id, "releases"] as const,
-  auditStats: (id: number) => ["vocab", id, "audit-stats"] as const,
-  auditRecent: (id: number) => ["vocab", id, "audit-recent"] as const,
   suggestions: (id: number, params: object) => ["vocab", id, "suggestions", params] as const,
   embeddingStatus: (domains: string[]) => ["embedding-status", [...domains].sort()] as const,
   tasks: (params: object) => ["tasks", params] as const,
@@ -196,30 +194,6 @@ export const useMappingStats = (id: number | null) =>
     queryFn: async () =>
       unwrap(
         await api.GET("/api/source-vocabularies/{vocabulary_id}/stats", { params: { path: { vocabulary_id: id! } } }),
-      ),
-    enabled: id !== null,
-  });
-
-export const useAuditStats = (id: number | null) =>
-  useQuery({
-    queryKey: keys.auditStats(id ?? 0),
-    queryFn: async () =>
-      unwrap(
-        await api.GET("/api/source-vocabularies/{vocabulary_id}/audit/stats", {
-          params: { path: { vocabulary_id: id! } },
-        }),
-      ),
-    enabled: id !== null,
-  });
-
-export const useAuditRecent = (id: number | null, limit = 10) =>
-  useQuery({
-    queryKey: [...keys.auditRecent(id ?? 0), limit],
-    queryFn: async () =>
-      unwrap(
-        await api.GET("/api/source-vocabularies/{vocabulary_id}/audit/recent", {
-          params: { path: { vocabulary_id: id! }, query: { limit } },
-        }),
       ),
     enabled: id !== null,
   });

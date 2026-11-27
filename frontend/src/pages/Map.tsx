@@ -3,14 +3,23 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Ban,
   CheckCircle2,
-  ChevronDown,
+  Info,
   Map as MapIcon,
   MessageCircleQuestion,
   MousePointerClick,
   Search as SearchIcon,
   Sparkles,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router";
 
 import { useAuth } from "@/auth/useAuth";
@@ -19,8 +28,6 @@ import {
   leaveVocabulary,
   searchQuery,
   translationQuery,
-  useAuditRecent,
-  useAuditStats,
   useMappingStats,
   usePresence,
   useUnmapped,
@@ -30,24 +37,23 @@ import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/lib/utils";
 import { usePersistentState } from "@/hooks/usePersistentState";
-import type { AuditEntry, UnmappedItem } from "@/api/types";
+import type { UnmappedItem } from "@/api/types";
 import { DataTable } from "@/components/DataTable";
-import { EmptyState, ErrorAlert, PageHeader, StatCard } from "@/components/common";
+import { EmptyState, ErrorAlert, PageHeader } from "@/components/common";
 import { AnimatedNumber } from "@/components/motion";
 import { CompactPager } from "@/components/Pagination";
-import { formatDate, formatNumber } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { VocabularySelector } from "@/components/VocabularySelector";
 import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAutomapControls } from "./map/AutomapSettings";
 import { ConceptDetail } from "./map/ConceptDetail";
 import { TeamStatus } from "./map/Team";
 import { UserAvatar } from "@/components/UserAvatar";
 import { defaultSearchRequest } from "./map/searchRequest";
-import { methodLabel } from "@/lib/methods";
 
 /** Columns of the term list; ``othersOn`` maps a source term to colleagues who have it open. */
 const unmappedColumns = (othersOn: Map<number, string[]>): ColumnDef<UnmappedItem, unknown>[] => [
@@ -60,12 +66,31 @@ const unmappedColumns = (othersOn: Map<number, string[]>): ColumnDef<UnmappedIte
         <div className="flex min-w-0 items-start gap-2">
           <div className="min-w-0 flex-1">
             <div className="leading-snug font-medium">{row.original.source_concept_name}</div>
-            <div className="text-muted-foreground truncate font-mono text-xs">{row.original.source_value}</div>
-            {row.original.source_description && (
-              <div className="text-muted-foreground truncate text-xs" title={row.original.source_description}>
-                {row.original.source_description}
-              </div>
-            )}
+            <div className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs">
+              <span className="truncate font-mono">{row.original.source_value}</span>
+              {row.original.source_description && (
+                <Tooltip>
+                  {/* Not a tab stop: the description is also shown, in full, in the term's panel */}
+                  <TooltipTrigger asChild>
+                    <span
+                      role="img"
+                      aria-label="Has a description"
+                      className="hover:text-foreground inline-flex shrink-0 cursor-help"
+                    >
+                      <Info className="size-3.5" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    align="start"
+                    collisionPadding={8}
+                    className="max-w-xs text-left text-pretty"
+                  >
+                    {row.original.source_description}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
           {others.length > 0 && (
             <div className="flex -space-x-1.5 pt-0.5" title={`Open by ${others.join(", ")}`}>
@@ -127,58 +152,6 @@ const unmappedColumns = (othersOn: Map<number, string[]>): ColumnDef<UnmappedIte
   },
 ];
 
-const RECENT_COLUMNS: ColumnDef<AuditEntry, unknown>[] = [
-  { accessorKey: "source_concept_name", header: "Source concept" },
-  { accessorKey: "mapped_concept_name", header: "Mapped concept" },
-  { accessorKey: "confidence_score", header: "Confidence" },
-  {
-    accessorKey: "mapping_method",
-    header: "Method",
-    cell: ({ row }) => methodLabel(row.original.mapping_method),
-  },
-  { accessorKey: "created_by", header: "By", cell: ({ row }) => row.original.created_by ?? "—" },
-  { accessorKey: "created_at", header: "Created", cell: ({ row }) => formatDate(row.original.created_at) },
-];
-
-function AuditTrail({ vocabularyId }: { vocabularyId: number }) {
-  const [open, setOpen] = useState(false);
-  const stats = useAuditStats(open ? vocabularyId : null);
-  const recent = useAuditRecent(open ? vocabularyId : null, 10);
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="rounded-lg border">
-      <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
-        Auto-mapping audit trail
-        <ChevronDown className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-4 border-t p-4">
-        {stats.data && stats.data.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No auto-mapping statistics available for this vocabulary.</p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {stats.data?.map((s) => (
-              <StatCard
-                key={s.mapping_method}
-                label={`${methodLabel(s.mapping_method)} mappings`}
-                value={formatNumber(s.mapping_count)}
-                hint={s.avg_confidence != null ? `Avg confidence ${s.avg_confidence.toFixed(2)}` : undefined}
-              />
-            ))}
-          </div>
-        )}
-        <div className="text-sm font-medium">Recent mappings</div>
-        <DataTable
-          columns={RECENT_COLUMNS}
-          data={recent.data ?? []}
-          getRowId={(r) => String(r.audit_id)}
-          isLoading={recent.isLoading}
-          emptyText="No mapping history found for this vocabulary."
-          maxHeight="16rem"
-        />
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
 const VIEWS: { value: UnmappedView; label: string; hint: string }[] = [
   { value: "todo", label: "To do", hint: "Terms nobody is handling yet: no flag, nothing waiting in Review" },
   { value: "suggested", label: "In review", hint: "AI suggestions waiting in Review" },
@@ -229,8 +202,8 @@ function ProgressStrip({ vocabularyId, action, team }: { vocabularyId: number; a
   const stats = useMappingStats(vocabularyId);
   const d = stats.data;
   return (
-    <Card className="gap-0 py-3">
-      <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4">
+    <Card className="gap-0 py-2">
+      <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4">
         <ErrorAlert error={stats.error} />
         <div className="min-w-56 flex-1 space-y-1.5">
           <div className="flex items-baseline justify-between gap-3 text-sm">
@@ -247,10 +220,11 @@ function ProgressStrip({ vocabularyId, action, team }: { vocabularyId: number; a
         {d && d.pending_suggestions > 0 && (
           <Link
             to="/review"
-            className="bg-accent text-accent-foreground hover:bg-accent/70 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors"
+            title="AI suggestions waiting in Review"
+            className="bg-accent text-accent-foreground hover:bg-accent/70 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors"
           >
             <Sparkles className="size-4" />
-            <b className="tabular-nums">{formatNumber(d.pending_suggestions)}</b> suggestions to review →
+            <b className="tabular-nums">{formatNumber(d.pending_suggestions)}</b> to review →
           </Link>
         )}
         <div className="ml-auto flex items-center gap-3">
@@ -298,12 +272,34 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
   if (found && found !== held) setHeld(found);
   const concept = found ?? (held && String(held.source_id) === selectedSource ? held : null);
 
+  const detailRef = useRef<HTMLDivElement>(null);
   const select = useCallback((id: string | null) => {
     setSelectedSource(id);
     if (id)
-      requestAnimationFrame(() =>
-        document.querySelector(`[data-row-id="${id}"]`)?.scrollIntoView({ block: "nearest" }),
-      );
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-row-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
+        // Below xl the panel sits under the list: bring it into view (side by side it already is)
+        if (!window.matchMedia("(min-width: 80rem)").matches)
+          detailRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
+  }, []);
+
+  // Side by side (xl), the two columns fill the window below whatever sits above them, so the
+  // page does not scroll and the candidate table gets the remaining height
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [gridTop, setGridTop] = useState(0);
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const measure = () => setGridTop(Math.round(el.getBoundingClientRect().top + window.scrollY));
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (el.parentElement) observer.observe(el.parentElement);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, []);
 
   const afterMapped = () => {
@@ -386,7 +382,11 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
       ) : (
         /* Source terms on the left, their candidate standard concepts on the right; both columns
            have a fixed height on wide screens, so switching terms never moves the page */
-        <div className="grid gap-5 xl:h-[max(36rem,calc(100vh-19rem))] xl:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]">
+        <div
+          ref={gridRef}
+          style={{ "--map-top": `${gridTop}px` } as CSSProperties}
+          className="grid gap-5 xl:h-[max(30rem,calc(100dvh-var(--map-top)-2rem))] xl:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]"
+        >
           <Card className="min-h-0 min-w-0 gap-0 py-0">
             <CardContent className="flex h-full min-h-0 flex-col gap-3 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -427,13 +427,13 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
                 isLoading={unmapped.isLoading}
                 emptyText="No unmapped concepts on this page."
                 maxHeight="none"
-                className="max-h-[32rem] min-h-0 flex-1 xl:max-h-none"
+                className="max-h-[20rem] min-h-0 flex-1 xl:max-h-none"
               />
               <CompactPager page={currentPage} pages={pages} onPageChange={setPage} />
             </CardContent>
           </Card>
 
-          <div className="min-h-0 min-w-0">
+          <div ref={detailRef} className="min-h-0 min-w-0 scroll-mt-20">
             {concept ? (
               <ConceptDetail
                 key={concept.source_id}
@@ -456,8 +456,6 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
           </div>
         </div>
       )}
-
-      <AuditTrail vocabularyId={vocabularyId} />
     </>
   );
 }
@@ -487,7 +485,7 @@ export function MapPage() {
           )
         }
       />
-      <VocabularySelector selection={selection} />
+      <VocabularySelector selection={selection} compact />
       {vocabularyId !== null && (
         <VocabularyMapping key={vocabularyId} vocabularyId={vocabularyId} isDrug={selection.isDrug} />
       )}

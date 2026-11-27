@@ -6,6 +6,7 @@ import { errorMessage } from "@/api/client";
 import { useUpdateVocabulary } from "@/api/queries";
 import type { SourceVocabulary } from "@/api/types";
 import { useAuth } from "@/auth/useAuth";
+import { ClampedLine } from "@/components/ClampedLine";
 import { CodeSystemsField } from "@/components/CodeSystemsField";
 import { SourceLanguageField } from "@/components/SourceLanguageField";
 import { VocabularyDescriptionField } from "@/components/VocabularyDescriptionField";
@@ -24,14 +25,13 @@ export function VocabularyAbout({ vocabulary }: { vocabulary: SourceVocabulary }
   if (!description && !isAdmin) return null;
   return (
     <div className="text-muted-foreground flex min-w-0 basis-full items-start gap-2 text-sm">
-      <Info className="mt-0.5 size-4 shrink-0" />
       {description ? (
-        <p className="min-w-0 leading-relaxed">
-          <span className="text-foreground font-medium">About this list: </span>
-          {description}
-        </p>
+        <ClampedLine icon={Info} label="About this list:" text={description} what="list description" />
       ) : (
-        <p className="min-w-0">No description yet. A sentence on what these terms denote helps the AI choose.</p>
+        <p className="flex min-w-0 flex-1 items-start gap-1.5">
+          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          No description yet. A sentence on what these terms denote helps the AI choose.
+        </p>
       )}
       {isAdmin && <EditVocabulary vocabulary={vocabulary} />}
     </div>

@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 import type { ConceptLike } from "./types";
 import { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
 
-/** The concepts chosen for the current source term, with "Confirm mapping" (kept at the top of the
- * panel, so confirming never needs scrolling). */
+/** The concepts chosen for the current source term, with "Confirm mapping" (the panel's footer,
+ * under the candidate table, so confirming never needs scrolling). */
 export function SelectedConcepts({
   concepts,
   onRemove,
@@ -33,14 +33,14 @@ export function SelectedConcepts({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-2 rounded-xl border p-3 transition-colors",
-        empty ? "bg-muted/40 border-dashed" : "border-primary/30 bg-accent/50",
+        "flex shrink-0 flex-wrap items-center gap-2 rounded-xl border transition-colors",
+        empty ? "bg-muted/40 border-dashed px-3 py-1.5" : "border-primary/30 bg-accent/50 p-3",
       )}
     >
-      <div className="text-sm font-medium">{empty ? "Nothing selected yet" : `Map to (${concepts.length})`}</div>
+      <div className="text-sm font-medium">{empty ? "Nothing selected" : `Map to (${concepts.length})`}</div>
       {empty && (
         <span className="text-muted-foreground text-sm">
-          Tick concepts in the table below, or use the AI suggestion.
+          Tick concepts above (or press 1–9), or use the AI suggestion.
         </span>
       )}
       <AnimatePresence initial={false}>
@@ -89,6 +89,7 @@ export function SelectedConcepts({
       )}
       <Button
         variant="cta"
+        size={empty ? "sm" : "default"}
         className={cn("gap-1.5", empty && "ml-auto")}
         onClick={onConfirm}
         disabled={empty || confirming || locked}

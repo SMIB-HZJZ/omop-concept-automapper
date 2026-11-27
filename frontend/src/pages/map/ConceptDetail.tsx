@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Filter, Hash, Languages, Loader2, RotateCcw, Search as SearchIcon, Sparkles } from "lucide-react";
+import { FileText, Filter, Hash, Languages, Loader2, RotateCcw, Search as SearchIcon, Sparkles } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -25,6 +25,7 @@ import {
   type SuggestResponse,
   type UnmappedItem,
 } from "@/api/types";
+import { ClampedLine } from "@/components/ClampedLine";
 import { DataTable } from "@/components/DataTable";
 import { ErrorAlert } from "@/components/common";
 import { ConceptFilterFields } from "@/components/ConceptFilterFields";
@@ -46,7 +47,6 @@ import { DrugPanel } from "./DrugPanel";
 import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 import { SelectedConcepts } from "./SelectedConcepts";
 import { SuggestionAlert } from "./SuggestionAlert";
-import { TermDescription } from "./TermDescription";
 import { BelowThresholdPick, FlagBanner, FlagButton, WaitingSuggestion } from "./TermExtras";
 import { buildSearchRequest, DEFAULT_LIMIT } from "./searchRequest";
 import type { ConceptLike } from "./types";
@@ -551,302 +551,315 @@ export function ConceptDetail({
     !isDrug && !edited && (translation.isLoading || (!!english && !searchedEnglish && !search.isError));
 
   return (
-    <Card className="h-full min-h-[36rem] gap-0 py-0">
+    <Card className="h-full min-h-[36rem] gap-0 py-0 xl:min-h-0">
       <CardContent className="flex h-full min-h-0 flex-col gap-3 p-4">
-        {/* The term being mapped */}
-        <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1"
-        >
-          <div className="min-w-0">
-            <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Mapping</div>
-            <h2 className="text-lg leading-snug font-semibold">{concept.source_concept_name}</h2>
-          </div>
-          <div className="text-muted-foreground flex flex-wrap gap-x-4 pt-4 text-xs">
-            <span>
-              Code <b className="text-foreground font-mono">{concept.source_value}</b>
-            </span>
-            <span>
-              Frequency <b className="text-foreground tabular-nums">{concept.freq?.toLocaleString() ?? "—"}</b>
-            </span>
-            {detected && (
+        {/* Everything above the candidates: pinned, and scrolls on its own if it ever gets taller
+            than about half the panel, so the table always keeps several rows */}
+        <div className="-m-1 flex shrink-0 flex-col gap-3 p-1 xl:max-h-[55%] xl:overflow-y-auto">
+          {/* The term being mapped */}
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"
+          >
+            <h2 className="min-w-0 text-lg leading-snug font-semibold">{concept.source_concept_name}</h2>
+            <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              {othersHere.length > 0 && (
+                <span
+                  className="border-warning/40 bg-warning/10 text-foreground flex items-center gap-1.5 rounded-full border py-0.5 pr-2 pl-0.5"
+                  title={`${othersHere.join(", ")} ${othersHere.length === 1 ? "has" : "have"} this term open too. Agree on who maps it, or pick another term.`}
+                >
+                  <span className="flex -space-x-1.5">
+                    {othersHere.map((who) => (
+                      <UserAvatar key={who} name={who} className="size-5 text-[9px]" />
+                    ))}
+                  </span>
+                  also open
+                  <span className="sr-only">
+                    {" "}
+                    by {othersHere.join(", ")}: agree on who maps it, or pick another term
+                  </span>
+                </span>
+              )}
               <span>
-                ATC7 <b className="text-foreground font-mono">{detected}</b>
+                Code <b className="text-foreground font-mono">{concept.source_value}</b>
               </span>
-            )}
-          </div>
-        </motion.div>
-
-        {concept.source_description && <TermDescription text={concept.source_description} />}
-
-        {isDrug && (
-          <DrugPanel
-            match={drugMatch.data}
-            loading={drugMatch.isFetching}
-            error={drugMatch.error}
-            edited={editedStructure}
-            onEdit={setEditedStructure}
-            showBranded={showBranded}
-            onShowBranded={setShowBranded}
-            used={drugUsed}
-            searchEdited={edited}
-            onUse={() => {
-              for (const c of dm?.candidates ?? [])
-                addConcept({ ...c, match: dm?.status === "exact" ? "exact" : undefined });
-            }}
-          />
-        )}
-
-        {/* Search and AI. The box starts with the source term; first-time users need to be told
-            they can change it */}
-        <div className="grid gap-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="concept-search">Search standard concepts</Label>
-            {edited && (
-              <button
-                type="button"
-                className="text-primary flex cursor-pointer items-center gap-1 text-xs hover:underline"
-                onClick={() => setName(concept.source_concept_name)}
-              >
-                <RotateCcw className="size-3" /> Back to the source term
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-56 flex-1">
-              <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-              <Input
-                id="concept-search"
-                aria-describedby="concept-search-hint"
-                placeholder="Type words to search, e.g. type 2 diabetes mellitus"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="pr-9 pl-9"
-              />
-              {busy && (
-                <Loader2
-                  aria-label="Searching"
-                  className="text-primary absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin"
-                />
+              <span>
+                Frequency <b className="text-foreground tabular-nums">{concept.freq?.toLocaleString() ?? "—"}</b>
+              </span>
+              {detected && (
+                <span>
+                  ATC7 <b className="text-foreground font-mono">{detected}</b>
+                </span>
               )}
             </div>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <Filter className="size-4" /> Filters
-                  {filterCount > 0 && <Badge variant="secondary">{filterCount}</Badge>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                side="bottom"
-                collisionPadding={12}
-                className="max-h-(--radix-popover-content-available-height) w-96 space-y-4 overflow-y-auto"
-              >
-                <ConceptFilterFields
-                  idPrefix="map-filter"
-                  values={{ domains, vocabularies, conceptClasses }}
-                  onChange={(next) => {
-                    setDomains(next.domains);
-                    setVocabularies(next.vocabularies);
-                    setConceptClasses(next.conceptClasses);
-                  }}
+          </motion.div>
+
+          {concept.source_description && (
+            <ClampedLine
+              icon={FileText}
+              label="Description:"
+              text={concept.source_description}
+              what="term description"
+            />
+          )}
+
+          {isDrug && (
+            <DrugPanel
+              match={drugMatch.data}
+              loading={drugMatch.isFetching}
+              error={drugMatch.error}
+              edited={editedStructure}
+              onEdit={setEditedStructure}
+              showBranded={showBranded}
+              onShowBranded={setShowBranded}
+              used={drugUsed}
+              searchEdited={edited}
+              onUse={() => {
+                for (const c of dm?.candidates ?? [])
+                  addConcept({ ...c, match: dm?.status === "exact" ? "exact" : undefined });
+              }}
+            />
+          )}
+
+          {/* Search and AI. The box starts with the source term; first-time users need to be told
+            they can change it */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="concept-search" className="sr-only">
+              Search standard concepts
+            </Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-56 flex-1">
+                <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                <Input
+                  id="concept-search"
+                  aria-describedby="concept-search-hint"
+                  placeholder="Type words to search, e.g. type 2 diabetes mellitus"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="pr-9 pl-9"
                 />
-                <p className="text-muted-foreground -mt-2 text-xs">AI suggest uses the domain filter only.</p>
-                {isDrug && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Checkbox id="use-atc7" checked={useAtc7} onCheckedChange={(v) => setUseAtc7(!!v)} />
-                      <Label htmlFor="use-atc7">Enable ATC7 filtering</Label>
-                    </div>
-                    {useAtc7 &&
-                      (detected ? (
-                        <p className="text-sm">
-                          Using ATC7 code from source value: <b className="font-mono">{detected}</b>
-                        </p>
-                      ) : (
-                        <div className="grid gap-1.5">
-                          <p className="text-muted-foreground text-xs">
-                            No ATC7 code detected at the beginning of the source value.
-                          </p>
-                          <Input
-                            aria-label="ATC7 code"
-                            placeholder="A10BA02"
-                            maxLength={7}
-                            value={manualAtc7}
-                            onChange={(e) => setManualAtc7(e.target.value.toUpperCase().trim())}
-                          />
-                          {!manualValid && manualAtc7.length > 0 && (
-                            <p className="text-destructive text-xs">
-                              Invalid ATC7 code format. Expected: Letter-Digit-Digit-Letter-Letter-Digit-Digit (e.g.,
-                              A10BA02)
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                )}
-                <div className="grid gap-2">
-                  <Label>
-                    Max results: <span className="tabular-nums">{limit}</span>
-                  </Label>
-                  <Slider
-                    thumbLabel="Max results"
-                    min={10}
-                    max={200}
-                    step={10}
-                    value={[limit]}
-                    onValueChange={(v) => setLimit(v[0] ?? 100)}
+                {busy && (
+                  <Loader2
+                    aria-label="Searching"
+                    className="text-primary absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin"
                   />
-                </div>
-                <div className="text-muted-foreground text-xs">
-                  AI suggest uses the confidence threshold from Auto map settings ({threshold}).
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="suggest-pipeline">AI suggest pipeline</Label>
-                  <PipelineSelect id="suggest-pipeline" value={pipeline} onChange={setPipeline} />
-                </div>
-              </PopoverContent>
-            </Popover>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <Hash className="size-4" /> By ID
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-96">
-                <ManualConceptIds isSelected={(id) => selected.has(id)} onAdd={addConcept} alwaysOpen />
-              </PopoverContent>
-            </Popover>
-            <Button variant="secondary" className="gap-2" onClick={runSuggest} disabled={suggest.isPending}>
-              {suggest.isPending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              {suggest.isPending ? <Elapsed prefix="Thinking… " /> : "AI suggest"}
-            </Button>
-            {!concept.flag && <FlagButton concept={concept} vocabularyId={vocabularyId} onFlagged={onMapped} />}
-          </div>
-          <p id="concept-search-hint" className="text-muted-foreground text-xs">
-            {edited
-              ? "Searching for your text instead of the source term; AI suggest uses it too."
-              : "Starts with the source term. No good match? Edit it: fix a typo, write it in English, or try other words. Results update as you type."}
-          </p>
-          {!isDrug && !edited && (addingEnglish || english) && (
-            <div aria-live="polite" className="flex min-w-0 items-center gap-1.5 text-xs">
-              {addingEnglish ? (
-                <span className="text-primary flex items-center gap-1.5">
-                  <Loader2 className="size-3 shrink-0 animate-spin" /> Adding English matches…
-                </span>
-              ) : (
+                )}
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Filter className="size-4" /> Filters
+                    {filterCount > 0 && <Badge variant="secondary">{filterCount}</Badge>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="bottom"
+                  collisionPadding={12}
+                  className="max-h-(--radix-popover-content-available-height) w-96 space-y-4 overflow-y-auto"
+                >
+                  <ConceptFilterFields
+                    idPrefix="map-filter"
+                    values={{ domains, vocabularies, conceptClasses }}
+                    onChange={(next) => {
+                      setDomains(next.domains);
+                      setVocabularies(next.vocabularies);
+                      setConceptClasses(next.conceptClasses);
+                    }}
+                  />
+                  <p className="text-muted-foreground -mt-2 text-xs">AI suggest uses the domain filter only.</p>
+                  {isDrug && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Checkbox id="use-atc7" checked={useAtc7} onCheckedChange={(v) => setUseAtc7(!!v)} />
+                        <Label htmlFor="use-atc7">Enable ATC7 filtering</Label>
+                      </div>
+                      {useAtc7 &&
+                        (detected ? (
+                          <p className="text-sm">
+                            Using ATC7 code from source value: <b className="font-mono">{detected}</b>
+                          </p>
+                        ) : (
+                          <div className="grid gap-1.5">
+                            <p className="text-muted-foreground text-xs">
+                              No ATC7 code detected at the beginning of the source value.
+                            </p>
+                            <Input
+                              aria-label="ATC7 code"
+                              placeholder="A10BA02"
+                              maxLength={7}
+                              value={manualAtc7}
+                              onChange={(e) => setManualAtc7(e.target.value.toUpperCase().trim())}
+                            />
+                            {!manualValid && manualAtc7.length > 0 && (
+                              <p className="text-destructive text-xs">
+                                Invalid ATC7 code format. Expected: Letter-Digit-Digit-Letter-Letter-Digit-Digit (e.g.,
+                                A10BA02)
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                  <div className="grid gap-2">
+                    <Label>
+                      Max results: <span className="tabular-nums">{limit}</span>
+                    </Label>
+                    <Slider
+                      thumbLabel="Max results"
+                      min={10}
+                      max={200}
+                      step={10}
+                      value={[limit]}
+                      onValueChange={(v) => setLimit(v[0] ?? 100)}
+                    />
+                  </div>
+                  <div className="text-muted-foreground text-xs">
+                    AI suggest uses the confidence threshold from Auto map settings ({threshold}).
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="suggest-pipeline">AI suggest pipeline</Label>
+                    <PipelineSelect id="suggest-pipeline" value={pipeline} onChange={setPipeline} />
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Hash className="size-4" /> By ID
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-96">
+                  <ManualConceptIds isSelected={(id) => selected.has(id)} onAdd={addConcept} alwaysOpen />
+                </PopoverContent>
+              </Popover>
+              <Button variant="secondary" className="gap-2" onClick={runSuggest} disabled={suggest.isPending}>
+                {suggest.isPending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                {suggest.isPending ? <Elapsed prefix="Thinking… " /> : "AI suggest"}
+              </Button>
+              {!concept.flag && <FlagButton concept={concept} vocabularyId={vocabularyId} onFlagged={onMapped} />}
+            </div>
+            {/* One hint line: the English search when there is one, otherwise how to search; the
+              full hint stays available to screen readers */}
+            <p
+              id="concept-search-hint"
+              className={cn(
+                "text-muted-foreground text-xs",
+                !isDrug && !edited && (addingEnglish || english) && "sr-only",
+              )}
+            >
+              {edited ? (
                 <>
-                  <Languages className="text-muted-foreground size-3 shrink-0" />
-                  <span className="text-muted-foreground shrink-0">Also searched in English:</span>
+                  Searching for your text instead of the source term; AI suggest uses it too.{" "}
                   <button
                     type="button"
-                    className="text-primary cursor-pointer truncate hover:underline"
-                    title="Search only this text (edit it in the box)"
-                    onClick={() => setName(english!)}
+                    className="text-primary inline-flex cursor-pointer items-center gap-1 hover:underline"
+                    onClick={() => setName(concept.source_concept_name)}
                   >
-                    {english}
+                    <RotateCcw className="size-3" /> Back to the source term
                   </button>
                 </>
+              ) : (
+                "Starts with the source term. No good match? Edit it: fix a typo, write it in English, or try other words. Results update as you type."
               )}
+            </p>
+            {!isDrug && !edited && (addingEnglish || english) && (
+              <div aria-live="polite" className="flex min-w-0 items-center gap-1.5 text-xs">
+                {addingEnglish ? (
+                  <span className="text-primary flex items-center gap-1.5">
+                    <Loader2 className="size-3 shrink-0 animate-spin" /> Adding English matches…
+                  </span>
+                ) : (
+                  <>
+                    <Languages className="text-muted-foreground size-3 shrink-0" />
+                    <span className="text-muted-foreground shrink-0">Also searched in English:</span>
+                    <button
+                      type="button"
+                      className="text-primary cursor-pointer truncate hover:underline"
+                      title="Search only this text (edit it in the box)"
+                      onClick={() => setName(english!)}
+                    >
+                      {english}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            {suggest.isPending && (
+              <div aria-live="polite" className="text-primary flex min-w-0 items-center gap-2 text-sm">
+                <Loader2 className="size-4 shrink-0 animate-spin" />
+                <span className="truncate">AI suggest: {step ?? "starting"}…</span>
+              </div>
+            )}
+          </div>
+
+          {leftList && (
+            <div className="border-warning/40 bg-warning/10 rounded-xl border px-3 py-2 text-sm">
+              This term is no longer in the list: a colleague may have mapped, flagged or queued it meanwhile. Saving
+              tells you if it was mapped.
             </div>
           )}
-          {suggest.isPending && (
-            <div aria-live="polite" className="text-primary flex min-w-0 items-center gap-2 text-sm">
-              <Loader2 className="size-4 shrink-0 animate-spin" />
-              <span className="truncate">AI suggest: {step ?? "starting"}…</span>
-            </div>
+          <FlagBanner concept={concept} vocabularyId={vocabularyId} />
+          {waiting && !suggestion && (
+            <WaitingSuggestion
+              suggestion={waiting}
+              busy={acceptSuggestion.isPending || rejectSuggestion.isPending}
+              onAccept={() => decideWaiting("accept")}
+              onReject={() => decideWaiting("reject")}
+            />
           )}
-        </div>
 
-        {leftList && (
-          <div className="border-warning/40 bg-warning/10 rounded-xl border px-3 py-2 text-sm">
-            This term is no longer in the list: a colleague may have mapped, flagged or queued it meanwhile. Saving
-            tells you if it was mapped.
-          </div>
-        )}
-        {othersHere.length > 0 && (
-          <div className="border-warning/40 bg-warning/10 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
-            <div className="flex -space-x-1.5">
-              {othersHere.map((name) => (
-                <UserAvatar key={name} name={name} />
-              ))}
-            </div>
-            <span>
-              <b>{othersHere.join(", ")}</b> {othersHere.length === 1 ? "has" : "have"} this term open too. Agree on who
-              maps it, or pick another term.
-            </span>
-          </div>
-        )}
-        <FlagBanner concept={concept} vocabularyId={vocabularyId} />
-        {waiting && !suggestion && (
-          <WaitingSuggestion
-            suggestion={waiting}
-            busy={acceptSuggestion.isPending || rejectSuggestion.isPending}
-            onAccept={() => decideWaiting("accept")}
-            onReject={() => decideWaiting("reject")}
-          />
-        )}
-
-        {lowPick && !suggestion && (
-          <BelowThresholdPick
-            suggestion={lowPick}
-            onSelect={() => {
-              setMatchType(asMatchType(lowPick.match_type));
-              addConcept({
-                concept_id: lowPick.concept_id,
-                concept_name: lowPick.concept_name,
-                domain_id: lowPick.domain_id,
-                vocabulary_id: lowPick.vocabulary_id,
-                concept_class_id: lowPick.concept_class_id,
-              });
-              for (const c of lowPick.extra_concepts ?? [])
+          {lowPick && !suggestion && (
+            <BelowThresholdPick
+              suggestion={lowPick}
+              onSelect={() => {
+                setMatchType(asMatchType(lowPick.match_type));
                 addConcept({
-                  concept_id: c.concept_id,
-                  concept_name: c.concept_name,
+                  concept_id: lowPick.concept_id,
+                  concept_name: lowPick.concept_name,
                   domain_id: lowPick.domain_id,
                   vocabulary_id: lowPick.vocabulary_id,
-                  concept_class_id: c.concept_class_id,
+                  concept_class_id: lowPick.concept_class_id,
                 });
-            }}
-          />
-        )}
-
-        <AnimatePresence initial={false}>
-          {suggestion && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="shrink-0 overflow-hidden"
-            >
-              <SuggestionAlert
-                suggestion={suggestion}
-                threshold={threshold}
-                onSelect={(c) => {
-                  setMatchType(asMatchType(suggestion.match_type));
-                  addConcept(c);
-                }}
-              />
-            </motion.div>
+                for (const c of lowPick.extra_concepts ?? [])
+                  addConcept({
+                    concept_id: c.concept_id,
+                    concept_name: c.concept_name,
+                    domain_id: lowPick.domain_id,
+                    vocabulary_id: lowPick.vocabulary_id,
+                    concept_class_id: c.concept_class_id,
+                  });
+              }}
+            />
           )}
-        </AnimatePresence>
 
-        <SelectedConcepts
-          concepts={[...selected.values()]}
-          onRemove={removeConcept}
-          onConfirm={confirm}
-          confirming={mapConcepts.isPending || acceptSuggestion.isPending}
-          matchType={matchType}
-          onMatchTypeChange={setMatchType}
-        />
+          <AnimatePresence initial={false}>
+            {suggestion && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="shrink-0 overflow-hidden"
+              >
+                <SuggestionAlert
+                  suggestion={suggestion}
+                  threshold={threshold}
+                  onSelect={(c) => {
+                    setMatchType(asMatchType(suggestion.match_type));
+                    addConcept(c);
+                  }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        <ErrorAlert error={searchError} title="Search failed" />
+          <ErrorAlert error={searchError} title="Search failed" />
+        </div>
 
-        {/* Candidates: a fixed area that keeps the previous results under a loading bar */}
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
+        {/* Candidates: take the rest of the panel and keep the previous results under a loading bar */}
+        <div className="flex min-h-0 flex-1 flex-col gap-2 xl:min-h-[16rem]">
           <div className="text-muted-foreground flex items-center justify-between text-xs">
             <span>
               {search.data ? `${results.length} candidates` : "Searching…"}
@@ -885,6 +898,16 @@ export function ConceptDetail({
             />
           </div>
         </div>
+
+        {/* Under the list it is picked from, like a form's submit row; always in view */}
+        <SelectedConcepts
+          concepts={[...selected.values()]}
+          onRemove={removeConcept}
+          onConfirm={confirm}
+          confirming={mapConcepts.isPending || acceptSuggestion.isPending}
+          matchType={matchType}
+          onMatchTypeChange={setMatchType}
+        />
       </CardContent>
     </Card>
   );

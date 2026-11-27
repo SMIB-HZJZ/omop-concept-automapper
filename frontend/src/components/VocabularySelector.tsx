@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { VocabularyAbout } from "@/components/VocabularyAbout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { useSelectedVocabulary } from "@/hooks/useSelectedVocabulary";
@@ -16,9 +17,12 @@ type Selection = ReturnType<typeof useSelectedVocabulary>;
 export function VocabularySelector({
   selection,
   releaseNotice = true,
+  compact = false,
 }: {
   selection: Selection;
   releaseNotice?: boolean;
+  /** Label for screen readers only and tighter spacing, for work pages short of height */
+  compact?: boolean;
 }) {
   const { vocabularies, vocabulary, isLoading } = selection;
   const sorted = useMemo(() => [...vocabularies].sort((a, b) => a.id - b.id), [vocabularies]);
@@ -38,9 +42,11 @@ export function VocabularySelector({
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-4">
+    <div className={cn("flex flex-wrap items-end", compact ? "gap-x-4 gap-y-2" : "gap-4")}>
       <div className="grid gap-1.5">
-        <Label htmlFor="vocabulary-select">Source vocabulary</Label>
+        <Label htmlFor="vocabulary-select" className={compact ? "sr-only" : undefined}>
+          Source vocabulary
+        </Label>
         <Select
           value={vocabulary ? String(vocabulary.id) : undefined}
           onValueChange={(v) => selection.select(Number(v))}

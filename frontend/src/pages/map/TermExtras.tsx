@@ -1,4 +1,4 @@
-import { Ban, Check, Flag, MessageCircleQuestion, Plus, Sparkles, X } from "lucide-react";
+import { Ban, Check, ChevronDown, Flag, MessageCircleQuestion, Plus, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -8,6 +8,7 @@ import type { Suggestion, UnmappedItem } from "@/api/types";
 import { ConceptLink } from "@/components/ConceptLink";
 import { Rationale } from "@/components/Rationale";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -71,12 +72,12 @@ export function WaitingSuggestion({
  *  the review queue, shown as a hint the mapper can take over. */
 export function BelowThresholdPick({ suggestion, onSelect }: { suggestion: Suggestion; onSelect: () => void }) {
   return (
-    <div className="rounded-xl border border-dashed p-3">
-      <div className="flex flex-wrap items-start gap-3">
+    <div className="rounded-xl border border-dashed px-3 py-2">
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
         <Sparkles className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-0.5">
           <div className="text-sm">
-            <span className="text-muted-foreground">Last auto-mapping picked </span>
+            <span className="text-muted-foreground">AI&apos;s best guess </span>
             <ConceptLink conceptId={suggestion.concept_id} className="font-semibold">
               {suggestion.concept_name}
             </ConceptLink>
@@ -90,15 +91,24 @@ export function BelowThresholdPick({ suggestion, onSelect }: { suggestion: Sugge
             ))}
             <span className="text-muted-foreground">
               {" "}
-              · confidence <b className="text-warning">{suggestion.confidence}</b>, below the threshold
+              · confidence <b className="text-warning">{suggestion.confidence}</b> (below the threshold)
               {suggestion.match_type && suggestion.match_type !== "exact" ? ` · ${suggestion.match_type} match` : ""}
             </span>
           </div>
-          <Rationale text={suggestion.rationale} className="text-muted-foreground text-xs leading-relaxed" />
-          <div className="text-muted-foreground text-xs">
-            {suggestion.decision_path ? `${suggestion.decision_path} · ` : ""}
-            {formatDate(suggestion.created_at)}
-          </div>
+          <Rationale text={suggestion.rationale} className="text-muted-foreground text-xs leading-snug" />
+          {/* Only the step trail is folded away; the pick, confidence and reason stay visible */}
+          <Collapsible>
+            <CollapsibleTrigger
+              className="text-muted-foreground flex cursor-pointer items-center gap-1 text-xs hover:underline"
+              title={`Auto-mapping run of ${formatDate(suggestion.created_at)}`}
+            >
+              <ChevronDown className="size-3" /> Steps
+            </CollapsibleTrigger>
+            <CollapsibleContent className="text-muted-foreground text-xs">
+              {suggestion.decision_path ? `${suggestion.decision_path} · ` : ""}
+              {formatDate(suggestion.created_at)}
+            </CollapsibleContent>
+          </Collapsible>
         </div>
         <Button size="sm" variant="outline" className="shrink-0 gap-1" onClick={onSelect}>
           <Plus /> Select
