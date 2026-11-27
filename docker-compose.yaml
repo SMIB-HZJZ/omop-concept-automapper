@@ -87,6 +87,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     image: omop-automapper-backend
+    # Built here, never pulled: the image exists only locally
+    pull_policy: build
     restart: unless-stopped
     env_file: .env
     environment: *backend-env
@@ -105,7 +107,9 @@ services:
       start_period: 30s
 
   worker:
+    # The backend's image (built by the backend service); never pulled from a registry
     image: omop-automapper-backend
+    pull_policy: never
     restart: unless-stopped
     env_file: .env
     environment:

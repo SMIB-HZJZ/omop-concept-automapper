@@ -37,7 +37,7 @@ You need Docker with Compose v2, an OMOP vocabulary download from [Athena](https
 ```bash
 cp .env.example .env                  # set POSTGRES_PASSWORD, JWT_SECRET (openssl rand -hex 32),
                                       # ADMIN_PASSWORD, LITELLM_MASTER_KEY
-cp .env.litellm.example .env.litellm  # provider keys (default models: ANTHROPIC_API_KEY, GEMINI_API_KEY)
+cp .env.litellm.example .env.litellm  # provider keys (default models: ANTHROPIC_API_KEY, OPENAI_API_KEY)
 docker compose up -d --build
 ```
 

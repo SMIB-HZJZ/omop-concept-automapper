@@ -48,7 +48,7 @@ cp .env.example .env                  # app settings: read by backend and worker
 cp .env.litellm.example .env.litellm  # provider API keys: read only by the LiteLLM proxy
 # In .env set at least (with APP_ENV=prod the app refuses to start on placeholders):
 #   POSTGRES_PASSWORD, JWT_SECRET (>= 32 chars: openssl rand -hex 32), ADMIN_PASSWORD, LITELLM_MASTER_KEY
-# In .env.litellm set ANTHROPIC_API_KEY and GEMINI_API_KEY (the default models),
+# In .env.litellm set ANTHROPIC_API_KEY and OPENAI_API_KEY (the default models),
 # or pick other providers: see "Providers and default models"
 docker compose up -d --build
 ```
@@ -256,7 +256,7 @@ Auto-mapping and AI suggest run a declarative pipeline from [`backend/app/workfl
 
 Auto-map always runs the default pipeline of the vocabulary type (`AUTOMAP_PIPELINE` or `AUTOMAP_DRUG_PIPELINE`); AI suggest can still pick another one for a single term.
 
-**Embeddings** (Configuration page): the embedded text can be the name, the name with class and domain, the name with synonyms (default), or both; query/document task types are sent to Gemini, Voyage and Cohere (default on; ignored by other providers). Each combination is its own collection, so variants can be compared without losing the others.
+**Embeddings** (Configuration page): the embedded text can be the name, the name with class and domain, the name with synonyms, or both (default: the name alone, `EMBEDDING_TEXT=name`); query/document task types are sent to Gemini, Voyage and Cohere (default on; ignored by other providers). Each combination is its own collection, so variants can be compared without losing the others.
 
 **Review queue**: sort by *Priority* (frequency × uncertainty) to review what affects most records first. After 20 or more decisions, the Review page shows how often suggestions were accepted per confidence level and recommends the threshold that keeps at least 95 % of auto-accepted mappings correct.
 
