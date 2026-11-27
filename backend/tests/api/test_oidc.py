@@ -154,8 +154,8 @@ def test_options_and_password_routes_follow_the_mode(client, provider, admin_hea
     assert create.status_code == 403
 
 
-def test_initial_admin_and_pending_users(provider, browser, admin_headers, client):
-    # The initial admin (verified email, case-insensitive) is approved as admin at once
+def test_accounts_are_approved_at_first_sign_in(provider, browser, admin_headers, client):
+    # The initial admin (verified email, case-insensitive) becomes an admin
     resp = sign_in(
         browser, provider, {"sub": "s-boss", "email": "boss@example.test", "email_verified": True}
     )
@@ -164,39 +164,70 @@ def test_initial_admin_and_pending_users(provider, browser, admin_headers, clien
     assert me["username"] == "boss@example.test" and me["role"] == "admin"
     assert not browser.cookies.get("omop_oidc_login")  # the one-time state is gone
 
-    # Anyone else waits for approval and gets no session
+    # Anyone else gets an approved user account and a session at once
     other = type(browser)(browser.app)
     resp = sign_in(
         other, provider, {"sub": "s-ana", "email": "ana@example.test", "email_verified": True}
     )
-    assert resp.headers["location"] == "/login?error=pending"
-    assert other.get("/api/auth/me").status_code == 401
+    assert resp.headers["location"] == "/"
+    assert other.get("/api/auth/me").json()["role"] == "user"
     assert dict(_user("ana@example.test")) == {
         "role": "user",
-        "pending": True,
+        "pending": False,
         "oidc_subject": "s-ana",
     }
 
-    # Approved: the next sign-in works; the account is found by sub even if the email changed
-    users = client.get("/api/users", headers=admin_headers).json()
-    ana = next(u for u in users if u["username"] == "ana@example.test")
-    assert client.post(f"/api/users/{ana['id']}/approve", headers=admin_headers).status_code == 200
+    # The account is found by sub even if the email changed
     resp = sign_in(
         other, provider, {"sub": "s-ana", "email": "ana.new@example.test", "email_verified": True}
     )
     assert resp.headers["location"] == "/"
     assert other.get("/api/auth/me").json()["username"] == "ana@example.test"
 
+    # A deactivated account gets no session
+    users = client.get("/api/users", headers=admin_headers).json()
+    ana = next(u for u in users if u["username"] == "ana@example.test")
+    client.patch(f"/api/users/{ana['id']}", json={"is_active": False}, headers=admin_headers)
+    third = type(browser)(browser.app)
+    resp = sign_in(
+        third, provider, {"sub": "s-ana", "email": "ana@example.test", "email_verified": True}
+    )
+    assert resp.headers["location"] == "/login?error=disabled"
+    assert third.get("/api/auth/me").status_code == 401
+
+
+def test_account_waiting_from_before_is_approved_on_sign_in(provider, browser):
+    """Accounts created while OIDC sign-ins still waited for approval are approved now."""
+    from app.services import users
+
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO app_user (username, hashed_password, role, pending, oidc_subject)"
+                " VALUES ('old@example.test', :h, 'user', true, 's-old')"
+            ),
+            {"h": users.NO_PASSWORD},
+        )
+    resp = sign_in(
+        browser, provider, {"sub": "s-old", "email": "old@example.test", "email_verified": True}
+    )
+    assert resp.headers["location"] == "/"
+    assert _user("old@example.test")["pending"] is False
+
 
 def test_unverified_initial_admin_email_is_not_trusted(provider, browser):
     resp = sign_in(
         browser,
         provider,
-        {"sub": "s-fake-boss", "email": "boss@example.test", "email_verified": False},
+        {"sub": "s-fake-boss", "email": "Boss@example.test", "email_verified": False},
     )
-    # The email is taken by the real initial admin's account: no second account, no session
-    assert resp.headers["location"] in ("/login?error=conflict", "/login?error=pending")
-    assert browser.get("/api/auth/me").status_code == 401
+    # Never an admin: the email is taken by the real initial admin's account (no second
+    # account, no session), or, signed in first, the account gets the role user
+    if resp.headers["location"] == "/":
+        assert browser.get("/api/auth/me").json()["role"] == "user"
+    else:
+        assert resp.headers["location"] == "/login?error=conflict"
+        assert browser.get("/api/auth/me").status_code == 401
 
 
 def test_forged_or_replayed_callbacks_are_refused(provider, browser):

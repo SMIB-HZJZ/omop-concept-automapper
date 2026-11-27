@@ -16,11 +16,7 @@ import { Label } from "@/components/ui/label";
 type Mode = "signin" | "register";
 
 /** Why the organisation sign-in (OIDC) sent the person back here (/login?error=...). */
-const OIDC_MESSAGES: Record<string, { text: string; ok?: boolean }> = {
-  pending: {
-    text: "Your account is created and waits for an administrator's approval. Sign in again once it is approved.",
-    ok: true,
-  },
+const OIDC_MESSAGES: Record<string, { text: string }> = {
   disabled: { text: "Your account is deactivated. Ask an administrator to activate it." },
   cancelled: { text: "Sign-in was cancelled." },
   expired: { text: "The sign-in took too long or was started in another window. Please try again." },
@@ -39,15 +35,10 @@ function OidcSignIn() {
     <div className="space-y-4">
       {message && (
         <div
-          role={message.ok ? "status" : "alert"}
-          className={
-            message.ok
-              ? "border-success/40 bg-success/10 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
-              : "border-destructive/40 bg-destructive/10 text-destructive rounded-lg border px-3 py-2 text-sm"
-          }
+          role="alert"
+          className="border-destructive/40 bg-destructive/10 text-destructive rounded-lg border px-3 py-2 text-sm"
         >
-          {message.ok && <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" />}
-          <span>{message.text}</span>
+          {message.text}
         </div>
       )}
       {/* A full page load: the backend redirects to the organisation's sign-in page */}
@@ -56,9 +47,6 @@ function OidcSignIn() {
           <LogIn /> Sign in with your organisation account
         </a>
       </Button>
-      <p className="text-muted-foreground text-center text-xs">
-        New accounts can be used once an administrator approves them.
-      </p>
     </div>
   );
 }

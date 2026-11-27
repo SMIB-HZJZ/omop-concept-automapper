@@ -241,12 +241,10 @@ function WaitingForApproval({
   users,
   approve,
   remove,
-  oidc,
 }: {
   users: User[];
   approve: ReturnType<typeof useUserMutations>["approve"];
   remove: ReturnType<typeof useUserMutations>["remove"];
-  oidc: boolean;
 }) {
   if (users.length === 0) return null;
   return (
@@ -258,8 +256,7 @@ function WaitingForApproval({
         <UserCheck className="text-warning size-4" />
         <h2 className="text-sm font-semibold">Waiting for approval ({users.length})</h2>
         <span className="text-muted-foreground text-xs">
-          {oidc ? "Signed in with the organisation account for the first time." : "Created on the sign-in page."}{" "}
-          Approve to let them sign in as a user; reject to delete the account.
+          Created on the sign-in page. Approve to let them sign in as a user; reject to delete the account.
         </span>
       </div>
       <ul className="divide-y rounded-lg border bg-card">
@@ -392,7 +389,7 @@ export function UsersPage() {
         actions={oidc ? undefined : <AddUserDialog create={create} />}
       />
       <ErrorAlert error={users.error} title="Could not load users" />
-      <WaitingForApproval users={waiting} approve={approve} remove={remove} oidc={oidc} />
+      <WaitingForApproval users={waiting} approve={approve} remove={remove} />
       <RolesExplained />
       <DataTable
         columns={columns}

@@ -189,8 +189,6 @@ def oidc_callback(
         return _to_login("provider")
     try:
         user = users.sign_in_oidc(session, claims)
-    except users.AccountPending:
-        return _to_login("pending")
     except users.AccountDisabled:
         return _to_login("disabled")
     except users.AccountConflict:

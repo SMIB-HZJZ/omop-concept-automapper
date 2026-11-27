@@ -152,11 +152,12 @@ def approve(session: Session, user: AppUser) -> AppUser:
 def sign_in_oidc(session: Session, claims: dict) -> AppUser:
     """The account for a verified OIDC ID token, created on the first sign-in.
 
-    A new account waits for an admin's approval, except the person whose verified email is
-    OIDC_INITIAL_ADMIN: they become an approved admin. Accounts are found by the provider's user
-    id (sub), so a changed email does not create a second account.
+    Every account is approved at once with the role user: who may sign in at all is decided in
+    the provider. The person whose verified email is OIDC_INITIAL_ADMIN becomes an admin.
+    Accounts are found by the provider's user id (sub), so a changed email does not create a
+    second account.
 
-    Raises AccountPending, AccountDisabled or AccountConflict when no session may be issued."""
+    Raises AccountDisabled or AccountConflict when no session may be issued."""
     settings = get_settings()
     subject = str(claims["sub"])
     email = str(claims.get("email") or "").strip().lower()
@@ -166,7 +167,7 @@ def sign_in_oidc(session: Session, claims: dict) -> AppUser:
     if initial and email == initial and not verified:
         logger.warning(
             "OIDC_INITIAL_ADMIN signed in, but the provider does not mark the email as verified;"
-            " the account waits for approval instead (mark the email verified in the provider)"
+            " the account gets the role user instead (mark the email verified in the provider)"
         )
     now = datetime.now(UTC)
     user = session.exec(select(AppUser).where(AppUser.oidc_subject == subject)).first()
@@ -179,24 +180,21 @@ def sign_in_oidc(session: Session, claims: dict) -> AppUser:
             hashed_password=NO_PASSWORD,
             oidc_subject=subject,
             role="admin" if is_initial_admin else "user",
-            pending=not is_initial_admin,
-            approved_at=now if is_initial_admin else None,
+            approved_at=now,
         )
         logger.info(
             "Created %s account %s on first OIDC sign-in",
-            "admin" if is_initial_admin else "pending",
+            "admin" if is_initial_admin else "user",
             username,
         )
-    elif is_initial_admin and user.pending:
-        user.role = "admin"
+    if user.pending:
+        # Created while OIDC accounts still waited for approval
         user.pending = False
         user.approved_at = now
+        if is_initial_admin:
+            user.role = "admin"
     if not user.is_active:
         raise AccountDisabled(user.username)
-    if user.pending:
-        session.add(user)
-        session.commit()
-        raise AccountPending(user.username)
     user.last_login_at = now
     session.add(user)
     session.commit()
