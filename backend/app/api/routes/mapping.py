@@ -194,6 +194,7 @@ async def suggest(
         source_id=source_id,
         source_value=source["source_value"],
         source_name=source["source_concept_name"],
+        source_description=source.get("source_description"),
         query=body.query,
         domains=body.domains,
         vocabularies=body.vocabularies if body.domain_mode != "all" else [],
@@ -276,7 +277,8 @@ async def translation(source_id: int, _: CurrentUser):
     context = vocabulary_context(
         source.get("vocabulary_name"), source.get("vocabulary_description")
     )
-    return await _translate(cfg, term, context, language, source_id)
+    description = " ".join((source.get("source_description") or "").split()) or None
+    return await _translate(cfg, term, context, language, source_id, description)
 
 
 async def _translate(
@@ -285,10 +287,13 @@ async def _translate(
     context: str | None,
     language: str | None,
     source_id: int | None = None,
+    description: str | None = None,
 ) -> TermTranslation:
     # Called as the translate step calls it: the cache key depends on the arguments
     args = (term, context) if context else (term,)
     kwargs = {"language": language} if language else {}
+    if description:
+        kwargs["description"] = description
     try:
         result = await build_translator(cfg).translate(*args, **kwargs)
     except Exception as exc:

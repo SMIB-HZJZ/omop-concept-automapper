@@ -7088,6 +7088,17 @@
                 "type": "null"
               }
             ]
+          },
+          "source_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Description"
           }
         },
         "type": "object",
@@ -7794,6 +7805,11 @@
           "with_drug_structure": {
             "default": 0,
             "title": "With Drug Structure",
+            "type": "integer"
+          },
+          "with_description": {
+            "default": 0,
+            "title": "With Description",
             "type": "integer"
           },
           "vocabulary_id": {

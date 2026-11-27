@@ -30,6 +30,8 @@ async def translate(state: AutomapState, ctx: NodeContext, params: TranslatePara
     try:
         context = state.get("vocabulary_context")
         kwargs = {"language": language} if language else {}
+        if state.get("source_description"):
+            kwargs["description"] = state["source_description"]
         result = await (
             translator.translate(term, context, **kwargs)
             if context

@@ -73,7 +73,7 @@ class FakeSearcher:
 class IdentityTranslator:
     """The default pipeline translates; test terms count as English already."""
 
-    async def translate(self, term, context=None):
+    async def translate(self, term, context=None, **kwargs):
         from app.llm.structured import TranslationResult
 
         return TranslationResult(term, "en")

@@ -181,7 +181,7 @@ def get_unmapped(
                    low.confidence AS low_confidence,
                    cardinality(low.extra_concept_ids) AS low_extra_count,
                    sc.flag, sc.flag_note, sc.flagged_at, u.username AS flagged_by,
-                   sc.drug_structure
+                   sc.drug_structure, sc.source_description
             {joins}{low_join}
             LEFT JOIN app_user u ON u.id = sc.flagged_by
             WHERE {where}
@@ -237,7 +237,8 @@ def get_unmapped_concepts_for_automap(
     rows = session.execute(
         text(
             """
-            SELECT sc.source_id, sc.source_value, sc.source_concept_name, sc.freq, sc.drug_structure
+            SELECT sc.source_id, sc.source_value, sc.source_concept_name, sc.freq, sc.drug_structure,
+                   sc.source_description
             FROM source_concepts sc
             WHERE sc.source_vocabulary_id = :v AND sc.flag IS NULL
               AND NOT EXISTS (SELECT 1 FROM source_standard_map m WHERE m.source_id = sc.source_id)
@@ -261,6 +262,7 @@ def get_source_concept(session: Session, source_id: int) -> dict | None:
                 """
             SELECT sc.source_id, sc.source_value, sc.source_concept_name,
                    sc.source_vocabulary_id, sc.freq, v.is_drug, sc.drug_structure,
+                   sc.source_description,
                    v.code_vocabularies, v.source_language, v.name AS vocabulary_name,
                    v.description AS vocabulary_description
             FROM source_concepts sc JOIN source_vocabulary v ON v.id = sc.source_vocabulary_id

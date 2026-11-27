@@ -72,3 +72,21 @@ def test_text_search_in_unmapped(client, admin_headers, loaded_vocabulary):
         client.get(url, params={"q": "zzz-no-such-term"}, headers=admin_headers).json()["total"]
         == 0
     )
+
+
+def test_source_description_is_imported_and_listed(client, admin_headers, loaded_vocabulary):
+    content = (
+        b"source_value,source_concept_name,source_description\n"
+        b'J45,Astma,"Use for asthma confirmed\n by spirometry"\n'
+        b"J46,Status asthmaticus,\n"
+    )
+    task = import_source_csv(client, admin_headers, 93, content)
+    assert task["status"] == "SUCCESS", task
+    assert task["result"]["with_description"] == 1
+    items = client.get("/api/source-vocabularies/93/unmapped", headers=admin_headers).json()
+    described = {i["source_value"]: i["source_description"] for i in items["items"]}
+    assert described == {"J45": "Use for asthma confirmed by spirometry", "J46": None}
+
+    too_long = b"source_value,source_concept_name,source_description\nX,Y," + b"z" * 2001 + b"\n"
+    failed = import_source_csv(client, admin_headers, 94, too_long)
+    assert failed["status"] == "FAILURE" and "Row 2" in failed["error"]

@@ -186,6 +186,7 @@ async def automap_concepts(
             " ".join((concept["source_concept_name"] or "").lower().split()),
             (concept["source_value"] or "").strip().upper() if code_vocabularies else "",
             json.dumps(concept.get("drug_structure"), sort_keys=True),
+            " ".join((concept.get("source_description") or "").split()),
         )
 
     async def decide(concept: dict) -> dict:
@@ -194,6 +195,7 @@ async def automap_concepts(
                 source_id=concept["source_id"],
                 source_value=concept["source_value"],
                 source_name=concept["source_concept_name"],
+                source_description=concept.get("source_description"),
                 domains=domains,
                 vocabularies=vocabularies,
                 drug_specific=drug_specific,

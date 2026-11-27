@@ -122,7 +122,7 @@ class _NoRewrites:
 
 
 class FakeTranslator:
-    async def translate(self, term, context=None):
+    async def translate(self, term, context=None, **kwargs):
         from app.llm.structured import TranslationResult
 
         return TranslationResult(term, "en")

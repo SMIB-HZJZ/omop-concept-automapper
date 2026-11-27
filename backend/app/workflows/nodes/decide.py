@@ -7,7 +7,7 @@ from app.llm.structured import Reranker
 from app.workflows.context import NodeContext
 from app.workflows.enrich import with_context
 from app.workflows.registry import node
-from app.workflows.state import AutomapState
+from app.workflows.state import AutomapState, term_notes
 
 ROUTES = {
     "escalated": "decided by the stronger model after an unsure first answer",
@@ -99,7 +99,7 @@ async def decide_with_evidence(state: AutomapState, ctx: NodeContext, params: De
             await with_context(ctx, candidates, params.context_top),
             bool(state.get("drug_specific")),
             translation=state.get("translated_query"),
-            notes=[*(state.get("notes") or []), *evidence_notes(state)],
+            notes=[*term_notes(state), *evidence_notes(state)],
             context=state.get("vocabulary_context"),
         )
     except Exception as exc:

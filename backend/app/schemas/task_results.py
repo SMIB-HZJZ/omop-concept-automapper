@@ -55,6 +55,7 @@ class SourceImportResult(_Result):
     premapped_links: int
     invalid_concept_ids: list[int]
     with_drug_structure: int = 0
+    with_description: int = 0
     vocabulary_id: int
     filename: str | None = None
 

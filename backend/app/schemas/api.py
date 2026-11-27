@@ -292,6 +292,8 @@ class UnmappedItem(BaseModel):
     flagged_at: datetime | None = None
     # Drug structure from the import's CSV columns (None: free text, parsed when mapping)
     drug_structure: DrugStructure | None = None
+    # From the import's source_description column (e.g. when to use the code)
+    source_description: str | None = None
 
 
 class Presence(BaseModel):

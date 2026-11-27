@@ -39,6 +39,8 @@ class SourceConcept(SQLModel, table=True):
     source_concept_name: str
     source_vocabulary_id: int = Field(foreign_key="source_vocabulary.id", index=True)
     freq: int | None = 1
+    # Optional description from the source list (e.g. when to use the code); shown to the LLM
+    source_description: str | None = None
     # Drugs: ingredients/strengths/dose form from the CSV (see app.llm.schemas.DrugStructure)
     drug_structure: dict | None = Field(default=None, sa_column=Column(JSONB))
     # "unmappable" or "question" (ask a colleague); flagged terms leave the default to-do list

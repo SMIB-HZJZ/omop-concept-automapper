@@ -9,7 +9,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.usage import UsageLimits
 
 from app.core.config import get_settings
-from app.llm.prompts import AGENT_INSTRUCTIONS, agent_criteria
+from app.llm.prompts import AGENT_INSTRUCTIONS, TERM_DESCRIPTION_LINE, agent_criteria
 from app.llm.schemas import MappingDecision
 from app.vector.store import SearchFilters, VectorSearcher
 
@@ -31,6 +31,8 @@ class AgentDeps:
     max_results: int = 20
     # Name and description of the source vocabulary
     context: str | None = None
+    # Description of the source term from the source list
+    description: str | None = None
     # Live progress: told what the agent is doing (a short label)
     report: Callable[[str], None] | None = None
 
@@ -181,8 +183,11 @@ async def run_mapping_agent(
         f"Source vocabulary (applies to every term in it): {deps.context}\n" if deps.context else ""
     )
     english = f"English rendering of the term: {translation}\n" if translation else ""
+    described = (
+        TERM_DESCRIPTION_LINE.format(description=deps.description) if deps.description else ""
+    )
     prompt = (
-        f"{vocabulary}Source term: {term}\n{english}\n"
+        f"{vocabulary}Source term: {term}\n{described}{english}\n"
         f"Initial candidates from vector search:\n{listing or '(none)'}"
     )
     settings = get_settings()

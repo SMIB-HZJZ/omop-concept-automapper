@@ -34,12 +34,17 @@ async def rewrite_search(state: AutomapState, ctx: NodeContext, params: RewriteP
     rewriter = ctx.rewriter or QueryRewriter(
         ctx.llm_model, effort=ctx.settings.llm_reasoning_effort
     )
+    # Only when the term has one: fakes and cached calls for other terms stay as they were
+    described = (
+        {"description": state["source_description"]} if state.get("source_description") else {}
+    )
     try:
         queries = await rewriter.rewrite(
             term,
             translation=state.get("translated_query"),
             context=state.get("vocabulary_context"),
             shown=[c["concept_name"] for c in candidates],
+            **described,
         )
     except Exception as exc:
         ctx.logger.warning("Query rewrite failed for %r: %s", term, exc)

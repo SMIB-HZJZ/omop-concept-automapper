@@ -97,6 +97,11 @@ def vocabulary_context(name: str | None, description: str | None) -> str | None:
     return " - ".join(parts) or None
 
 
+# The description a source list gives one term (e.g. when clinicians should use the code); only
+# in prompts for terms that have one, so other terms keep their cached answers
+TERM_DESCRIPTION_LINE = "Description of this source term (from the source list): {description}\n"
+
+
 TRANSLATION_LINE = "English rendering (machine translation, may be imperfect): {translation}\n"
 
 

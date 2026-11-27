@@ -2344,6 +2344,8 @@ export interface components {
             /** Flagged At */
             flagged_at?: string | null;
             drug_structure?: components["schemas"]["DrugStructure"] | null;
+            /** Source Description */
+            source_description?: string | null;
         };
         /** UnmappedPage */
         UnmappedPage: {
@@ -2639,6 +2641,11 @@ export interface components {
              * @default 0
              */
             with_drug_structure: number;
+            /**
+             * With Description
+             * @default 0
+             */
+            with_description: number;
             /** Vocabulary Id */
             vocabulary_id: number;
             /**

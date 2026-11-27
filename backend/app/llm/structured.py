@@ -21,6 +21,7 @@ from app.llm.prompts import (
     INPUT_PROMPT,
     REWRITE_SYSTEM_PROMPT,
     SOURCE_LANGUAGE_LINE,
+    TERM_DESCRIPTION_LINE,
     TRANSLATE_SYSTEM_PROMPT,
     TRANSLATION_LINE,
     VOCABULARY_LINE,
@@ -394,20 +395,33 @@ class Translator:
         self.effort = effort or None
         self._client = client
 
-    def _key(self, term: str, context: str | None = None, language: str | None = None) -> str:
+    def _key(
+        self,
+        term: str,
+        context: str | None = None,
+        language: str | None = None,
+        description: str | None = None,
+    ) -> str:
         ident = term.strip() if not context else f"{term.strip()}\n{context}"
         if language:
             ident = f"{ident}\nlanguage={language}"
+        if description:
+            ident = f"{ident}\ndescription={description}"
         digest = hashlib.sha1(ident.encode()).hexdigest()
         return f"translate:{model_label(self.model, self.effort)}:{digest}"
 
     async def translate(
-        self, term: str, context: str | None = None, language: str | None = None
+        self,
+        term: str,
+        context: str | None = None,
+        language: str | None = None,
+        description: str | None = None,
     ) -> TranslationResult:
         """``context``: the source vocabulary (name and description), which can settle what an
         abbreviation means. ``language``: ISO 639-1 code set on the vocabulary; without it the
-        model detects the language."""
-        key = self._key(term, context, language)
+        model detects the language. ``description``: the term's own description from the
+        source list."""
+        key = self._key(term, context, language, description)
         try:
             hit = await asyncio.to_thread(get_redis().get, key)
             if hit:
@@ -425,7 +439,12 @@ class Translator:
                     "role": "user",
                     "content": (VOCABULARY_LINE.format(context=context) if context else "")
                     + (SOURCE_LANGUAGE_LINE.format(language=language) if language else "")
-                    + f"Term: {term}",
+                    + f"Term: {term}"
+                    + (
+                        "\n" + TERM_DESCRIPTION_LINE.format(description=description).strip()
+                        if description
+                        else ""
+                    ),
                 },
             ],
             max_retries=get_settings().llm_max_retries,
@@ -463,10 +482,14 @@ class QueryRewriter:
         translation: str | None = None,
         context: str | None = None,
         shown: list[str] | None = None,
+        description: str | None = None,
     ) -> list[str]:
-        """``shown``: names of the candidates the first search found (not to be repeated)."""
+        """``shown``: names of the candidates the first search found (not to be repeated).
+        ``description``: the term's own description from the source list."""
         lines = [VOCABULARY_LINE.format(context=context)] if context else []
         lines.append(f"Source term: {term}\n")
+        if description:
+            lines.append(TERM_DESCRIPTION_LINE.format(description=description))
         if translation:
             lines.append(TRANSLATION_LINE.format(translation=translation))
         if shown:

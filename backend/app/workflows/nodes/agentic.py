@@ -34,6 +34,7 @@ async def agentic_refine(state: AutomapState, ctx: NodeContext, params: AgenticP
         atc7_codes=state.get("atc7_codes") or [],
         max_results=params.max_results,
         context=state.get("vocabulary_context"),
+        description=state.get("source_description"),
         report=lambda what: ctx.report(state, None, "agentic_refine", what),
     )
     term = state.get("source_name") or state.get("query", "")

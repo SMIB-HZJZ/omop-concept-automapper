@@ -3,12 +3,16 @@
 import operator
 from typing import Annotated, Any, TypedDict
 
+from app.llm.prompts import TERM_DESCRIPTION_LINE
+
 
 class AutomapState(TypedDict, total=False):
     # Source concept
     source_id: int | None
     source_value: str
     source_name: str
+    # Description of the term from the source list (e.g. when to use the code)
+    source_description: str | None
     # Search inputs (nodes may rewrite `query`)
     query: str
     # English rendering of the source term (set by the `translate` step)
@@ -57,6 +61,13 @@ class AutomapState(TypedDict, total=False):
     # Bookkeeping
     trace: Annotated[list[dict], operator.add]
     meta: Annotated[dict[str, Any], lambda a, b: {**(a or {}), **(b or {})}]
+
+
+def term_notes(state: AutomapState) -> list[str]:
+    """Context lines for the reranker: the term's description first, then the steps' notes."""
+    description = state.get("source_description")
+    lines = [TERM_DESCRIPTION_LINE.format(description=description).strip()] if description else []
+    return [*lines, *(state.get("notes") or [])]
 
 
 # Minimum confidence (1-10) for an automatic decision; see CONFIDENCE_SCALE in app.llm.prompts

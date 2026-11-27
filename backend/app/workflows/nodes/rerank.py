@@ -6,7 +6,7 @@ from app.llm.structured import EscalatingReranker
 from app.workflows.context import NodeContext
 from app.workflows.enrich import with_context
 from app.workflows.registry import node
-from app.workflows.state import AutomapState
+from app.workflows.state import AutomapState, term_notes
 
 
 class RerankParams(BaseModel):
@@ -41,8 +41,9 @@ async def llm_rerank(state: AutomapState, ctx: NodeContext, params: RerankParams
         extra: dict = {"translation": translation} if translation else {}
         if state.get("vocabulary_context"):
             extra["context"] = state["vocabulary_context"]
-        if state.get("notes"):
-            extra["notes"] = state["notes"]
+        notes = term_notes(state)
+        if notes:
+            extra["notes"] = notes
         if params.examples and ctx.lexical is not None:
             examples = await asyncio.to_thread(
                 ctx.lexical.similar_examples, term, state.get("source_id"), params.examples

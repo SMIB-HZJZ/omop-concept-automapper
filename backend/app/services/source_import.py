@@ -1,7 +1,8 @@
 """Source-concept CSV import (comma-delimited), using COPY into a staging table.
 
 Columns: ``source_value`` and ``source_concept_name`` (required), ``freq`` (empty/NaN -> 1)
-and ``concept_id`` (one or more OMOP concept ids separated by ';' used as existing mappings).
+``concept_id`` (one or more OMOP concept ids separated by ';' used as existing mappings) and
+``source_description`` (what the term means or when it is used; shown to reviewers and the LLM).
 
 Optional drug structure columns, in the shape of OMOP ``drug_strength`` (one value per
 ingredient separated by ';'; a single unit applies to every ingredient):
@@ -25,6 +26,8 @@ from app.worker.progress import ProgressReporter
 
 REQUIRED = ("source_value", "source_concept_name")
 BATCH = 5000
+# Longer descriptions would crowd the term out of the LLM prompts
+SOURCE_DESCRIPTION_MAX = 2000
 
 
 class SourceImportError(ValueError):
@@ -41,6 +44,16 @@ def _parse_freq(raw: str | None) -> int:
         return int(float(raw))
     except ValueError as exc:
         raise SourceImportError(f"Invalid freq value {raw!r}") from exc
+
+
+def parse_description(raw: str | None) -> str | None:
+    """Whitespace collapsed (CSV cells often hold line breaks); None when empty."""
+    text = " ".join((raw or "").split())
+    if len(text) > SOURCE_DESCRIPTION_MAX:
+        raise SourceImportError(
+            f"source_description is {len(text)} characters long (at most {SOURCE_DESCRIPTION_MAX})"
+        )
+    return text or None
 
 
 def _parse_concept_ids(raw: str | None) -> list[int]:
@@ -156,7 +169,8 @@ def import_source_csv(
                 source_concept_name TEXT NOT NULL,
                 freq INTEGER NOT NULL,
                 concept_ids INTEGER[],
-                drug_structure JSONB
+                drug_structure JSONB,
+                source_description TEXT
             ) ON COMMIT DROP
             """
         )
@@ -164,7 +178,7 @@ def import_source_csv(
             open(path, encoding="utf-8-sig", newline="") as fh,
             cur.copy(
                 "COPY source_stage (row_no, source_value, source_concept_name, freq, concept_ids, "
-                "drug_structure) FROM STDIN"
+                "drug_structure, source_description) FROM STDIN"
             ) as copy,
         ):
             reader = csv.DictReader(fh)
@@ -178,6 +192,7 @@ def import_source_csv(
                     raise SourceImportError(f"Row {i + 1}: source_concept_name is empty")
                 try:
                     structure = parse_drug_structure(row)
+                    description = parse_description(row.get("source_description"))
                 except SourceImportError as exc:
                     raise SourceImportError(f"Row {i + 1}: {exc}") from exc
                 copy.write_row(
@@ -188,6 +203,7 @@ def import_source_csv(
                         _parse_freq(row.get("freq")),
                         _parse_concept_ids(row.get("concept_id")),
                         Jsonb(structure) if structure else None,
+                        description,
                     )
                 )
                 if progress and i % BATCH == 0:
@@ -205,8 +221,10 @@ def import_source_csv(
         cur.execute(
             """
             INSERT INTO source_concepts
-                (source_id, source_value, source_concept_name, source_vocabulary_id, freq, drug_structure)
-            SELECT source_id, source_value, source_concept_name, %s, freq, drug_structure
+                (source_id, source_value, source_concept_name, source_vocabulary_id, freq,
+                 drug_structure, source_description)
+            SELECT source_id, source_value, source_concept_name, %s, freq, drug_structure,
+                   source_description
             FROM source_stage ORDER BY row_no
             """,
             (vocabulary_id,),
@@ -242,10 +260,13 @@ def import_source_csv(
         premapped = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM source_stage WHERE drug_structure IS NOT NULL")
         structured = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM source_stage WHERE source_description IS NOT NULL")
+        described = cur.fetchone()[0]
 
     return {
         "inserted": inserted,
         "with_drug_structure": structured,
+        "with_description": described,
         "premapped_sources": premapped,
         "premapped_links": links,
         "invalid_concept_ids": invalid[:1000],
