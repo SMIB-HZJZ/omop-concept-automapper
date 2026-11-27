@@ -87,6 +87,10 @@ This version starts from an empty database: import the vocabulary and embed conc
 2. **Import → Source Concepts**. Upload a comma-delimited CSV:
    - Required columns: `source_value` and `source_concept_name`.
    - Optional: `freq` (empty means 1), and `concept_id` for existing mappings (`;`-separated, for example `1234;5678`).
+   - Optional: `source_description`, what the term means or when it is used (for example the notes clinicians get with
+     the code; up to 2,000 characters, line breaks become spaces). Reviewers see it next to the term. The translate,
+     rewrite, rerank, agent and final-decision steps get it as a "Description of this source term" line. Terms without
+     one keep their cached LLM answers.
    - If a `source_value` starts with an ATC7 code (for example `A10BA02…`), drug mapping uses it.
    - Optional drug columns, in the shape of OMOP `drug_strength` (see [Drug mapping](#drug-mapping)).
 3. **Import → Embedding Management** (admin). Embeds the standard concepts with the configured embedding model. You can filter by domain and set the batch size.

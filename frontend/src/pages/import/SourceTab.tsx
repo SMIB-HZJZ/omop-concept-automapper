@@ -46,6 +46,9 @@ function SourceImportResult({ task }: { task: Task }) {
       {(r.with_drug_structure ?? 0) > 0 && (
         <div>{formatNumber(r.with_drug_structure ?? 0)} concepts came with a structured drug form.</div>
       )}
+      {(r.with_description ?? 0) > 0 && (
+        <div>{formatNumber(r.with_description ?? 0)} concepts came with a description.</div>
+      )}
       {invalid.length > 0 && (
         <div className="text-destructive">
           Unknown concept IDs ignored: {invalid.slice(0, 20).join(", ")}
@@ -203,7 +206,9 @@ export function SourceTab() {
               <p>
                 Optional columns: <code>freq</code> (frequency/count of usage; empty means 1), <code>concept_id</code>{" "}
                 (OMOP concept ID(s) for existing mappings; separate multiple IDs with semicolons, e.g.
-                "1234;5678;9012").
+                "1234;5678;9012"), <code>source_description</code> (what the term means or when it is used, e.g. the
+                notes clinicians get with the code; at most 2,000 characters). The description is shown next to the term
+                and given to the AI when it maps the term.
               </p>
               <p>
                 Optional drug columns (shape of OMOP <code>drug_strength</code>, one value per ingredient separated by

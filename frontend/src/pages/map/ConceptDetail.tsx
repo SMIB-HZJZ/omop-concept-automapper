@@ -46,6 +46,7 @@ import { DrugPanel } from "./DrugPanel";
 import { DEFAULT_PIPELINE, PipelineSelect } from "./PipelineSelect";
 import { SelectedConcepts } from "./SelectedConcepts";
 import { SuggestionAlert } from "./SuggestionAlert";
+import { TermDescription } from "./TermDescription";
 import { BelowThresholdPick, FlagBanner, FlagButton, WaitingSuggestion } from "./TermExtras";
 import { buildSearchRequest, DEFAULT_LIMIT } from "./searchRequest";
 import type { ConceptLike } from "./types";
@@ -577,6 +578,8 @@ export function ConceptDetail({
             )}
           </div>
         </motion.div>
+
+        {concept.source_description && <TermDescription text={concept.source_description} />}
 
         {isDrug && (
           <DrugPanel

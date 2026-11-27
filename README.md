@@ -50,6 +50,7 @@ Before starting, put the TLS certificate and key in `certs/` as `fullchain.pem` 
 3. **Import → Source Concepts**. Upload a CSV with `source_value` and `source_concept_name`. Optional columns:
    - `freq`;
    - `concept_id` for existing mappings (`;`-separated);
+   - `source_description`: what the term means or when to use it (up to 2,000 characters). It is shown with the term and given to the AI steps;
    - drug columns in the shape of OMOP `drug_strength`.
 
    ```csv

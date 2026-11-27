@@ -61,6 +61,11 @@ const unmappedColumns = (othersOn: Map<number, string[]>): ColumnDef<UnmappedIte
           <div className="min-w-0 flex-1">
             <div className="leading-snug font-medium">{row.original.source_concept_name}</div>
             <div className="text-muted-foreground truncate font-mono text-xs">{row.original.source_value}</div>
+            {row.original.source_description && (
+              <div className="text-muted-foreground truncate text-xs" title={row.original.source_description}>
+                {row.original.source_description}
+              </div>
+            )}
           </div>
           {others.length > 0 && (
             <div className="flex -space-x-1.5 pt-0.5" title={`Open by ${others.join(", ")}`}>
