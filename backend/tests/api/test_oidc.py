@@ -215,19 +215,57 @@ def test_account_waiting_from_before_is_approved_on_sign_in(provider, browser):
     assert _user("old@example.test")["pending"] is False
 
 
-def test_unverified_initial_admin_email_is_not_trusted(provider, browser):
+def test_unverified_email_cannot_take_a_colleagues_name(provider, browser, monkeypatch):
+    """Someone who sets the first admin's email without verifying it gets their own name; the
+    real admin is not locked out, and is promoted once their email is verified."""
+    from app.services import users
+
+    squatter = type(browser)(browser.app)
+    resp = sign_in(
+        squatter,
+        provider,
+        {
+            "sub": "s-squat",
+            "email": "chief@example.test",
+            "email_verified": False,
+            "preferred_username": "mallory",
+        },
+    )
+    assert resp.headers["location"] == "/"
+    me = squatter.get("/api/auth/me").json()
+    assert me["username"] == "unverified:mallory" and me["role"] == "user"
+
+    monkeypatch.setattr(get_settings(), "oidc_initial_admin", "chief@example.test")
+    # The real person, email not yet verified: role user, not named by the email either
     resp = sign_in(
         browser,
         provider,
-        {"sub": "s-fake-boss", "email": "Boss@example.test", "email_verified": False},
+        {
+            "sub": "s-chief",
+            "email": "chief@example.test",
+            "email_verified": False,
+            "preferred_username": "chief",
+        },
     )
-    # Never an admin: the email is taken by the real initial admin's account (no second
-    # account, no session), or, signed in first, the account gets the role user
-    if resp.headers["location"] == "/":
-        assert browser.get("/api/auth/me").json()["role"] == "user"
-    else:
-        assert resp.headers["location"] == "/login?error=conflict"
-        assert browser.get("/api/auth/me").status_code == 401
+    assert resp.headers["location"] == "/"
+    me = browser.get("/api/auth/me").json()
+    assert me["username"] == "unverified:chief" and me["role"] == "user"
+    # Verified later, with no active admin around: named by the email and promoted
+    monkeypatch.setattr(users, "count_admins", lambda session: 0)
+    resp = sign_in(
+        browser, provider, {"sub": "s-chief", "email": "chief@example.test", "email_verified": True}
+    )
+    assert resp.headers["location"] == "/"
+    me = browser.get("/api/auth/me").json()
+    assert me["username"] == "chief@example.test" and me["role"] == "admin"
+
+
+def test_non_ascii_state_is_refused_cleanly(provider, browser):
+    browser.get("/api/auth/oidc/login", follow_redirects=False)
+    resp = browser.get(
+        "/api/auth/oidc/callback", params={"code": "x", "state": "é"}, follow_redirects=False
+    )
+    assert resp.status_code == 303 and resp.headers["location"] == "/login?error=expired"
 
 
 def test_forged_or_replayed_callbacks_are_refused(provider, browser):

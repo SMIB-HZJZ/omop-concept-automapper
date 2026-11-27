@@ -179,7 +179,12 @@ def oidc_callback(
         logger.info("OIDC provider returned an error: %s", error[:100])
         return _to_login("cancelled" if error == "access_denied" else "provider")
     login = oidc.decode_login_state(request.cookies.get(OIDC_STATE_COOKIE))
-    if login is None or not code or not state or not secrets.compare_digest(state, login.state):
+    if (
+        login is None
+        or not code
+        or not state
+        or not secrets.compare_digest(state.encode(), login.state.encode())
+    ):
         # Expired, opened in another browser, or not started here (login CSRF)
         return _to_login("expired")
     try:

@@ -308,3 +308,25 @@ def test_vocabulary_update_reembeds_changed_and_new_concepts(
             session.commit()
         restored = run_import()  # back to the fixture names (and their vectors)
         assert restored["embedding_refresh"]["changed"] == 1
+
+
+def test_release_without_vocabulary_csv_clears_the_version(
+    client, admin_headers, loaded_vocabulary, tmp_path
+):
+    import shutil
+
+    from tests.conftest import FIXTURES
+
+    for csv in (FIXTURES / "vocabulary").glob("*.csv"):
+        if csv.name != "VOCABULARY.csv":
+            shutil.copy(csv, tmp_path / csv.name)
+    try:
+        resp = upload_vocabulary(client, admin_headers, vocabulary_zip(tmp_path))
+        assert resp.status_code == 202, resp.text
+        status = client.get("/api/vocabulary/status", headers=admin_headers).json()
+        # The previous release's version would no longer be true
+        assert status["vocabulary_version"] is None
+    finally:
+        assert upload_vocabulary(client, admin_headers).status_code == 202
+    status = client.get("/api/vocabulary/status", headers=admin_headers).json()
+    assert status["vocabulary_version"] == "v5.0 27-AUG-25"

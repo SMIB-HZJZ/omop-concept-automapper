@@ -87,8 +87,9 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     image: omop-automapper-backend
-    # Built here, never pulled: the image exists only locally
-    pull_policy: build
+    # Built here, never pulled: the image exists only locally. Built when missing; rebuild after
+    # an update with `docker compose up -d --build` ("build" would rebuild on every `up`)
+    pull_policy: never
     restart: unless-stopped
     env_file: .env
     environment: *backend-env

@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.core.config import get_settings
@@ -149,30 +150,43 @@ def approve(session: Session, user: AppUser) -> AppUser:
     return user
 
 
-def sign_in_oidc(session: Session, claims: dict) -> AppUser:
+UNVERIFIED_PREFIX = "unverified:"
+
+
+def sign_in_oidc(session: Session, claims: dict, _retry: bool = True) -> AppUser:
     """The account for a verified OIDC ID token, created on the first sign-in.
 
     Every account is approved at once with the role user: who may sign in at all is decided in
-    the provider. The person whose verified email is OIDC_INITIAL_ADMIN becomes an admin.
-    Accounts are found by the provider's user id (sub), so a changed email does not create a
-    second account.
+    the provider. Accounts are found by the provider's user id (sub), so a changed email does
+    not create a second account.
+
+    The email names the account only when the provider marks it as verified; otherwise the name
+    is ``unverified:<provider username>``, so nobody can take a colleague's email (and lock them
+    out, or pose as them in the mapping history). Once the email is verified and free, the
+    account is renamed to it. The person whose verified email is OIDC_INITIAL_ADMIN becomes an
+    admin on the first sign-in, or on a later one while there is no active admin (e.g. after
+    the email was verified).
 
     Raises AccountDisabled or AccountConflict when no session may be issued."""
     settings = get_settings()
     subject = str(claims["sub"])
     email = str(claims.get("email") or "").strip().lower()
-    verified = claims.get("email_verified") is True
+    verified = bool(email) and claims.get("email_verified") is True
     initial = settings.oidc_initial_admin.strip().lower()
     is_initial_admin = bool(initial) and email == initial and verified
     if initial and email == initial and not verified:
         logger.warning(
             "OIDC_INITIAL_ADMIN signed in, but the provider does not mark the email as verified;"
-            " the account gets the role user instead (mark the email verified in the provider)"
+            " the account gets the role user until it is (mark the email verified in the"
+            " provider, then sign in again)"
         )
     now = datetime.now(UTC)
     user = session.exec(select(AppUser).where(AppUser.oidc_subject == subject)).first()
     if user is None:
-        username = email or str(claims.get("preferred_username") or subject)
+        if verified:
+            username = email
+        else:
+            username = UNVERIFIED_PREFIX + str(claims.get("preferred_username") or subject)
         if get_by_username(session, username):
             raise AccountConflict(username)
         user = AppUser(
@@ -187,17 +201,30 @@ def sign_in_oidc(session: Session, claims: dict) -> AppUser:
             "admin" if is_initial_admin else "user",
             username,
         )
+    else:
+        if verified and user.username.startswith(UNVERIFIED_PREFIX):
+            if get_by_username(session, email) is None:
+                user.username = email
+        if is_initial_admin and user.role != "admin" and count_admins(session) == 0:
+            user.role = "admin"
+            revoke_sessions(user)
+            logger.info("Promoted OIDC_INITIAL_ADMIN %s: there was no active admin", email)
     if user.pending:
         # Created while OIDC accounts still waited for approval
         user.pending = False
         user.approved_at = now
-        if is_initial_admin:
-            user.role = "admin"
     if not user.is_active:
         raise AccountDisabled(user.username)
     user.last_login_at = now
     session.add(user)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # The same person's first sign-in in two windows at once: the other one created it
+        session.rollback()
+        if not _retry:
+            raise
+        return sign_in_oidc(session, claims, _retry=False)
     session.refresh(user)
     return user
 

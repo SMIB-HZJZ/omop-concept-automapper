@@ -190,3 +190,120 @@ def test_manual_mapping_decides_ai_picks(client, admin_headers, user_headers, lo
             ).scalar_one()
             == 8
         )
+
+
+def _source_ids(vocabulary_id):
+    with get_engine().connect() as conn:
+        return dict(
+            conn.execute(
+                text(
+                    "SELECT source_concept_name, source_id FROM source_concepts"
+                    " WHERE source_vocabulary_id = :v"
+                ),
+                {"v": vocabulary_id},
+            ).all()
+        )
+
+
+def _picks(source_id):
+    with get_engine().connect() as conn:
+        return conn.execute(
+            text(
+                "SELECT status, prior_status, concept_id FROM mapping_suggestion"
+                " WHERE source_id = :s ORDER BY id"
+            ),
+            {"s": source_id},
+        ).all()
+
+
+def _add_pick(source_id, concept_id, confidence, status="pending"):
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO mapping_suggestion (source_id, concept_id, confidence, method, status)"
+                " VALUES (:s, :c, :conf, 'auto_standard', :st)"
+            ),
+            {"s": source_id, "c": concept_id, "conf": confidence, "st": status},
+        )
+
+
+def test_undo_does_not_restore_a_pick_to_a_deprecated_concept(
+    client, admin_headers, user_headers, loaded_vocabulary
+):
+    import_source_csv(client, admin_headers, 73, CSV.replace(b"cal", b"dep"))
+    ids = _source_ids(73)
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO concept (concept_id, concept_name, domain_id, vocabulary_id,
+                    concept_class_id, standard_concept, concept_code, valid_start_date,
+                    valid_end_date, invalid_reason)
+                SELECT 990001, 'Review probe', domain_id, vocabulary_id, concept_class_id, 'S',
+                       'probe-990001', valid_start_date, valid_end_date, NULL
+                FROM concept WHERE concept_id = 203
+                """
+            )
+        )
+    try:
+        _add_pick(ids["dep one"], 990001, 9)
+        resp = client.post(
+            "/api/mappings",
+            json={"source_id": ids["dep one"], "concept_ids": [201]},
+            headers=user_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        # A vocabulary release deprecates the picked concept
+        with get_engine().begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE concept SET standard_concept = NULL, invalid_reason = 'D'"
+                    " WHERE concept_id = 990001"
+                )
+            )
+        client.post(
+            "/api/mappings/unmap", json={"source_ids": [ids["dep one"]]}, headers=user_headers
+        )
+        assert _picks(ids["dep one"]) == []  # dropped, not back in Review
+    finally:
+        with get_engine().begin() as conn:
+            conn.execute(text("DELETE FROM concept WHERE concept_id = 990001"))
+
+
+def test_undo_after_review_accept_does_not_revive_a_superseded_pick(
+    client, admin_headers, user_headers, loaded_vocabulary
+):
+    import_source_csv(client, admin_headers, 74, CSV.replace(b"cal", b"sup"))
+    term = _source_ids(74)["sup one"]
+    _add_pick(term, 203, 6)
+    client.post(
+        "/api/mappings", json={"source_id": term, "concept_ids": [201]}, headers=user_headers
+    )
+    assert _picks(term) == [("rejected", "pending", 203)]
+    # The term is mapped again through Review: a newer pick is accepted
+    _add_pick(term, 201, 9)
+    with get_engine().connect() as conn:
+        newer = conn.execute(
+            text("SELECT id FROM mapping_suggestion WHERE source_id = :s AND status = 'pending'"),
+            {"s": term},
+        ).scalar_one()
+    resp = client.post("/api/suggestions/accept", json={"ids": [newer]}, headers=admin_headers)
+    assert resp.status_code == 200 and resp.json()["count"] == 1
+    # Undo of that mapping: the first, superseded pick stays decided
+    client.post("/api/mappings/unmap", json={"source_ids": [term]}, headers=admin_headers)
+    assert sorted(_picks(term)) == [("accepted", None, 201), ("rejected", None, 203)]
+
+
+def test_manual_decisions_are_not_counted_as_review_work(
+    client, admin_headers, user_headers, loaded_vocabulary
+):
+    import_source_csv(client, admin_headers, 75, CSV.replace(b"cal", b"act"))
+    term = _source_ids(75)["act one"]
+    _add_pick(term, 203, 9)
+    _add_pick(term, 203, 5, status="below_threshold")
+    client.post(
+        "/api/mappings", json={"source_id": term, "concept_ids": [203]}, headers=user_headers
+    )
+    activity = client.get("/api/source-vocabularies/75/activity", headers=user_headers).json()
+    row = next(a for a in activity if a["mapped_total"])
+    assert row["mapped_total"] == 1 and row["reviewed_total"] == 0

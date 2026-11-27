@@ -174,8 +174,8 @@ class Settings(BaseSettings):
     oidc_client_id: str = ""
     oidc_client_secret: str = ""
     oidc_scopes: str = "openid profile email"
-    # Email of the first admin: that person is approved as admin on their first sign-in; everyone
-    # else waits for an admin's approval
+    # Email of the first admin: that person (with a verified email) becomes an admin; everyone
+    # else gets the role user at once
     oidc_initial_admin: str = ""
     # Callback URL registered at the provider. Empty: https://<this host>/api/auth/oidc/callback
     oidc_redirect_url: str = ""
