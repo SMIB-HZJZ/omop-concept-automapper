@@ -28,6 +28,18 @@ class RegistrationLimited(Exception):
     pass
 
 
+class AccountDisabled(Exception):
+    """The account was deactivated by an admin."""
+
+
+class AccountConflict(Exception):
+    """An account with the provider's email exists but belongs to someone else (not linked)."""
+
+
+# Stored as the password hash of accounts that sign in through OIDC: matches no password
+NO_PASSWORD = "!oidc"
+
+
 def get_by_username(session: Session, username: str) -> AppUser | None:
     return session.exec(
         select(AppUser).where(func.lower(AppUser.username) == username.strip().lower())
@@ -137,14 +149,90 @@ def approve(session: Session, user: AppUser) -> AppUser:
     return user
 
 
+def sign_in_oidc(session: Session, claims: dict) -> AppUser:
+    """The account for a verified OIDC ID token, created on the first sign-in.
+
+    A new account waits for an admin's approval, except the person whose verified email is
+    OIDC_INITIAL_ADMIN: they become an approved admin. Accounts are found by the provider's user
+    id (sub), so a changed email does not create a second account.
+
+    Raises AccountPending, AccountDisabled or AccountConflict when no session may be issued."""
+    settings = get_settings()
+    subject = str(claims["sub"])
+    email = str(claims.get("email") or "").strip().lower()
+    verified = claims.get("email_verified") is True
+    initial = settings.oidc_initial_admin.strip().lower()
+    is_initial_admin = bool(initial) and email == initial and verified
+    if initial and email == initial and not verified:
+        logger.warning(
+            "OIDC_INITIAL_ADMIN signed in, but the provider does not mark the email as verified;"
+            " the account waits for approval instead (mark the email verified in the provider)"
+        )
+    now = datetime.now(UTC)
+    user = session.exec(select(AppUser).where(AppUser.oidc_subject == subject)).first()
+    if user is None:
+        username = email or str(claims.get("preferred_username") or subject)
+        if get_by_username(session, username):
+            raise AccountConflict(username)
+        user = AppUser(
+            username=username,
+            hashed_password=NO_PASSWORD,
+            oidc_subject=subject,
+            role="admin" if is_initial_admin else "user",
+            pending=not is_initial_admin,
+            approved_at=now if is_initial_admin else None,
+        )
+        logger.info(
+            "Created %s account %s on first OIDC sign-in",
+            "admin" if is_initial_admin else "pending",
+            username,
+        )
+    elif is_initial_admin and user.pending:
+        user.role = "admin"
+        user.pending = False
+        user.approved_at = now
+    if not user.is_active:
+        raise AccountDisabled(user.username)
+    if user.pending:
+        session.add(user)
+        session.commit()
+        raise AccountPending(user.username)
+    user.last_login_at = now
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+def make_admin(session: Session, username: str) -> AppUser:
+    """Approve, activate and promote an account (recovery from the server's command line)."""
+    user = get_by_username(session, username)
+    if user is None:
+        raise ValueError(f"No user {username!r}")
+    user.role = "admin"
+    user.is_active = True
+    if user.pending:
+        user.pending = False
+        user.approved_at = datetime.now(UTC)
+    revoke_sessions(user)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
 def revoke_sessions(user: AppUser) -> None:
     """Invalidate every token issued to ``user`` (the caller commits)."""
     user.token_version = (user.token_version or 0) + 1
 
 
 def ensure_bootstrap_admin(session: Session) -> None:
-    """Create the initial admin from ADMIN_USERNAME/ADMIN_PASSWORD if no admin exists."""
+    """Create the initial admin from ADMIN_USERNAME/ADMIN_PASSWORD if no admin exists.
+
+    Not with AUTH_MODE=oidc: there the first admin is OIDC_INITIAL_ADMIN (see sign_in_oidc)."""
     settings = get_settings()
+    if settings.auth_mode == "oidc":
+        return
     has_admin = session.exec(select(AppUser).where(AppUser.role == "admin")).first()
     if has_admin:
         return

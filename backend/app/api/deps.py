@@ -53,3 +53,12 @@ def require_admin(user: CurrentUser) -> AppUser:
 
 
 AdminUser = Annotated[AppUser, Depends(require_admin)]
+
+
+def require_local_auth() -> None:
+    """Password sign-in, registration and password changes exist only with AUTH_MODE=local."""
+    if get_settings().auth_mode != "local":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Passwords are not used: sign in with the organisation account",
+        )

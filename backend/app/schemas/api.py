@@ -54,6 +54,8 @@ class RegisterRequest(BaseModel):
 
 
 class AuthOptions(BaseModel):
+    # local: username/email + password; oidc: sign in through the organisation's provider
+    auth_mode: Literal["local", "oidc"] = "local"
     self_registration: bool
 
 

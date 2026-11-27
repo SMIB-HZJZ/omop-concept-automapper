@@ -156,7 +156,11 @@ export interface paths {
         /** List Users */
         get: operations["list_users_api_users_get"];
         put?: never;
-        /** Create User */
+        /**
+         * Create User
+         * @description Create an account with a password (AUTH_MODE=local; with oidc, accounts appear on their
+         *     first sign-in).
+         */
         post: operations["create_user_api_users_post"];
         delete?: never;
         options?: never;
@@ -1175,6 +1179,12 @@ export interface components {
         };
         /** AuthOptions */
         AuthOptions: {
+            /**
+             * Auth Mode
+             * @default local
+             * @enum {string}
+             */
+            auth_mode: "local" | "oidc";
             /** Self Registration */
             self_registration: boolean;
         };

@@ -165,6 +165,20 @@ class Settings(BaseSettings):
     self_registration: bool = True
     # Accounts one client IP may register per hour
     registrations_per_ip_hour: int = 5
+    # local: username/email + password (and self-registration). oidc: sign-in only through an
+    # OpenID Connect provider such as Keycloak; no passwords, no ADMIN_USERNAME account
+    auth_mode: Literal["local", "oidc"] = "local"
+    # Issuer of the provider, e.g. https://<keycloak host>/realms/<realm> (the discovery
+    # document is <issuer>/.well-known/openid-configuration)
+    oidc_issuer_url: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_scopes: str = "openid profile email"
+    # Email of the first admin: that person is approved as admin on their first sign-in; everyone
+    # else waits for an admin's approval
+    oidc_initial_admin: str = ""
+    # Callback URL registered at the provider. Empty: https://<this host>/api/auth/oidc/callback
+    oidc_redirect_url: str = ""
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -231,17 +245,34 @@ class Settings(BaseSettings):
         return None if isinstance(value, str) and not value.strip() else value
 
     @model_validator(mode="after")
-    def _check_secrets(self) -> "Settings":
-        if self.app_env == "prod":
-            weak = [
+    def _check_oidc(self) -> "Settings":
+        if self.auth_mode == "oidc":
+            missing = [
                 name
                 for name, value in (
-                    ("JWT_SECRET", self.jwt_secret),
-                    ("ADMIN_PASSWORD", self.admin_password),
-                    ("POSTGRES_PASSWORD", self._db_password()),
-                    ("LITELLM_MASTER_KEY", self.litellm_master_key),
+                    ("OIDC_ISSUER_URL", self.oidc_issuer_url),
+                    ("OIDC_CLIENT_ID", self.oidc_client_id),
+                    ("OIDC_CLIENT_SECRET", self.oidc_client_secret),
                 )
-                if value.strip().lower() in INSECURE_PLACEHOLDERS
+                if not value.strip()
+            ]
+            if missing:
+                raise ValueError(f"AUTH_MODE=oidc needs {', '.join(missing)} in .env")
+        return self
+
+    @model_validator(mode="after")
+    def _check_secrets(self) -> "Settings":
+        if self.app_env == "prod":
+            checked = [
+                ("JWT_SECRET", self.jwt_secret),
+                ("POSTGRES_PASSWORD", self._db_password()),
+                ("LITELLM_MASTER_KEY", self.litellm_master_key),
+            ]
+            # With OIDC there is no password admin, so ADMIN_PASSWORD is never used
+            if self.auth_mode == "local":
+                checked.insert(1, ("ADMIN_PASSWORD", self.admin_password))
+            weak = [
+                name for name, value in checked if value.strip().lower() in INSECURE_PLACEHOLDERS
             ]
             if len(self.jwt_secret.strip()) < MIN_JWT_SECRET_LENGTH and "JWT_SECRET" not in weak:
                 weak.append(f"JWT_SECRET (shorter than {MIN_JWT_SECRET_LENGTH} characters)")

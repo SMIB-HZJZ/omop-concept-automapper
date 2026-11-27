@@ -6,6 +6,8 @@ Commands:
   bootstrap        create the initial admin user if none exists
   init             wait-db + migrate + bootstrap (used by the container entrypoint)
   create-user      create a user: create-user <username> [--role admin] (password from prompt or --password)
+  make-admin       approve, activate and promote an existing user: make-admin <username> (recovery,
+                   e.g. with AUTH_MODE=oidc when no admin can sign in)
   export-openapi   write the OpenAPI schema to a file (default: ../frontend/openapi.json)
 """
 
@@ -94,6 +96,20 @@ def create_user(username: str, role: str, password: str | None) -> None:
     logger.info("Created %s user %s", user.role, user.username)
 
 
+def make_admin(username: str) -> None:
+    from sqlmodel import Session
+
+    from app.services.users import make_admin as do_make_admin
+
+    with Session(get_engine()) as session:
+        try:
+            user = do_make_admin(session, username)
+        except ValueError as exc:
+            logger.error("%s", exc)
+            sys.exit(1)
+    logger.info("%s is now an active admin", user.username)
+
+
 def export_openapi(path: str) -> None:
     from app.main import create_app
 
@@ -111,6 +127,8 @@ def main(argv: list[str] | None = None) -> None:
     cu.add_argument("username")
     cu.add_argument("--role", choices=["user", "admin"], default="user")
     cu.add_argument("--password")
+    ma = sub.add_parser("make-admin")
+    ma.add_argument("username")
     eo = sub.add_parser("export-openapi")
     eo.add_argument(
         "path", nargs="?", default=str(BACKEND_DIR.parent / "frontend" / "openapi.json")
@@ -131,6 +149,8 @@ def main(argv: list[str] | None = None) -> None:
         bootstrap()
     elif args.command == "create-user":
         create_user(args.username, args.role, args.password)
+    elif args.command == "make-admin":
+        make_admin(args.username)
     elif args.command == "export-openapi":
         export_openapi(args.path)
 

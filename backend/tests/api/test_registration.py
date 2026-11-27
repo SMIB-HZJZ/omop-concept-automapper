@@ -34,7 +34,10 @@ def _user(client, admin_headers, username):
 
 
 def test_registered_account_signs_in_only_after_approval(client, admin_headers):
-    assert client.get("/api/auth/options").json() == {"self_registration": True}
+    assert client.get("/api/auth/options").json() == {
+        "auth_mode": "local",
+        "self_registration": True,
+    }
 
     resp = _register(client, "Ana.Example@Example.org")
     assert resp.status_code == 201, resp.text
@@ -81,7 +84,10 @@ def test_registration_is_limited_per_ip_and_can_be_turned_off(client, monkeypatc
     assert _register(client, "three@example.org").status_code == 429
 
     monkeypatch.setattr(get_settings(), "self_registration", False)
-    assert client.get("/api/auth/options").json() == {"self_registration": False}
+    assert client.get("/api/auth/options").json() == {
+        "auth_mode": "local",
+        "self_registration": False,
+    }
     assert _register(client, "four@example.org").status_code == 403
 
 

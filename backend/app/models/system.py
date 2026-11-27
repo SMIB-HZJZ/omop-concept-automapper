@@ -19,6 +19,8 @@ class AppUser(SQLModel, table=True):
     # Registered from the sign-in page and not yet approved by an admin: cannot sign in
     pending: bool = Field(default=False, sa_column_kwargs={"server_default": "false"})
     approved_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    # The OpenID Connect provider's user id (sub claim) for accounts that sign in through it
+    oidc_subject: str | None = Field(default=None)
     # Bumped on password/role/active changes; tokens carrying an older version are rejected
     token_version: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     created_at: datetime | None = Field(

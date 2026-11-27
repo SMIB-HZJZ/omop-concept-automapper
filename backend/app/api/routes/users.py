@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import select
 
-from app.api.deps import AdminUser, SessionDep
+from app.api.deps import AdminUser, SessionDep, require_local_auth
 from app.core.security import hash_password
 from app.models import AppUser
 from app.schemas.api import Message, UserCreate, UserOut, UserUpdate
@@ -17,6 +17,9 @@ def list_users(_: AdminUser, session: SessionDep):
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(body: UserCreate, _: AdminUser, session: SessionDep):
+    """Create an account with a password (AUTH_MODE=local; with oidc, accounts appear on their
+    first sign-in)."""
+    require_local_auth()
     try:
         return user_service.create_user(session, body.username, body.password, body.role)
     except ValueError as exc:
@@ -25,6 +28,8 @@ def create_user(body: UserCreate, _: AdminUser, session: SessionDep):
 
 @router.patch("/{user_id}", response_model=UserOut)
 def update_user(user_id: int, body: UserUpdate, admin: AdminUser, session: SessionDep):
+    if body.password:
+        require_local_auth()
     user = session.get(AppUser, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
