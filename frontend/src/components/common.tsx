@@ -47,13 +47,23 @@ export function PageHeader({
         )}
         <div>
           {step !== undefined && (
-            <div className="text-primary mb-1 text-xs font-semibold tracking-wider uppercase">
+            <div
+              className={cn(
+                "text-primary mb-1 text-xs font-semibold tracking-wider uppercase",
+                compact && "[@media(max-height:820px)]:hidden",
+              )}
+            >
               Step {step} of {WORKFLOW_STEPS}
             </div>
           )}
           <h1 className={cn("font-semibold tracking-tight", compact ? "text-xl" : "text-2xl")}>{title}</h1>
           {description && (
-            <p className={cn("text-muted-foreground max-w-3xl leading-relaxed", compact ? "text-xs" : "mt-1 text-sm")}>
+            <p
+              className={cn(
+                "text-muted-foreground max-w-3xl leading-relaxed",
+                compact ? "text-xs [@media(max-height:820px)]:hidden" : "mt-1 text-sm",
+              )}
+            >
               {description}
             </p>
           )}

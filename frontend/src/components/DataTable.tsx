@@ -4,6 +4,7 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type RowData,
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
@@ -14,6 +15,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/motion";
+
+declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the generics must match the library's
+  interface ColumnMeta<TData extends RowData, TValue> {
+    /** Takes the width the other columns leave (e.g. a name column) */
+    grow?: boolean;
+  }
+}
 
 type Props<T> = {
   columns: ColumnDef<T, unknown>[];
@@ -111,7 +120,10 @@ export function DataTable<T>({
                 const canSort = header.column.getCanSort() && header.column.id !== "__select";
                 const dir = header.column.getIsSorted();
                 return (
-                  <TableHead key={header.id} style={{ width: header.column.columnDef.size }}>
+                  <TableHead
+                    key={header.id}
+                    style={{ width: header.column.columnDef.meta?.grow ? "100%" : header.column.columnDef.size }}
+                  >
                     {header.isPlaceholder ? null : canSort ? (
                       <button
                         type="button"

@@ -18,6 +18,7 @@ export function SelectedConcepts({
   confirming,
   matchType,
   onMatchTypeChange,
+  hasSuggestion = false,
 }: {
   concepts: ConceptLike[];
   onRemove: (conceptId: number) => void;
@@ -26,6 +27,8 @@ export function SelectedConcepts({
   /** How the selected concept(s) relate to the source term */
   matchType: MatchType;
   onMatchTypeChange: (value: MatchType) => void;
+  /** An AI pick is shown for the term (the empty state then points to it) */
+  hasSuggestion?: boolean;
 }) {
   const empty = concepts.length === 0;
   // A released vocabulary is locked until an admin starts the next release
@@ -40,7 +43,7 @@ export function SelectedConcepts({
       <div className="text-sm font-medium">{empty ? "Nothing selected" : `Map to (${concepts.length})`}</div>
       {empty && (
         <span className="text-muted-foreground text-sm">
-          Tick concepts above (or press 1–9), or use the AI suggestion.
+          Tick concepts above (or press 1–9){hasSuggestion ? ", or use the AI suggestion" : ""}.
         </span>
       )}
       <AnimatePresence initial={false}>

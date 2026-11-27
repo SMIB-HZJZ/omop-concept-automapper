@@ -60,6 +60,7 @@ const unmappedColumns = (othersOn: Map<number, string[]>): ColumnDef<UnmappedIte
   {
     id: "term",
     header: "Source term",
+    meta: { grow: true },
     cell: ({ row }) => {
       const others = othersOn.get(row.original.source_id) ?? [];
       return (
@@ -278,9 +279,11 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
     if (id)
       requestAnimationFrame(() => {
         document.querySelector(`[data-row-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
-        // Below xl the panel sits under the list: bring it into view (side by side it already is)
-        if (!window.matchMedia("(min-width: 80rem)").matches)
-          detailRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+        // Bring the panel into view when it is not (under the list below xl, or a short window)
+        const el = detailRef.current;
+        const box = el?.getBoundingClientRect();
+        if (el && box && (box.top < 64 || box.bottom > window.innerHeight))
+          el.scrollIntoView({ block: box.height > window.innerHeight - 80 ? "start" : "end", behavior: "smooth" });
       });
   }, []);
 
@@ -446,7 +449,7 @@ function VocabularyMapping({ vocabularyId, isDrug }: { vocabularyId: number; isD
                 leftList={!found}
               />
             ) : (
-              <div className="h-full">
+              <div className="flex h-full flex-col [&>*]:flex-1">
                 <EmptyState title="Pick a source term" icon={<MousePointerClick className="text-primary size-7" />}>
                   Click a term on the left, or press ↓. Its matching standard concepts appear here, ready to select and
                   confirm.

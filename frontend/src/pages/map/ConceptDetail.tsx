@@ -116,6 +116,7 @@ const RESULT_COLUMNS: ColumnDef<ConceptLike, unknown>[] = [
   },
   {
     accessorKey: "concept_name",
+    meta: { grow: true },
     header: "Standard concept",
     cell: ({ row }) => {
       const c = row.original;
@@ -553,9 +554,9 @@ export function ConceptDetail({
   return (
     <Card className="h-full min-h-[36rem] gap-0 py-0 xl:min-h-0">
       <CardContent className="flex h-full min-h-0 flex-col gap-3 p-4">
-        {/* Everything above the candidates: pinned, and scrolls on its own if it ever gets taller
-            than about half the panel, so the table always keeps several rows */}
-        <div className="-m-1 flex shrink-0 flex-col gap-3 p-1 xl:max-h-[55%] xl:overflow-y-auto">
+        {/* Everything above the candidates. When the panel is short this part shrinks and scrolls
+            first (with a fade at its edge), so the table keeps a few rows and Confirm stays in view */}
+        <OverflowFade className="-m-1 flex min-h-0 flex-col gap-3 p-1 xl:min-h-[7rem] xl:overflow-y-auto">
           {/* The term being mapped */}
           <motion.div
             initial={{ opacity: 0, y: 4 }}
@@ -856,10 +857,10 @@ export function ConceptDetail({
           </AnimatePresence>
 
           <ErrorAlert error={searchError} title="Search failed" />
-        </div>
+        </OverflowFade>
 
         {/* Candidates: take the rest of the panel and keep the previous results under a loading bar */}
-        <div className="flex min-h-0 flex-1 flex-col gap-2 xl:min-h-[16rem]">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 xl:min-h-[15rem] xl:shrink-0">
           <div className="text-muted-foreground flex items-center justify-between text-xs">
             <span>
               {search.data ? `${results.length} candidates` : "Searching…"}
@@ -894,7 +895,10 @@ export function ConceptDetail({
               isLoading={!search.data && (search.isLoading || typing)}
               emptyText="No similar concepts found. Try other words or fewer filters."
               maxHeight="none"
-              className={cn("h-[28rem] transition-opacity xl:h-full", busy && search.data && "opacity-60")}
+              className={cn(
+                "h-[min(28rem,calc(100dvh-24rem))] min-h-[14rem] transition-opacity xl:h-full xl:min-h-0",
+                busy && search.data && "opacity-60",
+              )}
             />
           </div>
         </div>
@@ -907,8 +911,37 @@ export function ConceptDetail({
           confirming={mapConcepts.isPending || acceptSuggestion.isPending}
           matchType={matchType}
           onMatchTypeChange={setMatchType}
+          hasSuggestion={!!(suggestion?.selected || lowPick || waiting)}
         />
       </CardContent>
     </Card>
+  );
+}
+
+/** A scroll area that fades its bottom edge while more content is hidden below. */
+function OverflowFade({ className, children }: { className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    for (const child of el.children) observer.observe(child);
+    el.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      observer.disconnect();
+      el.removeEventListener("scroll", measure);
+    };
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className={cn(className, more && "[mask-image:linear-gradient(to_bottom,#000_calc(100%-16px),transparent)]")}
+    >
+      {children}
+    </div>
   );
 }
