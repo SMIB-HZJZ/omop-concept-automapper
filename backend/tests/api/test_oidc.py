@@ -251,7 +251,7 @@ def test_unverified_email_cannot_take_a_colleagues_name(provider, browser, monke
     me = browser.get("/api/auth/me").json()
     assert me["username"] == "unverified:chief" and me["role"] == "user"
     # Verified later, with no active admin around: named by the email and promoted
-    monkeypatch.setattr(users, "count_admins", lambda session: 0)
+    monkeypatch.setattr(users, "count_admins", lambda session, oidc=False: 0)
     resp = sign_in(
         browser, provider, {"sub": "s-chief", "email": "chief@example.test", "email_verified": True}
     )
@@ -346,3 +346,44 @@ def test_make_admin_command(client, admin_headers, capsys):
     }
     with pytest.raises(SystemExit):
         main(["make-admin", "nobody@example.test"])
+
+
+def test_email_verified_as_string_and_password_admins_do_not_block_promotion(
+    provider, browser, monkeypatch, admin_headers
+):
+    """The local test admin (no provider account) cannot sign in under OIDC, so it does not
+    stop the initial admin from being promoted once their email is verified."""
+    monkeypatch.setattr(get_settings(), "oidc_initial_admin", "late@example.test")
+    with get_engine().begin() as conn:
+        # Only password admins exist besides this person
+        others = (
+            conn.execute(
+                text(
+                    "UPDATE app_user SET role = 'user' WHERE role = 'admin' AND oidc_subject IS NOT NULL"
+                    " RETURNING id"
+                )
+            )
+            .scalars()
+            .all()
+        )
+    try:
+        resp = sign_in(
+            browser,
+            provider,
+            {"sub": "s-late", "email": "late@example.test", "email_verified": False},
+        )
+        assert resp.headers["location"] == "/"
+        assert browser.get("/api/auth/me").json()["role"] == "user"
+        # Some providers send the string "true"
+        resp = sign_in(
+            browser,
+            provider,
+            {"sub": "s-late", "email": "late@example.test", "email_verified": "true"},
+        )
+        me = browser.get("/api/auth/me").json()
+        assert me["username"] == "late@example.test" and me["role"] == "admin"
+    finally:
+        with get_engine().begin() as conn:
+            conn.execute(
+                text("UPDATE app_user SET role = 'admin' WHERE id = ANY(:ids)"), {"ids": others}
+            )

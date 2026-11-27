@@ -291,7 +291,11 @@ def test_undo_after_review_accept_does_not_revive_a_superseded_pick(
     assert resp.status_code == 200 and resp.json()["count"] == 1
     # Undo of that mapping: the first, superseded pick stays decided
     client.post("/api/mappings/unmap", json={"source_ids": [term]}, headers=admin_headers)
-    assert sorted(_picks(term)) == [("accepted", None, 201), ("rejected", None, 203)]
+    assert sorted(_picks(term)) == [("accepted", None, 201), ("rejected", "final", 203)]
+    # The superseded hand decision is still mapping work, not review work, of its mapper
+    activity = client.get("/api/source-vocabularies/74/activity", headers=user_headers).json()
+    mapper = next(a for a in activity if a["username"] == "mapper")
+    assert mapper["reviewed_total"] == 0
 
 
 def test_manual_decisions_are_not_counted_as_review_work(
@@ -307,3 +311,48 @@ def test_manual_decisions_are_not_counted_as_review_work(
     activity = client.get("/api/source-vocabularies/75/activity", headers=user_headers).json()
     row = next(a for a in activity if a["mapped_total"])
     assert row["mapped_total"] == 1 and row["reviewed_total"] == 0
+
+
+def test_undo_keeps_an_older_pick_gone_when_the_newest_is_deprecated(
+    client, admin_headers, user_headers, loaded_vocabulary
+):
+    """Two pending picks decided by hand (an auto-map ran in between): when the newest points
+    to a deprecated concept, Undo brings back neither, not the older one instead."""
+    import_source_csv(client, admin_headers, 76, CSV.replace(b"cal", b"old"))
+    term = _source_ids(76)["old one"]
+    with get_engine().begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO concept (concept_id, concept_name, domain_id, vocabulary_id,
+                    concept_class_id, standard_concept, concept_code, valid_start_date,
+                    valid_end_date, invalid_reason)
+                SELECT 990002, 'Review probe 2', domain_id, vocabulary_id, concept_class_id, 'S',
+                       'probe-990002', valid_start_date, valid_end_date, NULL
+                FROM concept WHERE concept_id = 203
+                """
+            )
+        )
+    try:
+        _add_pick(term, 203, 6)
+        client.post(
+            "/api/mappings", json={"source_id": term, "concept_ids": [201]}, headers=user_headers
+        )
+        _add_pick(term, 990002, 7)
+        client.post(
+            "/api/mappings",
+            json={"source_id": term, "concept_ids": [201], "replace": True},
+            headers=user_headers,
+        )
+        with get_engine().begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE concept SET standard_concept = NULL, invalid_reason = 'D'"
+                    " WHERE concept_id = 990002"
+                )
+            )
+        client.post("/api/mappings/unmap", json={"source_ids": [term]}, headers=user_headers)
+        assert _picks(term) == []
+    finally:
+        with get_engine().begin() as conn:
+            conn.execute(text("DELETE FROM concept WHERE concept_id = 990002"))

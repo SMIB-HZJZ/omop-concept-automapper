@@ -171,7 +171,8 @@ def sign_in_oidc(session: Session, claims: dict, _retry: bool = True) -> AppUser
     settings = get_settings()
     subject = str(claims["sub"])
     email = str(claims.get("email") or "").strip().lower()
-    verified = bool(email) and claims.get("email_verified") is True
+    # A JSON boolean in Keycloak; some providers send the string "true"
+    verified = bool(email) and claims.get("email_verified") in (True, "true")
     initial = settings.oidc_initial_admin.strip().lower()
     is_initial_admin = bool(initial) and email == initial and verified
     if initial and email == initial and not verified:
@@ -205,7 +206,7 @@ def sign_in_oidc(session: Session, claims: dict, _retry: bool = True) -> AppUser
         if verified and user.username.startswith(UNVERIFIED_PREFIX):
             if get_by_username(session, email) is None:
                 user.username = email
-        if is_initial_admin and user.role != "admin" and count_admins(session) == 0:
+        if is_initial_admin and user.role != "admin" and count_admins(session, oidc=True) == 0:
             user.role = "admin"
             revoke_sessions(user)
             logger.info("Promoted OIDC_INITIAL_ADMIN %s: there was no active admin", email)
@@ -273,13 +274,14 @@ def ensure_bootstrap_admin(session: Session) -> None:
     logger.info("Created bootstrap admin user %s", settings.admin_username)
 
 
-def count_admins(session: Session) -> int:
-    return session.exec(
-        select(func.count())
-        .select_from(AppUser)
-        .where(
-            AppUser.role == "admin",
-            AppUser.is_active == True,  # noqa: E712
-            AppUser.pending == False,  # noqa: E712
-        )
-    ).one()
+def count_admins(session: Session, oidc: bool = False) -> int:
+    """Active, approved admins; with ``oidc`` only those who sign in through the provider (a
+    password admin from before a switch to AUTH_MODE=oidc cannot sign in)."""
+    conditions = [
+        AppUser.role == "admin",
+        AppUser.is_active == True,  # noqa: E712
+        AppUser.pending == False,  # noqa: E712
+    ]
+    if oidc:
+        conditions.append(AppUser.oidc_subject.is_not(None))  # type: ignore[union-attr]
+    return session.exec(select(func.count()).select_from(AppUser).where(*conditions)).one()

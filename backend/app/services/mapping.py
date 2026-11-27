@@ -593,11 +593,12 @@ def map_concepts(
             {"s": source_id},
         )
         # Picks decided by an earlier manual mapping are final now: undoing this mapping must
-        # not bring back a pick that newer ones have replaced
+        # not bring back a pick that newer ones have replaced. 'final' (not NULL) keeps them
+        # apart from decisions made in Review, e.g. in team activity
         session.execute(
             text(
-                "UPDATE mapping_suggestion SET prior_status = NULL "
-                "WHERE source_id = :s AND prior_status IS NOT NULL"
+                f"UPDATE mapping_suggestion SET prior_status = '{FINAL}' "
+                f"WHERE source_id = :s AND prior_status IN {RESTORABLE}"
             ),
             {"s": source_id},
         )
@@ -668,6 +669,12 @@ def all_mapped_by(session: Session, source_ids: Sequence[int], user_id: int | No
     ).scalar_one()
 
 
+# prior_status of a pick decided by a manual mapping: the status it had before, which unmap
+# restores, or FINAL once a later mapping (Review accept, auto-map commit) superseded it
+RESTORABLE = "('pending', 'below_threshold')"
+FINAL = "final"
+
+
 def _decide_suggestions(
     session: Session, source_id: int, concept_ids: list[int], user_id: int | None
 ) -> None:
@@ -681,7 +688,7 @@ def _decide_suggestions(
     rows = session.execute(
         text(
             "SELECT id, concept_id, extra_concept_ids FROM mapping_suggestion WHERE source_id = :s"
-            " AND (status IN ('pending', 'below_threshold') OR prior_status IS NOT NULL)"
+            f" AND (status IN {RESTORABLE} OR prior_status IN {RESTORABLE})"
         ),
         {"s": source_id},
     ).mappings()
@@ -707,12 +714,27 @@ def _restore_suggestions(session: Session, source_ids: list[int]) -> None:
     each kind comes back (one pending and one below-threshold pick per term): when a later
     auto-map run left one of the same kind, or a newer decided one exists, the older one goes.
     A pick whose concepts are no longer valid standard concepts (a vocabulary release since) is
-    deleted rather than restored, so it cannot be accepted later."""
+    deleted rather than restored, so it cannot be accepted later; the older pick of its kind
+    stays gone too."""
     session.execute(
         text(
-            """
+            f"""
             DELETE FROM mapping_suggestion d
-            WHERE d.source_id = ANY(:ids) AND d.prior_status IS NOT NULL
+            WHERE d.source_id = ANY(:ids) AND d.prior_status IN {RESTORABLE} AND EXISTS (
+                SELECT 1 FROM mapping_suggestion o
+                WHERE o.source_id = d.source_id AND o.id <> d.id
+                  AND (o.status = d.prior_status
+                       OR (o.prior_status = d.prior_status AND o.id > d.id))
+            )
+            """
+        ),
+        {"ids": source_ids},
+    )
+    session.execute(
+        text(
+            f"""
+            DELETE FROM mapping_suggestion d
+            WHERE d.source_id = ANY(:ids) AND d.prior_status IN {RESTORABLE}
               AND EXISTS (
                 SELECT 1 FROM unnest(d.concept_id || d.extra_concept_ids) AS p(concept_id)
                 LEFT JOIN concept c ON c.concept_id = p.concept_id
@@ -725,23 +747,9 @@ def _restore_suggestions(session: Session, source_ids: list[int]) -> None:
     )
     session.execute(
         text(
-            """
-            DELETE FROM mapping_suggestion d
-            WHERE d.source_id = ANY(:ids) AND d.prior_status IS NOT NULL AND EXISTS (
-                SELECT 1 FROM mapping_suggestion o
-                WHERE o.source_id = d.source_id AND o.id <> d.id
-                  AND (o.status = d.prior_status
-                       OR (o.prior_status = d.prior_status AND o.id > d.id))
-            )
-            """
-        ),
-        {"ids": source_ids},
-    )
-    session.execute(
-        text(
             "UPDATE mapping_suggestion SET status = prior_status, prior_status = NULL,"
             " decided_by = NULL, decided_at = NULL"
-            " WHERE source_id = ANY(:ids) AND prior_status IS NOT NULL"
+            f" WHERE source_id = ANY(:ids) AND prior_status IN {RESTORABLE}"
         ),
         {"ids": source_ids},
     )

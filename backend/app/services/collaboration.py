@@ -58,8 +58,8 @@ def activity(session: Session, vocabulary_id: int) -> list[dict]:
                        COUNT(*) FILTER (WHERE ms.decided_at >= CURRENT_DATE) AS today,
                        COUNT(*) AS total
                 FROM mapping_suggestion ms JOIN source_concepts sc ON sc.source_id = ms.source_id
-                -- Decisions made in Review; picks decided by a manual mapping (prior_status)
-                -- are counted as mapping work above
+                -- Decisions made in Review; picks decided by a manual mapping (prior_status set,
+                -- also 'final') are counted as mapping work above
                 WHERE sc.source_vocabulary_id = :v AND ms.decided_by IS NOT NULL
                   AND ms.prior_status IS NULL
                 GROUP BY ms.decided_by

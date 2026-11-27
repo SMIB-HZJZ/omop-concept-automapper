@@ -192,7 +192,7 @@ def import_all(
                 "records_imported": 0,
                 "error": f"Not in the zip: {info['filename']}",
             }
-            if table == "vocabulary" and files["concept"]["exists"]:
+            if table == "vocabulary" and results.get("concept", {}).get("status") == "success":
                 # A new release without VOCABULARY.csv: the old version would no longer be true
                 with conn.transaction(), conn.cursor() as cur:
                     cur.execute("DELETE FROM vocabulary")
